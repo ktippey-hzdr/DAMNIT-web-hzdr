@@ -109,6 +109,12 @@ python api/scripts/hzdr-hdf5-builder.py \
     --output-nexus /data/damnit/hzdr/<campaign>/<campaign>.nxs
 ```
 
+Instead of running this by hand (or via cron), the spool consumer can run it
+automatically: set `DW_API_HZDR_KAFKA_SPOOL__BUILDER_AUTO_TRIGGER=true` and
+`DW_API_HZDR_KAFKA_SPOOL__BUILDER_COMMAND` to the argv above (see
+`.env.production.example`). New spooled events then schedule a debounced,
+coalesced builder run in-process; default is off.
+
 ---
 
 ## Step 2: Enable the ASAPO HTTP harness spool consumer

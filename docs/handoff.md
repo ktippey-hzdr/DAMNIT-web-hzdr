@@ -1,6 +1,6 @@
 # Handoff
 
-Updated: 2026-07-01
+Updated: 2026-07-04
 
 ## Current State
 
@@ -38,6 +38,22 @@ All integration branches tested and committed. DAMNIT-web-hzdr suite:
 - **asapo-for-hzdr-damnit** (`main`): local harness proves correct
   claim/flush/ack/dedup pattern; example files use canonical `hzdr-event-v1`
   schema-version string. All committed.
+
+## Built 2026-07-04
+
+- **Builder auto-trigger after new spool events** — new `BuilderAutoTrigger`
+  (`consumer/builder_trigger.py`) closes gap (1) from the 2026-07-01
+  verification pass. `HZDRSpoolConsumer.on_new_events()` now schedules a
+  debounced in-process builder run: bursts coalesce into one run, events that
+  arrive mid-build queue exactly one follow-up, failures are logged without
+  killing the consumer loop, and the worker is stopped by the existing lifespan
+  teardown. The builder is launched as a subprocess of a configured argv, so
+  the single-writer PID lock and atomic NeXus/catalog publish are unchanged.
+  Opt-in and off by default: `DW_API_HZDR_SPOOL__BUILDER_AUTO_TRIGGER` /
+  `DW_API_HZDR_KAFKA_SPOOL__BUILDER_AUTO_TRIGGER` plus `BUILDER_COMMAND`
+  (required when enabled, validated at startup) and `BUILDER_DEBOUNCE_SECONDS`
+  (default 5.0). 12 tests in `api/tests/test_hzdr_builder_trigger.py`; knobs
+  documented in `.env.production.example` and `CLAUDE.md`.
 
 ## Built 2026-07-01
 
@@ -83,7 +99,8 @@ All integration branches tested and committed. DAMNIT-web-hzdr suite:
   but **not yet fixed** — see `integration-roadmap.md`'s 2026-07-01
   verification note: (1) no consumer overrides `on_new_events()`, so the
   builder is never auto-triggered by new spool events, and no cron/timer
-  fills that gap either; (2) there is no ASAPO equivalent of
+  fills that gap either (**closed 2026-07-04** — see Built 2026-07-04 above);
+  (2) there is no ASAPO equivalent of
   `test_hzdr_broker_roundtrip.py` — `RealAsapoSpoolConsumer` has only been
   tested against a fake in-process SDK stub.
 
@@ -153,11 +170,11 @@ Mongo, no broker consumer group; each degrades safely) — see
    **writing** an ASAPO real-broker roundtrip test (no equivalent of
    `test_hzdr_broker_roundtrip.py` exists yet for ASAPO), and then running it
    against the live broker.
-2a. **Automate the builder trigger** — `on_new_events()` in
-   `consumer/spool.py` is currently a no-op for every consumer, and no
-   cron/systemd-timer unit exists for `hzdr-hdf5-builder.py`. Real events
-   will sit in the spool without updating the catalog until this is wired up
-   (either the hook or an external timer).
+2a. ~~**Automate the builder trigger**~~ — done 2026-07-04:
+   `on_new_events()` now schedules a debounced `BuilderAutoTrigger` run
+   (see Built 2026-07-04). What remains for go-live is deployment config:
+   set `DW_API_HZDR_*SPOOL__BUILDER_AUTO_TRIGGER=true` and the per-campaign
+   `BUILDER_COMMAND` on the production host.
 3. **Capture one real pilot sequence** and run the go-live gate in
    [integration-roadmap.md](integration-roadmap.md).
 4. **Standards alignment Phase 0** — lock the `metadata.*` namespace convention;

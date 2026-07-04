@@ -216,7 +216,11 @@ The handoff into this app is one setting:
 `DW_API_METADATA__PROVIDER=local` points the API at `hzdr_sources.json` on disk
 (set `=mongo` to read the same catalog from a MongoDB collection instead). The
 builder is **single-writer** per campaign (PID-stamped lock on the output file),
-so it can safely run on a schedule while the API reads. Build it, then publish the
+so it can safely run on a schedule while the API reads. It can also be run
+automatically: with `DW_API_HZDR_SPOOL__BUILDER_AUTO_TRIGGER=true` (or the
+`HZDR_KAFKA_SPOOL` equivalent) plus a configured `BUILDER_COMMAND`, the spool
+consumers schedule a debounced, coalesced builder subprocess after new events —
+opt-in, default off, and the PID lock still applies. Build it, then publish the
 catalog atomically (temp file + rename) — the API and frontend pick up the new
 end products on their next read with no restart.
 

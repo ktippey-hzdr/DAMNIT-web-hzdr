@@ -26,6 +26,14 @@ repo). Covers: claim→write-fsync→ack cycle, no-ack-without-write, dedup by
 `event_id`, campaign offset isolation, and replay dedup surviving consumer
 restart. 11 tests; skipped automatically if the sibling repo is not present.
 
+`api/tests/test_hzdr_builder_trigger.py` tests the debounced builder
+auto-trigger (`consumer/builder_trigger.py`) with a fake in-process runner —
+no broker or subprocess needed except two trivial `python -c` runner cases.
+Covers: burst coalescing into one run, exactly one follow-up for events
+arriving mid-build, disabled-by-default (`from_settings` returns `None`),
+builder-failure isolation, clean shutdown, consumer wiring, and settings
+validation. 12 tests.
+
 The operational read-only views (see
 [architecture.md](architecture.md#read-only-operational-views)) each have a
 deterministic, broker-free suite:
