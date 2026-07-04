@@ -29,6 +29,7 @@ import logging
 from pathlib import Path  # noqa: TC003
 from typing import Any, Protocol
 
+from .builder_trigger import BuilderAutoTrigger
 from .spool import HZDRSpoolConsumer, SpoolConfig
 
 logger = logging.getLogger(__name__)
@@ -88,13 +89,15 @@ class KafkaSpoolConsumer(HZDRSpoolConsumer):
         config: SpoolConfig,
         consumer: _KafkaConsumerLike,
         poll_timeout_ms: int = 1000,
+        builder_trigger: BuilderAutoTrigger | None = None,
     ) -> None:
-        super().__init__(config)
+        super().__init__(config, builder_trigger)
         self._consumer = consumer
         self._poll_timeout_ms = poll_timeout_ms
 
     async def aclose(self) -> None:
         await asyncio.to_thread(self._consumer.close)
+        await super().aclose()
 
     def _poll(self) -> tuple[list[dict[str, Any]], dict[Any, Any]]:
         """Blocking poll of one batch; build the per-partition commit token.
@@ -153,8 +156,12 @@ class KafkaSpoolConsumer(HZDRSpoolConsumer):
             topics=cfg_settings.topics,
             group_id=cfg_settings.consumer_group,
         )
+        trigger = BuilderAutoTrigger.from_settings(
+            cfg_settings, label="kafka-spool"
+        )
         return cls(
             config=cfg,
             consumer=consumer,
             poll_timeout_ms=cfg_settings.poll_timeout_ms,
+            builder_trigger=trigger,
         )

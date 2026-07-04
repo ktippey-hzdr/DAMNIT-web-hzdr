@@ -28,6 +28,7 @@ from pathlib import Path  # noqa: TC003
 from typing import Any
 
 from ..metadata.hzdr_event import lint_metadata_keys
+from .builder_trigger import BuilderAutoTrigger  # noqa: TC001
 
 logger = logging.getLogger(__name__)
 
@@ -120,10 +121,15 @@ class HZDRSpoolConsumer(ABC):
     Subclasses implement `_claim` and `_ack`; the loop logic here is shared.
     """
 
-    def __init__(self, config: SpoolConfig) -> None:
+    def __init__(
+        self,
+        config: SpoolConfig,
+        builder_trigger: BuilderAutoTrigger | None = None,
+    ) -> None:
         self.config = config
         self._staged: set[str] = set()
         self._loaded = False
+        self._builder_trigger = builder_trigger
 
     def _ensure_loaded(self) -> None:
         if not self._loaded:
@@ -155,8 +161,24 @@ class HZDRSpoolConsumer(ABC):
         logger.info("Spooled %s → %s", identity, path)
         return path
 
-    def on_new_events(self, paths: list[Path]) -> None:  # noqa: B027
-        """Called after a batch is written and acked.  Override to trigger builder."""
+    def on_new_events(self, paths: list[Path]) -> None:
+        """Called after a batch is written and acked.
+
+        Schedules a debounced builder run when auto-trigger is configured; the
+        call is non-blocking so the poll loop is never held up.  Subclasses may
+        still override for transport-specific behavior.
+        """
+        if self._builder_trigger is not None:
+            self._builder_trigger.schedule()
+
+    async def aclose(self) -> None:
+        """Release resources.  Stops the builder auto-trigger if present.
+
+        Subclasses override to close their broker client and should call
+        ``await super().aclose()`` so the trigger worker is stopped too.
+        """
+        if self._builder_trigger is not None:
+            await self._builder_trigger.aclose()
 
     @abstractmethod
     async def _claim(self) -> tuple[list[dict[str, Any]], Any]:
@@ -173,6 +195,8 @@ class HZDRSpoolConsumer(ABC):
             self.config.campaign,
             self.config.consumer_group,
         )
+        if self._builder_trigger is not None:
+            self._builder_trigger.start()
         while not stop.is_set():
             try:
                 messages, token = await self._claim()

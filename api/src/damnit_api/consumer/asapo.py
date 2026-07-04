@@ -24,6 +24,7 @@ from typing import Any
 import httpx
 
 from ..metadata.hzdr_event import check_values_size
+from .builder_trigger import BuilderAutoTrigger
 from .spool import HZDRSpoolConsumer, SpoolConfig
 
 
@@ -35,13 +36,15 @@ class AsapoSpoolConsumer(HZDRSpoolConsumer):
         config: SpoolConfig,
         broker_url: str,
         timeout: float = 10.0,
+        builder_trigger: BuilderAutoTrigger | None = None,
     ) -> None:
-        super().__init__(config)
+        super().__init__(config, builder_trigger)
         self._broker = broker_url.rstrip("/")
         self._client = httpx.AsyncClient(timeout=timeout)
 
     async def aclose(self) -> None:
         await self._client.aclose()
+        await super().aclose()
 
     async def _claim(self) -> tuple[list[dict[str, Any]], Any]:
         params = urllib.parse.urlencode({
@@ -78,6 +81,9 @@ class AsapoSpoolConsumer(HZDRSpoolConsumer):
             poll_interval=settings.hzdr_spool.poll_interval,
             batch_size=settings.hzdr_spool.batch_size,
         )
+        trigger = BuilderAutoTrigger.from_settings(
+            settings.hzdr_spool, label="asapo-spool"
+        )
         if settings.hzdr_spool.broker_kind == "asapo":
             return RealAsapoSpoolConsumer(
                 config=cfg,
@@ -89,6 +95,7 @@ class AsapoSpoolConsumer(HZDRSpoolConsumer):
                 source_path=settings.hzdr_spool.asapo_source_path,
                 has_filesystem=settings.hzdr_spool.asapo_has_filesystem,
                 timeout_ms=settings.hzdr_spool.asapo_timeout_ms,
+                builder_trigger=trigger,
             )
         broker_url = settings.hzdr_spool.broker_url
         # The model validator on HZDRSpoolSettings already rejects enabled=True
@@ -96,7 +103,7 @@ class AsapoSpoolConsumer(HZDRSpoolConsumer):
         if broker_url is None:
             msg = "broker_url required (validated by HZDRSpoolSettings)"
             raise RuntimeError(msg)
-        return cls(config=cfg, broker_url=broker_url)
+        return cls(config=cfg, broker_url=broker_url, builder_trigger=trigger)
 
 
 class RealAsapoSpoolConsumer(HZDRSpoolConsumer):
@@ -115,8 +122,9 @@ class RealAsapoSpoolConsumer(HZDRSpoolConsumer):
         timeout_ms: int = 5000,
         sdk_consumer: Any | None = None,
         sdk_module: Any | None = None,
+        builder_trigger: BuilderAutoTrigger | None = None,
     ) -> None:
-        super().__init__(config)
+        super().__init__(config, builder_trigger)
         self._endpoint = endpoint
         self._beamtime = beamtime
         self._data_source = data_source
@@ -137,7 +145,7 @@ class RealAsapoSpoolConsumer(HZDRSpoolConsumer):
         )
 
     async def aclose(self) -> None:
-        return None
+        await super().aclose()
 
     async def _claim(self) -> tuple[list[dict[str, Any]], Any]:
         return await asyncio.to_thread(self._claim_sync)

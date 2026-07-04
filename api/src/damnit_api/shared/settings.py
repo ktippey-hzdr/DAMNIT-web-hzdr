@@ -248,6 +248,12 @@ class HZDRSpoolSettings(BaseModel):
     spool_dir: Path = Path("spool/asapo")
     poll_interval: float = 2.0
     batch_size: int = 10
+    # In-process debounced builder auto-trigger. Off by default so existing
+    # deployments (which run the builder by hand/cron) are unchanged. When true,
+    # builder_command must be a full argv for hzdr-hdf5-builder.py.
+    builder_auto_trigger: bool = False
+    builder_command: list[str] = Field(default_factory=list)
+    builder_debounce_seconds: float = 5.0
     asapo_endpoint: str = ""
     asapo_beamtime: str = ""
     asapo_data_source: str = ""
@@ -287,6 +293,13 @@ class HZDRSpoolSettings(BaseModel):
                     + "."
                 )
                 raise ValueError(msg)
+        if self.builder_auto_trigger and not self.builder_command:
+            msg = (
+                "DW_API_HZDR_SPOOL__BUILDER_COMMAND must be a non-empty command "
+                "(argv for hzdr-hdf5-builder.py) when "
+                "DW_API_HZDR_SPOOL__BUILDER_AUTO_TRIGGER=true."
+            )
+            raise ValueError(msg)
         return self
 
 
@@ -309,6 +322,22 @@ class HZDRKafkaSpoolSettings(BaseModel):
     poll_interval: float = 2.0
     poll_timeout_ms: int = 1000
     batch_size: int = 10
+    # In-process debounced builder auto-trigger (see HZDRSpoolSettings). Off by
+    # default; builder_command must be set when builder_auto_trigger=true.
+    builder_auto_trigger: bool = False
+    builder_command: list[str] = Field(default_factory=list)
+    builder_debounce_seconds: float = 5.0
+
+    @model_validator(mode="after")
+    def _require_builder_command_when_auto_trigger(self) -> "HZDRKafkaSpoolSettings":
+        if self.builder_auto_trigger and not self.builder_command:
+            msg = (
+                "DW_API_HZDR_KAFKA_SPOOL__BUILDER_COMMAND must be a non-empty "
+                "command (argv for hzdr-hdf5-builder.py) when "
+                "DW_API_HZDR_KAFKA_SPOOL__BUILDER_AUTO_TRIGGER=true."
+            )
+            raise ValueError(msg)
+        return self
 
 
 class HZDRHealthSettings(BaseModel):

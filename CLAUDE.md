@@ -110,7 +110,13 @@ Pydantic settings via `DW_API_*` env vars with `__` as the nested delimiter (e.g
 `DW_API_AUTH__MODE`). The deployment template is `api/.env.production.example`. Key
 knobs: `DW_API_DAMNIT_PATH` (data root), `DW_API_METADATA__PROVIDER` (`local` reads
 `hzdr_sources.json`, `mongo` reads a collection), and the `DW_API_HZDR_*SPOOL__*`
-consumer settings. Structured JSON logging turns on when `DW_API_DEBUG=false`.
+consumer settings. The spool consumers can auto-run the builder in-process:
+`DW_API_HZDR_*SPOOL__BUILDER_AUTO_TRIGGER` (default `false`) plus
+`DW_API_HZDR_*SPOOL__BUILDER_COMMAND` (full builder argv) schedule a debounced,
+coalesced builder subprocess after new events (quiet period
+`BUILDER_DEBOUNCE_SECONDS`, default 5s); a run already in progress coalesces
+later triggers into one follow-up, preserving the builder's single-writer lock.
+Structured JSON logging turns on when `DW_API_DEBUG=false`.
 `scripts/damnit-api.service` is the systemd unit (`Restart=on-failure`).
 
 ## Event schema contract (`hzdr-event-v1`)
