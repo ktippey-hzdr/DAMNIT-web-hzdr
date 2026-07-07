@@ -56,7 +56,7 @@ jobs:
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
-          
+
       - name: Checkout gh-pages
         uses: actions/checkout@v5
         with:
