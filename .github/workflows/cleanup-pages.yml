@@ -13,6 +13,16 @@ jobs:
     if: github.event_name == 'delete' && github.event.ref_type == 'branch'
     runs-on: ubuntu-latest
     steps:
+      - name: Check whether gh-pages exists
+        id: check_gh_pages
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --heads "https://github.com/${GITHUB_REPOSITORY}.git" gh-pages; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout gh-pages
         uses: actions/checkout@v5
         with:
@@ -37,6 +47,16 @@ jobs:
     if: github.event_name == 'pull_request' && github.event.action == 'closed'
     runs-on: ubuntu-latest
     steps:
+      - name: Check whether gh-pages exists
+        id: check_gh_pages
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --heads "https://github.com/${GITHUB_REPOSITORY}.git" gh-pages; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+          
       - name: Checkout gh-pages
         uses: actions/checkout@v5
         with:
