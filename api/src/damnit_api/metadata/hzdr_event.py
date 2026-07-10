@@ -1,15 +1,20 @@
 """Canonical ``hzdr-event-v1`` envelope contract.
 
-This is DAMNIT-web-hzdr's copy of the shared event model described in
-``docs/architecture.md``. There is no shared Python package between this
-repo and the producer repos today, so this file is vendored and must be kept
-in sync by hand with:
+The authoritative copy of this file lives in DAMNIT-web-hzdr at
+``api/src/damnit_api/metadata/hzdr_event.py`` (the shared event model is
+described in that repo's ``docs/architecture.md``). There is no shared
+Python package between the repos today, so the file is vendored
+byte-identically into:
 
     planet-watchdog/watchdog_core/hzdr_event.py
 
-and with the shotcounter producer (``hzdrTangoDSShotcounter``), which builds
-a plain-dict event of the same shape.
+by ``DAMNIT-web-hzdr/hzdr/scripts/sync-hzdr-event.ps1`` — edit only the
+DAMNIT copy, then re-run the sync with ``-Apply``. The shotcounter producer
+(``hzdrTangoDSShotcounter``) builds a plain-dict event of the same shape and
+vendors only the JSON fixtures.
 
+Every transport event (LaserData/ASAPO, DAQ File Watchdog/Kafka,
+DRACO-Trigger/Kafka, ...) must validate against ``HZDREventV1``. In DAMNIT,
 ``hzdr_sources.py`` and ``hzdr_nexus.py`` derive their event-shaped logic
 from this model instead of maintaining independent field lists.
 """
