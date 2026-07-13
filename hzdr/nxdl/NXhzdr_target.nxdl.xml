@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+# NXhzdr_target - HZDR-local application definition for laser-target campaign
+# bridge files written by DAMNIT-web-hzdr.
+#
+# This is the machine-readable encoding of hzdr/docs/nxhzdr-target-profile.md
+# (sections 2 and 3). The prose document remains the normative reference; this
+# NXDL exists so generated files can be certified with standard NXDL tooling
+# (pynxtools, via nds validate with the pynxtools and definitions options).
+#
+# Versioning: the enumerated value of sample/@damnit_nxdl_version below MUST
+# equal both HZDR_TARGET_PROFILE_VERSION in
+# api/src/damnit_api/metadata/hzdr_nexus.py and the "Current version" line in
+# the profile document (profile doc section 4). The meta-repo alignment
+# checker (ontology group) enforces this.
+-->
+<definition name="NXhzdr_target" extends="NXobject" type="group"
+    category="application"
+    xmlns="http://definition.nexusformat.org/nxdl/3.1"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://definition.nexusformat.org/nxdl/3.1 ../nxdl.xsd "
+    >
+    <doc>
+      HZDR laser-target campaign profile (NXhzdr_target).
+
+      Certifies the /entry/sample group of a DAMNIT NeXus bridge file against
+      the NXhzdr_target profile: standard NXsample fields plus HZDR profile
+      extensions for solid-target and gas-jet metadata. All sample fields are
+      optional because the writer skips absent/null metadata keys entirely
+      (profile doc section 2); the profile marker attributes damnit_nx_class
+      and damnit_nxdl_version are required whenever the sample group exists.
+
+      The open extras bag is modelled as the partial-name attribute prop_KEY
+      (free-form keys, string or number values). The transport-layer groups of
+      the bridge file (/entry/shots, /entry/instrument, per-source payload
+      collections) are intentionally not modelled here.
+    </doc>
+    <group type="NXentry">
+      <field name="definition">
+        <doc>
+          NXDL schema to which this file conforms.
+        </doc>
+        <enumeration>
+          <item value="NXhzdr_target"></item>
+        </enumeration>
+      </field>
+      <group type="NXsample" name="sample" optional="true">
+        <doc>
+          Target metadata for the campaign (profile doc section 2). Written
+          once per campaign file from the first shot's metadata.target.
+        </doc>
+        <attribute name="damnit_nx_class">
+          <doc>
+            Marks the group as following the NXhzdr_target profile while the
+            group keeps NX_class="NXsample" for compatibility (profile doc
+            section 3).
+          </doc>
+          <enumeration>
+            <item value="NXhzdr_target"></item>
+          </enumeration>
+        </attribute>
+        <attribute name="damnit_nxdl_version">
+          <doc>
+            Profile version the writer conformed to. Must match
+            HZDR_TARGET_PROFILE_VERSION and the profile document version.
+          </doc>
+          <enumeration>
+            <item value="0.2"></item>
+          </enumeration>
+        </attribute>
+        <attribute name="damnit_provenance" optional="true">
+          <doc>
+            Curated (wiki) vs. hand-entered (manual) target record.
+          </doc>
+          <enumeration>
+            <item value="wiki"></item>
+            <item value="manual"></item>
+          </enumeration>
+        </attribute>
+        <attribute name="target_ref" optional="true">
+          <doc>
+            URL or stable id of the MediaWiki target record.
+          </doc>
+        </attribute>
+        <attribute name="gas_species" optional="true">
+          <doc>
+            Gas-jet / cluster species (e.g. Ar, N2, He).
+          </doc>
+        </attribute>
+        <attribute name="prop_KEY" nameType="partial" type="NX_CHAR_OR_NUMBER" optional="true">
+          <doc>
+            Open extras bag: one attribute per metadata.target.properties key,
+            value as given (profile doc section 3; target-ontology.md section
+            4). Keys are free-form, so only the prop_ prefix is fixed here;
+            values are not unit-registry-backed.
+          </doc>
+        </attribute>
+        <field name="name" optional="true">
+          <doc>
+            Descriptive name of the target (standard NXsample field).
+          </doc>
+        </field>
+        <field name="chemical_formula" optional="true">
+          <doc>
+            Target material (standard NXsample field; source key
+            metadata.target.material).
+          </doc>
+        </field>
+        <field name="thickness" type="NX_FLOAT" units="NX_LENGTH" optional="true">
+          <doc>
+            Target thickness; canonical unit nm (standard NXsample field).
+          </doc>
+        </field>
+        <field name="temperature" type="NX_FLOAT" units="NX_ANY" optional="true">
+          <doc>
+            Sample temperature; canonical unit degree Celsius, written as the
+            registry string "C" (standard NXsample field). units="NX_ANY"
+            deliberately overrides the NXsample base class's NX_TEMPERATURE
+            category: the binding metadata key registry fixed the canonical
+            unit string as "C" (2026-07-02), which UDUNITS/pint-based
+            validators parse as coulomb and would reject as a temperature.
+            Revisit if the registry ever adopts "degC".
+          </doc>
+        </field>
+        <field name="diameter" type="NX_FLOAT" units="NX_LENGTH" optional="true">
+          <doc>
+            Target diameter; canonical unit mm (HZDR profile extension - no
+            standard NXsample field).
+          </doc>
+        </field>
+        <field name="gas_pressure" type="NX_FLOAT" units="NX_PRESSURE" optional="true">
+          <doc>
+            Gas-jet backing pressure; canonical unit bar (HZDR profile
+            extension - no standard NXsample field).
+          </doc>
+        </field>
+        <field name="substrate_material" optional="true">
+          <doc>
+            Substrate material for coated/layered targets (HZDR profile
+            extension - no standard NXsample field).
+          </doc>
+        </field>
+        <field name="description" optional="true">
+          <doc>
+            Free-text notes (standard NXsample field; source key
+            metadata.target.notes).
+          </doc>
+        </field>
+      </group>
+    </group>
+</definition>

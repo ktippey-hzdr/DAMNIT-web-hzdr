@@ -1,12 +1,15 @@
-# `NXhzdr_target` Profile — v0.1
+# `NXhzdr_target` Profile — v0.2
 
-Updated: 2026-07-02
+Updated: 2026-07-13
 
-The first versioned definition of the HZDR-local `NXhzdr_target` profile: the
+The versioned definition of the HZDR-local `NXhzdr_target` profile: the
 semantic map from `metadata.target.*` to the `/entry/sample` NeXus group, and
-the compatibility-attribute contract the writer stamps until a real NXDL
-ships. This is a profile *document*, not an NXDL — see §6 for what's still
-open.
+the compatibility-attribute contract the writer stamps. Since v0.2 the profile
+is also encoded as a real NXDL application definition
+(`hzdr/nxdl/NXhzdr_target.nxdl.xml`), declared by the bridge file via
+`/entry/definition`, so generated files can be certified with standard NXDL
+tooling (`nds validate <file> --pynxtools --definitions hzdr/nxdl`). This
+document stays the normative prose reference — see §6 for what's still open.
 
 Related docs: [target-ontology.md §2/§5/§8](target-ontology.md#2-the-schema)
 (binding key registry and NeXus mapping this profile is derived from),
@@ -28,9 +31,9 @@ its own local profile: **`NXhzdr_target`**.
 on `/entry/sample` so any standard NeXus/HELPMI tool can still read them. The
 HZDR profile is layered on top as attributes, not as a replacement class:
 `damnit_nx_class="NXhzdr_target"` and `damnit_nxdl_version` (this document's
-version). Once a real `NXhzdr_target` NXDL is written and bundled with a
-validator, HZDR can decide whether profile files should set
-`NX_class="NXhzdr_target"` directly (§6).
+version). Since v0.2 a real `NXhzdr_target` NXDL ships alongside this document
+and the file declares it via `/entry/definition`; whether profile files should
+additionally set `NX_class="NXhzdr_target"` remains an open decision (§6).
 
 ## 1.1 Literature and standards basis
 
@@ -42,7 +45,7 @@ readable by generic NeXus/HDF5 tooling.
 | --- | --- | --- |
 | Use `NXsample` as the compatibility class | The NeXus `NXsample` base class is the standard place for sample information and already defines `name`, `chemical_formula`, `temperature`, `description`, `type`, `thickness`, `physical_form`, sample environment, and incident beam links ([NeXus `NXsample`](https://manual.nexusformat.org/classes/base_classes/NXsample.html)). | `/entry/sample` keeps `NX_class="NXsample"` and maps the overlapping target fields onto standard `NXsample` datasets first. |
 | Keep HZDR-specific fields visibly local | The NXDL manual says NeXus class definitions are the standard glossary; extra items may be inserted, but they are not part of the standard unless defined by an NXDL/application definition ([NeXus NXDL](https://manual.nexusformat.org/nxdl.html)). | HZDR extensions use `damnit_*`, `target_ref`, `gas_species`, and `prop_*` attributes under a named local profile instead of pretending they are upstream NeXus fields. |
-| Write a prose profile before claiming a formal class | NXDL files are machine-readable definitions that can be validated against XML Schema and used to validate data files ([NeXus NXDL](https://manual.nexusformat.org/nxdl.html)). | v0.1 is a profile document only. A real `NXhzdr_target` NXDL and validator bundle are required before files can safely set `NX_class="NXhzdr_target"` directly. |
+| Write a prose profile before claiming a formal class | NXDL files are machine-readable definitions that can be validated against XML Schema and used to validate data files ([NeXus NXDL](https://manual.nexusformat.org/nxdl.html)). | v0.1 was a profile document only. v0.2 ships the NXDL (`hzdr/nxdl/NXhzdr_target.nxdl.xml`) with pynxtools-based validation; the `NX_class="NXhzdr_target"` swap is still a separate decision (§6). |
 | Avoid the bare name `NXtarget` | Official NeXus class lists define the standard namespace ([base classes](https://manual.nexusformat.org/classes/base_classes/index.html), [application definitions](https://manual.nexusformat.org/classes/applications/index.html)). As of the v2026.01 manual used for this review, `NXsample` exists and no official `NXtarget` base class is documented there. | The local class/profile name is prefixed as `NXhzdr_target` to avoid implying official NIAC status or colliding with a future upstream class. |
 | Prefer standard units metadata over unit suffixes in keys | NXDL standardizes common terms including engineering units, and fields carry unit categories such as `NX_LENGTH`, `NX_TEMPERATURE`, and `NX_PRESSURE` ([NeXus NXDL](https://manual.nexusformat.org/nxdl.html), [`NXsample`](https://manual.nexusformat.org/classes/base_classes/NXsample.html)). | Stored metadata keys stay bare (`thickness`, `temperature`, `gas_pressure`); the NeXus writer stamps `@units` at write time. |
 | Keep laser and target as adjacent but separate concepts | NeXus already models the radiation source and beam via `NXsource` and `NXbeam`, including laser/source type, frequency, wavelength, pulse energy, beam extent, incident wavelength, and polarization ([`NXsource`](https://manual.nexusformat.org/classes/base_classes/NXsource.html), [`NXbeam`](https://manual.nexusformat.org/classes/base_classes/NXbeam.html)). | `NXhzdr_target` only covers target/sample semantics; laser semantics stay in `/entry/instrument/laser` as `NXsource` + `NXbeam`. |
@@ -98,7 +101,7 @@ Stamped on the `/entry/sample` group by `write_nexus_sample()`:
 | --- | --- | --- | --- |
 | `NX_class` | `"NXsample"` | always | Compatibility class; never changes to `NXhzdr_target` until §6 is resolved |
 | `damnit_nx_class` | `"NXhzdr_target"` | always | Marks the group as following this profile |
-| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.1"`) | always | Must match this document's version (§4) |
+| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.2"`) | always | Must match this document's version and the NXDL enumeration (§4) |
 | `damnit_provenance` | `"wiki"` \| `"manual"` | if `provenance` present | Curated vs. hand-entered target |
 | `target_ref` | string (URL or stable id) | if `wiki_ref` present | Link back to the MediaWiki target record |
 | `gas_species` | string (e.g. `"Ar"`, `"N2"`, `"He"`) | if `gas_species` present | Gas-jet / cluster species |
@@ -108,16 +111,33 @@ Stamped on the `/entry/sample` group by `write_nexus_sample()`:
 `api/src/damnit_api/metadata/hzdr_nexus.py` (next to `write_nexus_sample()`);
 its value must always equal this document's version number.
 
+Since v0.2, `write_nexus_bridge()` additionally writes the entry-level dataset
+`/entry/definition = "NXhzdr_target"` (always). It declares the application
+definition encoded in `hzdr/nxdl/NXhzdr_target.nxdl.xml`, which is what NXDL
+validators (pynxtools) certify the file against; the NXDL fixes the accepted
+`damnit_nxdl_version` value via an enumeration, so a version drift between
+writer and NXDL fails certification.
+
 ## 4. Versioning rule
 
 Bump `damnit_nxdl_version` / `HZDR_TARGET_PROFILE_VERSION` on **any** change to
 the semantic map in §2 or the attribute spec in §3 — a field added/removed/
-retyped, a unit changed, or an attribute renamed. The writer constant and this
-document's version must always agree; a mismatch means one of them was
-updated without the other. Non-semantic edits to this document (wording,
-typo fixes) do not require a bump.
+retyped, a unit changed, or an attribute renamed. The writer constant, this
+document's version, and the `damnit_nxdl_version` enumeration in
+`hzdr/nxdl/NXhzdr_target.nxdl.xml` must always agree (all three, bumped
+together); a mismatch means one of them was updated without the others. The
+meta-repo alignment checker's `ontology` group verifies all three. Non-semantic
+edits to this document (wording, typo fixes) do not require a bump.
 
-Current version: **0.1** (first drafted version, 2026-07-02).
+Current version: **0.2** (adds `/entry/definition` + the NXDL encoding,
+2026-07-13).
+
+History:
+
+- **0.2** (2026-07-13): `/entry/definition = "NXhzdr_target"` stamped by
+  `write_nexus_bridge()`; profile encoded as the NXDL application definition
+  `hzdr/nxdl/NXhzdr_target.nxdl.xml`. §2/§3 sample-group semantics unchanged.
+- **0.1** (2026-07-02): first drafted version.
 
 ## 5. Known deviations
 
@@ -128,23 +148,34 @@ Current version: **0.1** (first drafted version, 2026-07-02).
   or attaches it under `NXsample` (the beam incident on the sample). HZDR's
   nesting groups the beam with its originating source instead, which reads
   naturally for a single-laser beamline but is not the most common upstream
-  pattern. **Accepted as a deviation for now** — revisit if/when this profile
-  is formalized into an NXDL and cross-checked against a validator that
-  enforces placement.
+  pattern. **Accepted as a deviation for now** — the v0.2 NXDL deliberately
+  covers only the entry's `definition` and the sample group, so it neither
+  enforces nor forbids this placement; revisit if the NXDL's scope ever grows
+  to instrument groups.
 
-No other deviations are tracked in v0.1.
+No other deviations are tracked in v0.2.
 
 ## 6. Future work
 
-- **NXDL formalization.** Write an actual `NXhzdr_target` NXDL file (XML,
-  following the standard NeXus definitions schema) encoding §2/§3 as formal
-  field/attribute definitions, and bundle it with a validator (`cnxvalidate`/
-  `punx` or equivalent) so generated files can be checked against it directly
-  instead of only against this prose document.
-- **`NX_class="NXhzdr_target"` decision.** Once the NXDL is bundled with
-  validation tooling, decide whether HZDR-profile files should set
+- ✅ **NXDL formalization — done in v0.2 (2026-07-13).**
+  `hzdr/nxdl/NXhzdr_target.nxdl.xml` encodes §2/§3 as an application
+  definition (NXentry + optional `sample: NXsample`; all sample fields
+  optional because the writer skips absent keys; `damnit_nx_class` /
+  `damnit_nxdl_version` required with enumerated values). Validation is
+  bundled via nexus-design-studio:
+  `nds validate <file.nxs> --pynxtools --definitions hzdr/nxdl` overlays this
+  directory onto pynxtools' NeXus definitions and certifies each entry against
+  the `/entry/definition` it declares. The open `prop_*` attribute bag is
+  modelled as the partial-name attribute `prop_KEY` (type
+  `NX_CHAR_OR_NUMBER`), and `temperature` carries `units="NX_ANY"` on purpose
+  — the registry's canonical unit string `"C"` reads as coulomb to
+  UDUNITS/pint-based validators, so the base class's `NX_TEMPERATURE`
+  category would false-fail (revisit if the registry ever adopts `"degC"`).
+- **`NX_class="NXhzdr_target"` decision.** The NXDL now ships with validation
+  tooling; deciding whether HZDR-profile files should set
   `NX_class="NXhzdr_target"` directly on `/entry/sample` (dropping, or
-  keeping alongside, the `NX_class="NXsample"` compatibility value). Tracked
+  keeping alongside, the `NX_class="NXsample"` compatibility value) remains
+  open. Tracked
   as [alignment-implementation-plan.md Phase 5](plans/alignment-implementation-plan.md#phase-5--hzdr-owned-ontology-annotation--openpmd-interoperability-).
 - **`type` field.** `metadata.target.type` (target-ontology.md §3) is not yet
   written into `/entry/sample`; add a mapping (dataset or attribute) in a

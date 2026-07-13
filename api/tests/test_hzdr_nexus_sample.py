@@ -216,3 +216,21 @@ def test_gas_species_written_when_present(tmp_path: Path):
         assert sample.attrs["gas_species"] == "Ar"
         assert sample["gas_pressure"][()] == pytest.approx(3.2)
         assert sample["gas_pressure"].attrs["units"] == "bar"
+
+
+def test_nxdl_version_enumeration_matches_writer_constant():
+    """The NXDL fixes the accepted damnit_nxdl_version via an enumeration;
+    writer constant, profile doc, and NXDL must bump together (profile doc §4).
+    """
+    import re
+
+    nxdl = (
+        Path(__file__).resolve().parents[2] / "hzdr" / "nxdl" / "NXhzdr_target.nxdl.xml"
+    )
+    match = re.search(
+        r'name="damnit_nxdl_version".*?<item value="([^"]+)"',
+        nxdl.read_text(encoding="utf-8"),
+        flags=re.DOTALL,
+    )
+    assert match, f"damnit_nxdl_version enumeration not found in {nxdl}"
+    assert match.group(1) == HZDR_TARGET_PROFILE_VERSION

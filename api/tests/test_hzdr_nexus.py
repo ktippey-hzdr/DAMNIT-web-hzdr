@@ -140,6 +140,8 @@ def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
         incident_polarization = cast("h5py.Dataset", beam["incident_polarization"])
 
         assert list(raw_kept[...]) == [1, 2]
+        definition = cast("h5py.Dataset", handle["entry/definition"])
+        assert definition.asstr()[()] == "NXhzdr_target"
         assert shot_key.asstr()[0] == "HELPMI:20260610:000017"
         assert match_quality.asstr()[0] == "exact_day_shot_number"
         assert source_shot_key.asstr()[0] == "HELPMI:20260610:000017"

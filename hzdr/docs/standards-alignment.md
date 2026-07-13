@@ -318,8 +318,13 @@ only (§3.3, §3.4). This requires:
 3. ✅ **Done 2026-07-02:** drafted the v0.1 HZDR `NXhzdr_target` profile document
    ([hzdr/docs/nxhzdr-target-profile.md](nxhzdr-target-profile.md)) and `write_nexus_sample()`
    now stamps the compatibility attrs (`damnit_nx_class="NXhzdr_target"`,
-   `damnit_nxdl_version`) on `/entry/sample` while keeping `NX_class="NXsample"`. NXDL
-   formalization (an actual XML NXDL + validator) is still open.
+   `damnit_nxdl_version`) on `/entry/sample` while keeping `NX_class="NXsample"`.
+   ✅ **Done 2026-07-13 (profile v0.2):** NXDL formalization — the application definition
+   `hzdr/nxdl/NXhzdr_target.nxdl.xml` encodes the profile, `write_nexus_bridge()` declares
+   it via `/entry/definition`, and files are certified with
+   `nds validate <file> --pynxtools --definitions hzdr/nxdl` (pynxtools; wired into the
+   meta-repo alignment checker's `nexus` group). The `NX_class="NXhzdr_target"` swap
+   decision (profile doc §6) is still open.
 4. No change to the transport envelope; the data is already in `metadata`/`values`.
 
 ### Route 3: SciCat registration (lower effort — existing plugin)
@@ -380,7 +385,7 @@ writer and analysis tooling concern.
 | Add `/entry/sample` (`NXsample`) to NeXus bridge | ✅ done for available target metadata | §3.7, Route 2 |
 | Per-product `NXdetector` sub-groups in NeXus bridge | ⬜ medium effort | §3.6, §3.7 |
 | Official `NXlaser` / `NXtarget` groups from HELPMI | ❌ cancelled 2026-07-02 — HELPMI finished | Route 2 |
-| HZDR-local `NXhzdr_target` profile / NXDL | 🟡 v0.1 profile doc + writer compatibility attrs done 2026-07-02 ([nxhzdr-target-profile.md](nxhzdr-target-profile.md)); NXDL formalization still open | Route 2, Route 4 |
+| HZDR-local `NXhzdr_target` profile / NXDL | ✅ v0.2 done 2026-07-13: NXDL application definition (`hzdr/nxdl/NXhzdr_target.nxdl.xml`) + `/entry/definition` stamped by the bridge + pynxtools certification via `nds validate --pynxtools --definitions` ([nxhzdr-target-profile.md](nxhzdr-target-profile.md)); `NX_class` swap decision still open (profile doc §6) | Route 2, Route 4 |
 | SciCat registration + `scicat_pid` back-population (via existing HZDR SciCat plugin) | 🟡 plugin built (HTTP `/scicat/from-json` \| `/scicat/push`); DAMNIT builder post-step + API link not yet wired | Route 3, [roadmap §SciCat Registration](status/integration-roadmap.md#scicat-registration) |
 | NeXus Ontology annotation for federated search | ⬜ HZDR-owned design; no HELPMI blocker | Route 4 |
 | openPMD interoperability (simulation links) | ⬜ HZDR-owned link/manifest design; comparison tooling deferred | Route 5 |

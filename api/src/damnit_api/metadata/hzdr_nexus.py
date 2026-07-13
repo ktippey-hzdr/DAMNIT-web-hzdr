@@ -1147,6 +1147,10 @@ def write_nexus_bridge(
             entry = handle.require_group("entry")
             if "NX_class" not in entry.attrs:
                 entry.attrs["NX_class"] = "NXentry"
+            # Declares the NXhzdr_target application definition so NXDL tooling
+            # (pynxtools) can certify the file against hzdr/nxdl/. Profile >= 0.2.
+            if "definition" not in entry:
+                entry.create_dataset("definition", data="NXhzdr_target")
             entry.attrs["damnit_shot_table"] = "shots"
             entry.attrs["damnit_source_events"] = "source_events"
             entry.attrs["damnit_data_products"] = "data_products"
@@ -1355,9 +1359,10 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
 
 # HZDR-local NXhzdr_target profile version. Bump on any semantic-map change
 # (fields added/removed/retyped) to the metadata.target.* -> /entry/sample
-# mapping; the profile doc version must be bumped to match.
+# mapping; the profile doc version AND the damnit_nxdl_version enumeration in
+# hzdr/nxdl/NXhzdr_target.nxdl.xml must be bumped to match.
 # See hzdr/docs/nxhzdr-target-profile.md.
-HZDR_TARGET_PROFILE_VERSION = "0.1"
+HZDR_TARGET_PROFILE_VERSION = "0.2"
 
 
 def write_nexus_sample(entry_group: h5py.Group, target: Any) -> None:
@@ -1375,8 +1380,10 @@ def write_nexus_sample(entry_group: h5py.Group, target: Any) -> None:
     so the group is `NXsample` permanently (no planned `NXtarget` wait). The
     group also carries the HZDR-local compatibility profile attrs
     `damnit_nx_class="NXhzdr_target"` and `damnit_nxdl_version` (see
-    hzdr/docs/nxhzdr-target-profile.md) until a local NXDL ships and
-    `NX_class="NXhzdr_target"` can be set directly.
+    hzdr/docs/nxhzdr-target-profile.md). The profile's NXDL lives at
+    hzdr/nxdl/NXhzdr_target.nxdl.xml (declared via /entry/definition, written
+    by write_nexus_bridge); swapping NX_class to "NXhzdr_target" remains
+    deferred (profile doc §6).
     """
     target = _normalize_target_metadata(target)
     if not isinstance(target, dict):
