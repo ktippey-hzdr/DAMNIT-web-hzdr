@@ -1362,7 +1362,7 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
 # mapping; the profile doc version AND the damnit_nxdl_version enumeration in
 # hzdr/nxdl/NXhzdr_target.nxdl.xml must be bumped to match.
 # See hzdr/docs/nxhzdr-target-profile.md.
-HZDR_TARGET_PROFILE_VERSION = "0.2"
+HZDR_TARGET_PROFILE_VERSION = "0.3"
 
 
 def write_nexus_sample(entry_group: h5py.Group, target: Any) -> None:

@@ -260,7 +260,7 @@ keys, so the linter is silent on its output.
 | --- | --- | --- |
 | `target.*` | `thickness` | nm |
 | `target.*` | `diameter` | mm |
-| `target.*` | `temperature` | °C (`C`) |
+| `target.*` | `temperature` | °C (`degC`) |
 | `target.*` | `gas_pressure` | bar |
 | `laser.*` | `pulse_energy` | J |
 | `laser.*` | `pulse_duration` | fs |

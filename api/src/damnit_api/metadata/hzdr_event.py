@@ -181,7 +181,9 @@ EVENT_REQUIRED_FIELDS: frozenset[str] = frozenset({
 METADATA_KEY_REGISTRY: dict[str, str | None] = {
     "target.thickness": "nm",
     "target.diameter": "mm",
-    "target.temperature": "C",
+    # "degC" (UDUNITS/pint) rather than "C", which unit-aware validators
+    # parse as coulomb. Changed 2026-07-13 with NXhzdr_target profile 0.3.
+    "target.temperature": "degC",
     "target.gas_pressure": "bar",
     "laser.pulse_energy": "J",
     "laser.pulse_duration": "fs",

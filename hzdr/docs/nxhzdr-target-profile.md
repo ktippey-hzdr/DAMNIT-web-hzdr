@@ -1,4 +1,4 @@
-# `NXhzdr_target` Profile — v0.2
+# `NXhzdr_target` Profile — v0.3
 
 Updated: 2026-07-13
 
@@ -70,7 +70,7 @@ decomposition into plasma source, medium/target, diagnostics, and resources
 | `name` | `name` (dataset) | — (string) | — | Standard `NXsample.name` |
 | `material` | `chemical_formula` (dataset) | — (string) | Material | Standard `NXsample.chemical_formula` |
 | `thickness` | `thickness` (dataset), `@units` | nm | Thickness | Standard `NXsample.thickness` |
-| `temperature` | `temperature` (dataset), `@units` | °C (`C`) | Sample temperature | Standard `NXsample.temperature` |
+| `temperature` | `temperature` (dataset), `@units` | °C (`degC`) | Sample temperature | Standard `NXsample.temperature` |
 | `diameter` | `diameter` (dataset), `@units` | mm | Diameter | **Profile extension** — no standard `NXsample` field |
 | `gas_pressure` | `gas_pressure` (dataset), `@units` | bar | Gas pressure (gas jet) | **Profile extension** — no standard `NXsample` field |
 | `substrate_material` | `substrate_material` (dataset) | — (string) | Substrate material | **Profile extension** — no standard `NXsample` field |
@@ -101,7 +101,7 @@ Stamped on the `/entry/sample` group by `write_nexus_sample()`:
 | --- | --- | --- | --- |
 | `NX_class` | `"NXsample"` | always | Compatibility class; never changes to `NXhzdr_target` until §6 is resolved |
 | `damnit_nx_class` | `"NXhzdr_target"` | always | Marks the group as following this profile |
-| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.2"`) | always | Must match this document's version and the NXDL enumeration (§4) |
+| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.3"`) | always | Must match this document's version and the NXDL enumeration (§4) |
 | `damnit_provenance` | `"wiki"` \| `"manual"` | if `provenance` present | Curated vs. hand-entered target |
 | `target_ref` | string (URL or stable id) | if `wiki_ref` present | Link back to the MediaWiki target record |
 | `gas_species` | string (e.g. `"Ar"`, `"N2"`, `"He"`) | if `gas_species` present | Gas-jet / cluster species |
@@ -129,11 +129,14 @@ together); a mismatch means one of them was updated without the others. The
 meta-repo alignment checker's `ontology` group verifies all three. Non-semantic
 edits to this document (wording, typo fixes) do not require a bump.
 
-Current version: **0.2** (adds `/entry/definition` + the NXDL encoding,
+Current version: **0.3** (canonical temperature unit string `"C"` → `"degC"`,
 2026-07-13).
 
 History:
 
+- **0.3** (2026-07-13): canonical unit string for `target.temperature`
+  changed `"C"` → `"degC"` (UDUNITS/pint-parseable; `"C"` reads as coulomb),
+  letting the NXDL keep the standard `NX_TEMPERATURE` units category.
 - **0.2** (2026-07-13): `/entry/definition = "NXhzdr_target"` stamped by
   `write_nexus_bridge()`; profile encoded as the NXDL application definition
   `hzdr/nxdl/NXhzdr_target.nxdl.xml`. §2/§3 sample-group semantics unchanged.
@@ -153,7 +156,7 @@ History:
   enforces nor forbids this placement; revisit if the NXDL's scope ever grows
   to instrument groups.
 
-No other deviations are tracked in v0.2.
+No other deviations are tracked in v0.3.
 
 ## 6. Future work
 
@@ -167,10 +170,10 @@ No other deviations are tracked in v0.2.
   directory onto pynxtools' NeXus definitions and certifies each entry against
   the `/entry/definition` it declares. The open `prop_*` attribute bag is
   modelled as the partial-name attribute `prop_KEY` (type
-  `NX_CHAR_OR_NUMBER`), and `temperature` carries `units="NX_ANY"` on purpose
-  — the registry's canonical unit string `"C"` reads as coulomb to
-  UDUNITS/pint-based validators, so the base class's `NX_TEMPERATURE`
-  category would false-fail (revisit if the registry ever adopts `"degC"`).
+  `NX_CHAR_OR_NUMBER`). Since v0.3 the registry's canonical temperature unit
+  string is `"degC"` (not `"C"`, which unit-aware validators parse as
+  coulomb), so `temperature` carries the standard `NX_TEMPERATURE` units
+  category.
 - **`NX_class="NXhzdr_target"` decision.** The NXDL now ships with validation
   tooling; deciding whether HZDR-profile files should set
   `NX_class="NXhzdr_target"` directly on `/entry/sample` (dropping, or

@@ -193,7 +193,7 @@ def test_units_match_registry_exactly(tmp_path: Path):
         )
         assert METADATA_KEY_REGISTRY["target.thickness"] == "nm"
         assert METADATA_KEY_REGISTRY["target.diameter"] == "mm"
-        assert METADATA_KEY_REGISTRY["target.temperature"] == "C"
+        assert METADATA_KEY_REGISTRY["target.temperature"] == "degC"
         assert METADATA_KEY_REGISTRY["target.gas_pressure"] == "bar"
 
 

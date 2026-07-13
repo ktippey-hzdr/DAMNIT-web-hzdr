@@ -157,7 +157,7 @@ attribute (matching how `hzdr_nexus.py` already attaches `units` to data product
 | --- | --- | --- | --- |
 | `thickness` | nm | `nm` | `NX_LENGTH` |
 | `diameter` | mm | `mm` | |
-| `temperature` | °C | `C` | NeXus `NXsample.temperature` is K; the writer may also emit a K-converted dataset with `@units="K"` |
+| `temperature` | °C | `degC` | UDUNITS/pint-parseable (`C` reads as coulomb); NeXus `NXsample.temperature` is K, and the writer may also emit a K-converted dataset with `@units="K"` |
 | `gas_pressure` | bar | `bar` | |
 
 This supersedes the unit-suffixed names (`thickness_nm`, `diameter_mm`, …) shown in
