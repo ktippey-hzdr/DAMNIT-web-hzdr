@@ -2426,12 +2426,15 @@ def _write_source_payloads(entry: h5py.Group, events: list[dict[str, Any]]) -> N
         values = event.get("values")
         if not isinstance(values, list):
             continue
-        event_group = (
-            entry
-            .require_group(source_group_name(str(event["source"])))
-            .require_group(safe_hdf5_name(str(event["kind"])))
-            .require_group(safe_hdf5_name(str(event["event_id"])))
-        )
+        source_group = entry.require_group(source_group_name(str(event["source"])))
+        kind_group = source_group.require_group(safe_hdf5_name(str(event["kind"])))
+        event_group = kind_group.require_group(safe_hdf5_name(str(event["event_id"])))
+        # Unclassed groups fail structural NeXus validation (nds validate,
+        # pynxtools); these are DAMNIT-internal tables, so NXcollection applies
+        # (same as /entry/shots and /entry/source_events).
+        for group in (source_group, kind_group, event_group):
+            if "NX_class" not in group.attrs:
+                group.attrs["NX_class"] = "NXcollection"
         _replace_dataset(event_group, "values", np.asarray(values))
         event_group.attrs["event_id"] = str(event["event_id"])
         event_group.attrs["shot_key"] = str(event.get("shot_key") or "")
