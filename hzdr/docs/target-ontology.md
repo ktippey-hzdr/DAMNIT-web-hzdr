@@ -51,7 +51,7 @@ round-trips losslessly and can be promoted to a typed key later.
 | `type` | str enum | yes | Target class — see §3 | `NXsample.type` / HELPMI `TargetClasses` |
 | `name` | str | yes | Display / catalog label (the wiki selection, or the OTHER name) | `NXsample.name` |
 | `provenance` | str enum | yes | `wiki` \| `manual` — curated vs hand-entered | `NXsample` `@damnit_provenance` |
-| `material` | str \| null | no | Chemical formula or material name (`"Au"`, `"CH2"`, `"mylar"`) | `NXsample.chemical_formula` |
+| `material` | str \| null | no | Chemical formula or material name (`"Au"`, `"CH2"`, `"mylar"`) | `NXsample.material` (profile ext.); `chemical_formula` too when it parses as a formula (profile v0.4) |
 | `thickness` | number \| null | no | Foil/film thickness — **bare number, unit in §5** | `NXsample.thickness` |
 | `notes` | str \| null | no | Free operator text | `NXsample.description` / `NXnote` |
 | `wiki_page` | str \| null | no | MediaWiki page title the target was selected from; null for `manual` | — |
@@ -230,7 +230,7 @@ The implemented `write_nexus_sample()` writer reads
 | `metadata.target` key | `NXsample` field | Attribute |
 | --- | --- | --- |
 | `name` | `name` | |
-| `material` | `chemical_formula` | |
+| `material` | `material`; plus `chemical_formula` when the value parses as a plain element-symbol formula (profile v0.4) | |
 | `thickness` | `thickness` | `@units="nm"` |
 | `diameter` | `diameter` | `@units="mm"` |
 | `temperature` | `temperature` | `@units` per §5 |

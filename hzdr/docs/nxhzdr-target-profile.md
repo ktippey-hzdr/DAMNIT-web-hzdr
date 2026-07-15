@@ -1,6 +1,6 @@
-# `NXhzdr_target` Profile — v0.3
+# `NXhzdr_target` Profile — v0.4
 
-Updated: 2026-07-13
+Updated: 2026-07-15
 
 The versioned definition of the HZDR-local `NXhzdr_target` profile: the
 semantic map from `metadata.target.*` to the `/entry/sample` NeXus group, and
@@ -68,7 +68,8 @@ decomposition into plasma source, medium/target, diagnostics, and resources
 | `metadata.target` key | NeXus path (under `/entry/sample`) | Canonical unit | HELPMI DDC term (§3.4) | Upstream NeXus field? |
 | --- | --- | --- | --- | --- |
 | `name` | `name` (dataset) | — (string) | — | Standard `NXsample.name` |
-| `material` | `chemical_formula` (dataset) | — (string) | Material | Standard `NXsample.chemical_formula` |
+| `material` | `material` (dataset) | — (string) | Material | **Profile extension** — free text; no standard `NXsample` field |
+| `material` (only when it parses as a formula) | `chemical_formula` (dataset) | — (string) | Material | Standard `NXsample.chemical_formula` |
 | `thickness` | `thickness` (dataset), `@units` | nm | Thickness | Standard `NXsample.thickness` |
 | `temperature` | `temperature` (dataset), `@units` | °C (`degC`) | Sample temperature | Standard `NXsample.temperature` |
 | `diameter` | `diameter` (dataset), `@units` | mm | Diameter | **Profile extension** — no standard `NXsample` field |
@@ -80,12 +81,24 @@ decomposition into plasma source, medium/target, diagnostics, and resources
 | `gas_species` | `@gas_species` (group attr) | — (string) | Gas species (gas jet) | **Profile extension** (HZDR attr) |
 | `properties.*` | `@prop_<key>` (group attr, one per key) | as given (open bag, no registry unit) | — | **Profile extension** (HZDR attr) |
 
-`name`, `material`, `thickness`, `temperature` are **standard NXsample**
+`name`, `thickness`, `temperature` are **standard NXsample**
 fields — a plain NeXus reader gets useful data with no knowledge of this
-profile. `diameter`, `gas_pressure`, `substrate_material` are **profile
-extensions**: still written as plain datasets (so generic NeXus tooling can
-still read the value), but there is no upstream `NXsample` field they map to
-— they only have meaning under the `NXhzdr_target` semantic layer. `type` is
+profile. `material`, `diameter`, `gas_pressure`, `substrate_material` are
+**profile extensions**: still written as plain datasets (so generic NeXus
+tooling can still read the value), but there is no upstream `NXsample` field
+they map to — they only have meaning under the `NXhzdr_target` semantic layer.
+
+Since v0.4, `material` routes to the free-text `material` extension dataset
+instead of `chemical_formula`. Real target-inventory values are mostly **not**
+CIF-convention formulas — the curated wiki records carry polymer trade names
+("Formvar", "CH formvar"), multi-layer lists ("Si, Cu", "Au + CH (PU)") and
+gas mixtures for LWFA gas targets — and `NXsample.chemical_formula` is
+specified as a CIF/Hill-notation formula, so writing those values there would
+mislabel them for any consumer that trusts the field name. The writer still
+derives `chemical_formula` **additionally** when the material value parses as
+a plain element-symbol formula (`_is_chemical_formula()` in
+`hzdr_nexus.py` — e.g. `Au`, `Cu`, `Si3N4`, `CH`), which covers the pure-foil
+inventory; anything that does not parse is written only as `material`. `type` is
 recorded in `metadata.target.type` (§3, target-ontology.md) but is not yet
 written into `/entry/sample`; see §6.
 
@@ -101,7 +114,7 @@ Stamped on the `/entry/sample` group by `write_nexus_sample()`:
 | --- | --- | --- | --- |
 | `NX_class` | `"NXsample"` | always | Compatibility class; never changes to `NXhzdr_target` until §6 is resolved |
 | `damnit_nx_class` | `"NXhzdr_target"` | always | Marks the group as following this profile |
-| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.3"`) | always | Must match this document's version and the NXDL enumeration (§4) |
+| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.4"`) | always | Must match this document's version and the NXDL enumeration (§4) |
 | `damnit_provenance` | `"wiki"` \| `"manual"` | if `provenance` present | Curated vs. hand-entered target |
 | `target_ref` | string (URL or stable id) | if `wiki_ref` present | Link back to the MediaWiki target record |
 | `gas_species` | string (e.g. `"Ar"`, `"N2"`, `"He"`) | if `gas_species` present | Gas-jet / cluster species |
@@ -129,11 +142,18 @@ together); a mismatch means one of them was updated without the others. The
 meta-repo alignment checker's `ontology` group verifies all three. Non-semantic
 edits to this document (wording, typo fixes) do not require a bump.
 
-Current version: **0.3** (canonical temperature unit string `"C"` → `"degC"`,
-2026-07-13).
+Current version: **0.4** (`material` → free-text `material` extension dataset;
+`chemical_formula` derived only when the value parses as a formula,
+2026-07-15).
 
 History:
 
+- **0.4** (2026-07-15): `target.material` now routes to the free-text
+  profile-extension dataset `material` instead of `chemical_formula`, because
+  real inventory values are mostly trade names ("Formvar"), layer lists
+  ("Si, Cu") or gas mixtures rather than CIF formulas. `chemical_formula`
+  (standard NXsample) is written **in addition** only when the value parses
+  as a plain element-symbol formula (writer check `_is_chemical_formula()`).
 - **0.3** (2026-07-13): canonical unit string for `target.temperature`
   changed `"C"` → `"degC"` (UDUNITS/pint-parseable; `"C"` reads as coulomb),
   letting the NXDL keep the standard `NX_TEMPERATURE` units category.

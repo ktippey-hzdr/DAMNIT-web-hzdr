@@ -65,7 +65,7 @@
             HZDR_TARGET_PROFILE_VERSION and the profile document version.
           </doc>
           <enumeration>
-            <item value="0.3"></item>
+            <item value="0.4"></item>
           </enumeration>
         </attribute>
         <attribute name="damnit_provenance" optional="true">
@@ -100,10 +100,22 @@
             Descriptive name of the target (standard NXsample field).
           </doc>
         </field>
+        <field name="material" optional="true">
+          <doc>
+            Target material as recorded, free text (HZDR profile extension -
+            no standard NXsample field; source key metadata.target.material).
+            Real values are often trade names ("Formvar"), layer lists
+            ("Si, Cu") or gas mixtures, not chemical formulas (profile doc
+            section 2, since v0.4).
+          </doc>
+        </field>
         <field name="chemical_formula" optional="true">
           <doc>
-            Target material (standard NXsample field; source key
-            metadata.target.material).
+            Target material as a CIF/Hill-notation formula (standard NXsample
+            field). Since profile 0.4 the writer derives it from
+            metadata.target.material only when the value parses as a plain
+            element-symbol formula (e.g. Au, Si3N4); otherwise the field is
+            absent and only the free-text material dataset is written.
           </doc>
         </field>
         <field name="thickness" type="NX_FLOAT" units="NX_LENGTH" optional="true">

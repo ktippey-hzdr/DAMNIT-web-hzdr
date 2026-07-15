@@ -1362,7 +1362,34 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
 # mapping; the profile doc version AND the damnit_nxdl_version enumeration in
 # hzdr/nxdl/NXhzdr_target.nxdl.xml must be bumped to match.
 # See hzdr/docs/nxhzdr-target-profile.md.
-HZDR_TARGET_PROFILE_VERSION = "0.3"
+HZDR_TARGET_PROFILE_VERSION = "0.4"
+
+# All 118 IUPAC element symbols, for the conservative formula check below.
+_ELEMENTS = (
+    "H He Li Be B C N O F Ne Na Mg Al Si P S Cl Ar K Ca Sc Ti V Cr Mn Fe Co "
+    "Ni Cu Zn Ga Ge As Se Br Kr Rb Sr Y Zr Nb Mo Tc Ru Rh Pd Ag Cd In Sn Sb "
+    "Te I Xe Cs Ba La Ce Pr Nd Pm Sm Eu Gd Tb Dy Ho Er Tm Yb Lu Hf Ta W Re "
+    "Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es "
+    "Fm Md No Lr Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og"
+)
+_ELEMENT_SYMBOLS = frozenset(_ELEMENTS.split())
+
+_FORMULA_TOKEN = re.compile(r"([A-Z][a-z]?)(\d*)")
+
+
+def _is_chemical_formula(value: str) -> bool:
+    """True when *value* is a plain Hill-style formula (element symbols with
+    optional integer counts, e.g. "Au", "Si3N4", "CH").
+
+    Deliberately conservative: real target.material values are often trade
+    names ("Formvar"), layer lists ("Si, Cu"), or gas mixes ("He + 5% N2"),
+    which must NOT be stamped into NXsample.chemical_formula (profile doc
+    section 2, v0.4).
+    """
+    text = value.strip()
+    if not text or not re.fullmatch(r"(?:[A-Z][a-z]?\d*)+", text):
+        return False
+    return all(symbol in _ELEMENT_SYMBOLS for symbol, _ in _FORMULA_TOKEN.findall(text))
 
 
 def write_nexus_sample(entry_group: h5py.Group, target: Any) -> None:
@@ -1395,7 +1422,10 @@ def write_nexus_sample(entry_group: h5py.Group, target: Any) -> None:
     sample.attrs["damnit_nxdl_version"] = HZDR_TARGET_PROFILE_VERSION
 
     _write_optional_string_dataset(sample, "name", target.get("name"))
-    _write_optional_string_dataset(sample, "chemical_formula", target.get("material"))
+    material = target.get("material")
+    _write_optional_string_dataset(sample, "material", material)
+    if material is not None and _is_chemical_formula(str(material)):
+        _write_optional_string_dataset(sample, "chemical_formula", material)
     _write_optional_numeric_dataset(
         sample, "thickness", target.get("thickness"), unit_key="target.thickness"
     )

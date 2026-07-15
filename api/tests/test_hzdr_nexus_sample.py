@@ -13,6 +13,7 @@ import pytest
 from damnit_api.metadata.hzdr_event import METADATA_KEY_REGISTRY
 from damnit_api.metadata.hzdr_nexus import (
     HZDR_TARGET_PROFILE_VERSION,
+    _is_chemical_formula,
     write_nexus_sample,
 )
 
@@ -46,6 +47,8 @@ def test_wiki_foil_example_with_properties(tmp_path: Path):
         assert sample.attrs["damnit_nx_class"] == "NXhzdr_target"
         assert sample.attrs["damnit_nxdl_version"] == HZDR_TARGET_PROFILE_VERSION
         assert sample["name"].asstr()[()] == "Au 5 μm #A12"
+        assert sample["material"].asstr()[()] == "Au"
+        # "Au" parses as a formula, so chemical_formula is derived too (v0.4).
         assert sample["chemical_formula"].asstr()[()] == "Au"
         assert sample["thickness"][()] == pytest.approx(5000.0)
         assert sample["thickness"].attrs["units"] == "nm"
@@ -91,6 +94,7 @@ def test_manual_other_example_omits_absent_fields(tmp_path: Path):
         assert sample.attrs["damnit_nx_class"] == "NXhzdr_target"
         assert sample.attrs["damnit_nxdl_version"] == HZDR_TARGET_PROFILE_VERSION
         assert sample["name"].asstr()[()] == "test wedge"
+        assert sample["material"].asstr()[()] == "Al"
         assert sample["chemical_formula"].asstr()[()] == "Al"
         assert sample["thickness"][()] == pytest.approx(250.0)
         assert sample["thickness"].attrs["units"] == "nm"
@@ -125,6 +129,7 @@ def test_legacy_string_target_normalizes(tmp_path: Path):
         assert sample["name"].asstr()[()] == "target-1"
         assert sample.attrs["damnit_provenance"] == "manual"
         # No material/thickness/etc. were ever provided for the legacy form.
+        assert "material" not in sample
         assert "chemical_formula" not in sample
         assert "thickness" not in sample
 
@@ -195,6 +200,56 @@ def test_units_match_registry_exactly(tmp_path: Path):
         assert METADATA_KEY_REGISTRY["target.diameter"] == "mm"
         assert METADATA_KEY_REGISTRY["target.temperature"] == "degC"
         assert METADATA_KEY_REGISTRY["target.gas_pressure"] == "bar"
+
+
+@pytest.mark.parametrize(
+    "value",
+    ["Au", "Al", "Cu", "Ti", "CH", "Si3N4", "SiO2", "C10H8O4"],
+)
+def test_is_chemical_formula_accepts_plain_formulas(value: str):
+    assert _is_chemical_formula(value)
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        # Real target-inventory shapes (wiki cargo export) that must NOT be
+        # stamped into NXsample.chemical_formula (profile doc §2, v0.4).
+        "Formvar",
+        "CH formvar",
+        "Si, Cu",
+        "Au + CH (PU)",
+        "polyamide C12H22N2",
+        "He + 5% N2",
+        "mylar",
+        "",
+        "   ",
+        "Qx3",  # regex-shaped but Q is not an element
+    ],
+)
+def test_is_chemical_formula_rejects_free_text(value: str):
+    assert not _is_chemical_formula(value)
+
+
+def test_non_formula_material_written_without_chemical_formula(tmp_path: Path):
+    """A trade-name material lands only in the free-text `material` dataset."""
+    target = {
+        "type": "foil",
+        "name": "0.25% Formvar 092023",
+        "provenance": "wiki",
+        "material": "CH formvar",
+        "thickness": 40.0,
+    }
+    path = tmp_path / "campaign.nxs"
+
+    with h5py.File(path, "w") as handle:
+        entry = handle.create_group("entry")
+        write_nexus_sample(entry, target)
+
+    with h5py.File(path, "r") as handle:
+        sample = _sample_group(handle)
+        assert sample["material"].asstr()[()] == "CH formvar"
+        assert "chemical_formula" not in sample
 
 
 def test_gas_species_written_when_present(tmp_path: Path):
