@@ -1,6 +1,6 @@
-# `NXhzdr_target` Profile — v0.4
+# `NXhzdr_target` Profile — v0.5
 
-Updated: 2026-07-15
+Updated: 2026-07-17
 
 The versioned definition of the HZDR-local `NXhzdr_target` profile: the
 semantic map from `metadata.target.*` to the `/entry/sample` NeXus group, and
@@ -68,6 +68,7 @@ decomposition into plasma source, medium/target, diagnostics, and resources
 | `metadata.target` key | NeXus path (under `/entry/sample`) | Canonical unit | HELPMI DDC term (§3.4) | Upstream NeXus field? |
 | --- | --- | --- | --- | --- |
 | `name` | `name` (dataset) | — (string) | — | Standard `NXsample.name` |
+| `type` | `type` (dataset) | — (string enum, target-ontology.md §3) | Target type | Standard `NXsample.type` **field name**; HZDR enum values (`foil`/`gas_jet`/`cluster`/`liquid`/`structured`/`other`), not the upstream sample/can/buffer vocabulary |
 | `material` | `material` (dataset) | — (string) | Material | **Profile extension** — free text; no standard `NXsample` field |
 | `material` (only when it parses as a formula) | `chemical_formula` (dataset) | — (string) | Material | Standard `NXsample.chemical_formula` |
 | `thickness` | `thickness` (dataset), `@units` | nm | Thickness | Standard `NXsample.thickness` |
@@ -98,9 +99,16 @@ mislabel them for any consumer that trusts the field name. The writer still
 derives `chemical_formula` **additionally** when the material value parses as
 a plain element-symbol formula (`_is_chemical_formula()` in
 `hzdr_nexus.py` — e.g. `Au`, `Cu`, `Si3N4`, `CH`), which covers the pure-foil
-inventory; anything that does not parse is written only as `material`. `type` is
-recorded in `metadata.target.type` (§3, target-ontology.md) but is not yet
-written into `/entry/sample`; see §6.
+inventory; anything that does not parse is written only as `material`.
+
+Since v0.5, `type` — the ontology's required classification
+(target-ontology.md §3) — is written as the `type` dataset. The **field name**
+is standard `NXsample.type`, but the **value vocabulary** is the HZDR
+laser-target enumeration rather than upstream NXsample's
+sample/can/buffer list; the NXDL fixes the six accepted values, so a producer
+sending an out-of-vocabulary type fails certification (the reconciler's wiki
+mapping always lands on the enum, keeping the original wiki text in
+`prop_wiki_type`).
 
 Fields absent or `null` in `metadata.target` are skipped entirely — never
 written as empty/null datasets or attributes (see `write_nexus_sample()` in
@@ -114,7 +122,7 @@ Stamped on the `/entry/sample` group by `write_nexus_sample()`:
 | --- | --- | --- | --- |
 | `NX_class` | `"NXsample"` | always | Compatibility class; never changes to `NXhzdr_target` until §6 is resolved |
 | `damnit_nx_class` | `"NXhzdr_target"` | always | Marks the group as following this profile |
-| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.4"`) | always | Must match this document's version and the NXDL enumeration (§4) |
+| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.5"`) | always | Must match this document's version and the NXDL enumeration (§4) |
 | `damnit_provenance` | `"wiki"` \| `"manual"` | if `provenance` present | Curated vs. hand-entered target |
 | `target_ref` | string (URL or stable id) | if `wiki_ref` present | Link back to the MediaWiki target record |
 | `gas_species` | string (e.g. `"Ar"`, `"N2"`, `"He"`) | if `gas_species` present | Gas-jet / cluster species |
@@ -142,12 +150,16 @@ together); a mismatch means one of them was updated without the others. The
 meta-repo alignment checker's `ontology` group verifies all three. Non-semantic
 edits to this document (wording, typo fixes) do not require a bump.
 
-Current version: **0.4** (`material` → free-text `material` extension dataset;
-`chemical_formula` derived only when the value parses as a formula,
-2026-07-15).
+Current version: **0.5** (`target.type` written as the `type` dataset with the
+ontology's six-value enumeration fixed in the NXDL, 2026-07-17).
 
 History:
 
+- **0.5** (2026-07-17): `target.type` (target-ontology.md §3, the ontology's
+  only *required* classification key) is now written to `/entry/sample/type`.
+  Standard `NXsample.type` field name with HZDR enum values
+  (`foil`/`gas_jet`/`cluster`/`liquid`/`structured`/`other`); the NXDL
+  enumerates them, so certification catches out-of-vocabulary producers.
 - **0.4** (2026-07-15): `target.material` now routes to the free-text
   profile-extension dataset `material` instead of `chemical_formula`, because
   real inventory values are mostly trade names ("Formvar"), layer lists
@@ -200,10 +212,9 @@ No other deviations are tracked in v0.3.
   keeping alongside, the `NX_class="NXsample"` compatibility value) remains
   open. Tracked
   as [alignment-implementation-plan.md Phase 5](plans/alignment-implementation-plan.md#phase-5--hzdr-owned-ontology-annotation--openpmd-interoperability-).
-- **`type` field.** `metadata.target.type` (target-ontology.md §3) is not yet
-  written into `/entry/sample`; add a mapping (dataset or attribute) in a
-  later profile version if downstream consumers need it in the NeXus file
-  itself rather than only in the source `metadata` JSON.
+- ✅ **`type` field — done in v0.5 (2026-07-17).** `metadata.target.type`
+  (target-ontology.md §3) is written as the `/entry/sample/type` dataset;
+  the NXDL enumerates the six ontology values.
 - **NeXus Ontology URIs.** Route 4 (standards-alignment.md) calls for
   annotating covered fields with `nexusformat/NeXusOntology` URIs where they
   exist; §2's "Upstream NeXus field?" column is the starting point for that

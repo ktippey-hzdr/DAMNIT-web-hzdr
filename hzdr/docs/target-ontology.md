@@ -230,6 +230,7 @@ The implemented `write_nexus_sample()` writer reads
 | `metadata.target` key | `NXsample` field | Attribute |
 | --- | --- | --- |
 | `name` | `name` | |
+| `type` | `type` — standard field name, §3 enum values; NXDL-enumerated (profile v0.5) | |
 | `material` | `material`; plus `chemical_formula` when the value parses as a plain element-symbol formula (profile v0.4) | |
 | `thickness` | `thickness` | `@units="nm"` |
 | `diameter` | `diameter` | `@units="mm"` |
@@ -239,6 +240,7 @@ The implemented `write_nexus_sample()` writer reads
 | `notes` | `description` | |
 | `provenance` | — | `@damnit_provenance` |
 | `wiki_ref` | — | `@target_ref` |
+| `gas_species` | — | `@gas_species` |
 | `properties.*` | — | written as group attributes, prefixed `prop_` |
 
 The low-risk compatibility group keeps `NX_class="NXsample"` so standard NeXus tooling
@@ -251,10 +253,12 @@ conflict with a future upstream NeXus class. **Done 2026-07-02:** the v0.1 profi
 document, [hzdr/docs/nxhzdr-target-profile.md](nxhzdr-target-profile.md), defines the
 semantic map and compatibility-attribute contract, and `write_nexus_sample()` stamps
 `damnit_nx_class="NXhzdr_target"` and `damnit_nxdl_version` (module constant
-`HZDR_TARGET_PROFILE_VERSION` in `hzdr_nexus.py`, currently `"0.1"`) on `/entry/sample`
-while leaving `NX_class="NXsample"`. NXDL formalization is still open — once a local
-NXDL is bundled with a validator, we can decide whether HZDR-profile files should set
-`NX_class="NXhzdr_target"` directly (see nxhzdr-target-profile.md §6).
+`HZDR_TARGET_PROFILE_VERSION` in `hzdr_nexus.py`; the profile doc is the versioned
+reference) on `/entry/sample` while leaving `NX_class="NXsample"`. **Done in profile
+v0.2 (2026-07-13):** the NXDL application definition
+(`hzdr/nxdl/NXhzdr_target.nxdl.xml`) ships with pynxtools-based validation; whether
+HZDR-profile files should set `NX_class="NXhzdr_target"` directly remains open
+(see nxhzdr-target-profile.md §6).
 HELPMI DDC names remain the documentation cross-walk; see
 [standards-alignment.md Route 2](standards-alignment.md#route-2-nxsource-nxbeam-and-nxsample-groups-in-the-nexus-bridge-ready).
 
@@ -271,7 +275,7 @@ HELPMI DDC names remain the documentation cross-walk; see
 | LabFrog export carries captured target fields | ✅ done 2026-07-02 |
 | DAMNIT reconciler maps exported LabFrog target columns to `metadata.target.*` | ✅ done 2026-07-02 |
 | `write_nexus_sample()` (`NXsample`) reads `metadata.target.*` | ✅ done 2026-07-02 |
-| HZDR-local `NXhzdr_target` profile / NXDL drafted | 🟡 v0.1 doc + compatibility attrs done 2026-07-02 ([nxhzdr-target-profile.md](nxhzdr-target-profile.md)); NXDL formalization still open — Phase 5 |
+| HZDR-local `NXhzdr_target` profile / NXDL drafted | ✅ profile doc + compatibility attrs done 2026-07-02; NXDL application definition + pynxtools certification done in v0.2 (2026-07-13); `type` dataset written since v0.5 (2026-07-17) — [nxhzdr-target-profile.md](nxhzdr-target-profile.md) §4 for history; `NX_class` swap decision still open — Phase 5 |
 | Target→wiki link surfaced in API/UI (`target_wiki_ref` / `target_wiki_page`, table + shot detail links) | ✅ done 2026-07-02 |
 | Wiki catalog (`IonenTargetOrigin`) → ontology mapping documented (§2.3); SQLite v9 extras columns mapped by the reconciler | ✅ implemented locally 2026-07-03 |
 | LabFrog persists wiki extras (`wiki_page`/`wiki_ref`/status/provider/amount) per shot | ✅ done 2026-07-03 (labfrog) |

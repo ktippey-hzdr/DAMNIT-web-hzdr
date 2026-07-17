@@ -9,9 +9,11 @@ import numpy as np
 import pytest
 
 from damnit_api.metadata.hzdr_nexus import (
+    HZDR_TARGET_PROFILE_VERSION,
     BuilderAlreadyRunningError,
     _first_shot_laser,
     _first_shot_target,
+    _first_shot_vacuum,
     append_review_decision,
     discover_labfrog_data_products,
     load_normalized_events,
@@ -26,6 +28,9 @@ from damnit_api.metadata.hzdr_nexus import (
     single_writer_lock,
     write_json_atomic,
     write_nexus_bridge,
+    write_nexus_detector_groups,
+    write_nexus_diagnostic_groups,
+    write_nexus_vacuum_group,
     write_sources_catalog,
 )
 from damnit_api.metadata.hzdr_sources import load_sources_file
@@ -99,6 +104,14 @@ def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
                         "beam_pos_x": 0.12,
                         "beam_pos_y": -0.08,
                     },
+                    "vacuum": {
+                        "chamber_pressure": 2.4e-6,
+                        "pre_shot_pressure": 1.1e-6,
+                        "rga_dominant_species": "H2O",
+                    },
+                    "diagnostic": {"xray_counts": 1450},
+                    # Pre-namespace flat spelling; folded by the writer.
+                    "detector_signal_mean": 2.25,
                 }
             )
         ],
@@ -109,6 +122,16 @@ def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
     products = discover_labfrog_data_products(labfrog_nexus, shots)
     for product in products:
         shots[product["metadata"]["shot_index"]]["data_products"].append(product)
+    # A semantic-kind product (as planet-watchdog delivers them), so the
+    # per-kind NXdetector promotion has something to work on.
+    shots[0]["data_products"].append({
+        "product_id": "watchdog:streak:17",
+        "shot_key": shots[0]["shot_key"],
+        "source": "planet-watchdog",
+        "kind": "streak_camera",
+        "path": "Z:/data/streak-17.h5",
+        "dataset_name": "/image",
+    })
 
     write_nexus_bridge(
         output_path=output_nexus,
@@ -138,6 +161,10 @@ def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
         incident_wavelength = cast("h5py.Dataset", beam["incident_wavelength"])
         pulse_duration = cast("h5py.Dataset", beam["pulse_duration"])
         incident_polarization = cast("h5py.Dataset", beam["incident_polarization"])
+        environment = cast("h5py.Group", handle["entry/sample/environment"])
+        chamber_pressure = cast("h5py.Dataset", environment["chamber_pressure"])
+        pre_shot_pressure = cast("h5py.Dataset", environment["pre_shot_pressure"])
+        rga_species = cast("h5py.Dataset", environment["rga_dominant_species"])
 
         assert list(raw_kept[...]) == [1, 2]
         definition = cast("h5py.Dataset", handle["entry/definition"])
@@ -157,6 +184,45 @@ def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
         assert pulse_duration.attrs["units"] == "fs"
         assert pulse_duration[()] == pytest.approx(30.0)
         assert incident_polarization.asstr()[()] == "horizontal"
+        assert environment.attrs["NX_class"] == "NXenvironment"
+        assert chamber_pressure.attrs["units"] == "mbar"
+        assert chamber_pressure[()] == pytest.approx(2.4e-6)
+        assert pre_shot_pressure.attrs["units"] == "mbar"
+        assert pre_shot_pressure[()] == pytest.approx(1.1e-6)
+        assert rga_species.asstr()[()] == "H2O"
+        # Per-shot diagnostic scalars become NXdetector groups; the second
+        # shot carried no diagnostics, so its slot is NaN.
+        xray = cast("h5py.Group", handle["entry/instrument/xray_counts"])
+        assert xray.attrs["NX_class"] == "NXdetector"
+        assert xray.attrs["damnit_source"] == "metadata.diagnostic"
+        xray_data = cast("h5py.Dataset", xray["data"])
+        assert xray_data.shape[0] == shot_key.shape[0]
+        assert xray_data[0] == pytest.approx(1450.0)
+        # Legacy flat spelling folded into the same NXdetector shape.
+        signal = cast(
+            "h5py.Dataset", handle["entry/instrument/detector_signal_mean/data"]
+        )
+        assert signal[0] == pytest.approx(2.25)
+        # Per-shot laser series (NXdata) alongside the campaign snapshot;
+        # shot 18 carried no laser block, so its slot is NaN.
+        series = cast("h5py.Group", handle["entry/instrument/laser/shot_series"])
+        assert series.attrs["NX_class"] == "NXdata"
+        assert series.attrs["signal"] == "pulse_energy"
+        assert series.attrs["axes"] == "shot_index"
+        series_energy = cast("h5py.Dataset", series["pulse_energy"])
+        assert series_energy.attrs["units"] == "J"
+        assert series_energy[0] == pytest.approx(8.2)
+        assert np.isnan(series_energy[1])
+        # The semantic-kind product gets an NXdetector group with its type
+        # tag; generic hdf5_dataset/file transport kinds do not.
+        product_detector = cast(
+            "h5py.Group", handle["entry/instrument/detector_streak_camera"]
+        )
+        assert product_detector.attrs["NX_class"] == "NXdetector"
+        assert product_detector.attrs["detector_type"] == "STREAK"
+        detector_shot_keys = cast("h5py.Dataset", product_detector["shot_keys"])
+        assert detector_shot_keys.asstr()[0] == "HELPMI:20260610:000017"
+        assert "detector_hdf5_dataset" not in handle["entry/instrument"]
         assert "entry/data_products/dataset_path" in handle
         assert (f"entry/laserdata/camera_raw/{events[0]['event_id']}/values") in handle
 
@@ -167,6 +233,7 @@ def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
     assert {product.source for product in shot.data_products} == {
         "LabFrog",
         "LaserData",
+        "planet-watchdog",
     }
     # "last rebuild" timestamp, surfaced for the Flow Monitor status panel
     assert "catalog_built_at" in sources[0].metadata
@@ -871,6 +938,140 @@ def test_first_shot_laser_warns_once_when_a_later_shot_differs(caplog):
     assert laser == {"system": "DRACO"}
     warnings = [r for r in caplog.records if "laser metadata block" in r.message]
     assert len(warnings) == 1
+
+
+def test_first_shot_vacuum_warns_once_when_a_later_shot_differs(caplog):
+    """Same silent-drop risk as `_first_shot_laser`, for the campaign-level
+    /entry/sample/environment block."""
+    shots = [
+        {
+            "shot_number": 1,
+            "shot_key": "HELPMI:20260610:000001",
+            "metadata": {"vacuum": {"chamber_pressure": 2.4e-6}},
+        },
+        {
+            "shot_number": 2,
+            "shot_key": "HELPMI:20260610:000002",
+            "metadata": {"vacuum": {"chamber_pressure": 8.0e-3}},
+        },
+    ]
+
+    with caplog.at_level("WARNING"):
+        vacuum = _first_shot_vacuum(shots)
+
+    assert vacuum == {"chamber_pressure": 2.4e-6}
+    warnings = [r for r in caplog.records if "vacuum metadata block" in r.message]
+    assert len(warnings) == 1
+
+
+def test_bridge_without_source_nexus_writes_experiment_identifier(tmp_path: Path):
+    """A canonical build with no preserved LabFrog file must still carry the
+    standard NXentry experiment_identifier itself (the LabFrog projection also
+    writes one, but the bridge must not depend on preservation for it)."""
+    output_nexus = tmp_path / "canonical.nxs"
+    shots, events = reconcile_canonical_shots(
+        [normalized_event()],
+        experiment_id="HELPMI",
+        source_key="hzdr-labfrog",
+        labfrog_shots=[],
+    )
+
+    write_nexus_bridge(
+        output_path=output_nexus,
+        experiment_id="HELPMI",
+        shots=shots,
+        events=events,
+    )
+
+    with h5py.File(output_nexus, "r") as handle:
+        identifier = cast("h5py.Dataset", handle["entry/experiment_identifier"])
+        assert identifier.asstr()[()] == "HELPMI"
+
+
+def test_diagnostic_groups_write_per_shot_series_and_respect_owners(tmp_path: Path):
+    """Namespaced values win over legacy flat spellings, non-numeric series
+    fall back to strings, and a group owned by someone else (e.g. a preserved
+    LabFrog projection group) is never overwritten."""
+    shots = [
+        {
+            "metadata": {
+                "diagnostic": {"xray_counts": 1500, "rga_species": "H2O"},
+                "xray_counts": 999,  # legacy duplicate loses to the namespaced value
+            }
+        },
+        {"metadata": {"diagnostic": {"xray_counts": 1550}}},
+    ]
+    path = tmp_path / "campaign.nxs"
+    with h5py.File(path, "w") as handle:
+        entry = handle.create_group("entry")
+        instrument = entry.create_group("instrument")
+        foreign = instrument.create_group("rga_species")
+        foreign.attrs["NX_class"] = "NXcollection"
+        write_nexus_diagnostic_groups(entry, shots)
+
+    with h5py.File(path, "r") as handle:
+        xray = cast("h5py.Dataset", handle["entry/instrument/xray_counts/data"])
+        assert xray[0] == pytest.approx(1500.0)
+        assert xray[1] == pytest.approx(1550.0)
+        # The pre-existing non-DAMNIT group was left untouched.
+        foreign = cast("h5py.Group", handle["entry/instrument/rga_species"])
+        assert foreign.attrs["NX_class"] == "NXcollection"
+        assert "data" not in foreign
+
+
+def test_detector_groups_map_known_kinds_and_skip_transport_kinds(tmp_path: Path):
+    """streak_camera maps to detector_type STREAK; the generic hdf5_dataset
+    transport kind gets no NXdetector group at all."""
+    products = [
+        {
+            "product_id": "p1",
+            "shot_key": "HELPMI:20260610:000001",
+            "kind": "streak_camera",
+            "path": "/data/a.h5",
+            "dataset_name": "/image",
+        },
+        {
+            "product_id": "p2",
+            "shot_key": "HELPMI:20260610:000002",
+            "kind": "hdf5_dataset",
+            "path": "/data/b.h5",
+            "dataset_name": "/values",
+        },
+    ]
+    path = tmp_path / "campaign.nxs"
+    with h5py.File(path, "w") as handle:
+        entry = handle.create_group("entry")
+        write_nexus_detector_groups(entry, products)
+
+    with h5py.File(path, "r") as handle:
+        streak = cast("h5py.Group", handle["entry/instrument/detector_streak_camera"])
+        assert streak.attrs["NX_class"] == "NXdetector"
+        assert streak.attrs["detector_type"] == "STREAK"
+        product_ids = cast("h5py.Dataset", streak["product_ids"])
+        assert product_ids.asstr()[0] == "p1"
+        assert "detector_hdf5_dataset" not in handle["entry/instrument"]
+
+
+def test_vacuum_group_without_target_keeps_sample_certifiable(tmp_path: Path):
+    """A vacuum-only file must still stamp the NXhzdr_target profile marker
+    attrs on /entry/sample (the NXDL requires them whenever the group exists),
+    and absent vacuum keys must not be written at all."""
+    path = tmp_path / "campaign.nxs"
+    with h5py.File(path, "w") as handle:
+        entry = handle.create_group("entry")
+        write_nexus_vacuum_group(entry, {"chamber_pressure": 2.4e-6})
+
+    with h5py.File(path, "r") as handle:
+        sample = cast("h5py.Group", handle["entry/sample"])
+        environment = cast("h5py.Group", handle["entry/sample/environment"])
+        chamber_pressure = cast("h5py.Dataset", environment["chamber_pressure"])
+        assert sample.attrs["NX_class"] == "NXsample"
+        assert sample.attrs["damnit_nx_class"] == "NXhzdr_target"
+        assert sample.attrs["damnit_nxdl_version"] == HZDR_TARGET_PROFILE_VERSION
+        assert environment.attrs["NX_class"] == "NXenvironment"
+        assert chamber_pressure.attrs["units"] == "mbar"
+        assert "pre_shot_pressure" not in environment
+        assert "rga_dominant_species" not in environment
 
 
 def test_adapts_planet_watchdog_processed_document():

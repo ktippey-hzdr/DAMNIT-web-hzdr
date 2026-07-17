@@ -198,12 +198,26 @@ attached.
 The LabFrog NeXus structure is preserved and DAMNIT adds:
 
 ```text
-/entry/shots          canonical shot rows and match provenance
-/entry/source_events  normalized events, including unmatched events
-/entry/data_products  files and internal dataset references
-/entry/laserdata      embedded small event arrays
-/entry/watchdog       Watchdog-derived values when present
+/entry/definition                    NXhzdr_target application-definition declaration
+/entry/experiment_identifier         campaign id (standard NXentry field)
+/entry/shots                         canonical shot rows and match provenance
+/entry/source_events                 normalized events, including unmatched events
+/entry/data_products                 files and internal dataset references
+/entry/laserdata                     embedded small event arrays
+/entry/watchdog                      Watchdog-derived values when present
+/entry/instrument/laser              campaign laser snapshot (NXsource + nested NXbeam)
+/entry/instrument/laser/shot_series  per-shot metadata.laser.* series (NXdata)
+/entry/instrument/<key>              per-shot metadata.diagnostic.* scalars (NXdetector)
+/entry/instrument/detector_<kind>    per-kind data-product references (NXdetector)
+/entry/sample                        target metadata (NXsample, NXhzdr_target profile)
+/entry/sample/environment            vacuum metadata (NXenvironment)
 ```
+
+The semantic `metadata.*` promotions (laser, target, vacuum, diagnostics,
+per-kind detectors) are documented field-by-field in
+[standards-alignment.md §3](standards-alignment.md#3-detailed-field-level-alignment-mapping);
+the `/entry/sample` contract is versioned in
+[nxhzdr-target-profile.md](nxhzdr-target-profile.md).
 
 `hzdr_sources.json` exposes the file through the HZDR API. `runs.sqlite` is an
 optional future projection for legacy DAMNIT table workflows, not the source of

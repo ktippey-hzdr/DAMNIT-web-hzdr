@@ -47,6 +47,8 @@ def test_wiki_foil_example_with_properties(tmp_path: Path):
         assert sample.attrs["damnit_nx_class"] == "NXhzdr_target"
         assert sample.attrs["damnit_nxdl_version"] == HZDR_TARGET_PROFILE_VERSION
         assert sample["name"].asstr()[()] == "Au 5 μm #A12"
+        # Ontology-required classification, written since profile v0.5.
+        assert sample["type"].asstr()[()] == "foil"
         assert sample["material"].asstr()[()] == "Au"
         # "Au" parses as a formula, so chemical_formula is derived too (v0.4).
         assert sample["chemical_formula"].asstr()[()] == "Au"
@@ -94,6 +96,7 @@ def test_manual_other_example_omits_absent_fields(tmp_path: Path):
         assert sample.attrs["damnit_nx_class"] == "NXhzdr_target"
         assert sample.attrs["damnit_nxdl_version"] == HZDR_TARGET_PROFILE_VERSION
         assert sample["name"].asstr()[()] == "test wedge"
+        assert sample["type"].asstr()[()] == "other"
         assert sample["material"].asstr()[()] == "Al"
         assert sample["chemical_formula"].asstr()[()] == "Al"
         assert sample["thickness"][()] == pytest.approx(250.0)
@@ -127,6 +130,8 @@ def test_legacy_string_target_normalizes(tmp_path: Path):
         assert sample.attrs["damnit_nx_class"] == "NXhzdr_target"
         assert sample.attrs["damnit_nxdl_version"] == HZDR_TARGET_PROFILE_VERSION
         assert sample["name"].asstr()[()] == "target-1"
+        # The normalizer widens the legacy string to type="other" (§7).
+        assert sample["type"].asstr()[()] == "other"
         assert sample.attrs["damnit_provenance"] == "manual"
         # No material/thickness/etc. were ever provided for the legacy form.
         assert "material" not in sample

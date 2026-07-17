@@ -150,8 +150,8 @@ currently has only the free-form emulator `target` string.
 
 | HELPMI TargetClasses field | Current emulator key | Recommended key | Unit | NeXus equivalent | Gap / note |
 | --- | --- | --- | --- | --- | --- |
-| Target type | `target` (free-form) | `metadata.target.type` | string enum | `NXsample.type` | Types: `foil`, `gas_jet`, `cluster`, `liquid`, `structured`; mapped for manual (`other`) and wiki-sourced targets (wiki vocabulary → enum per target-ontology.md §2.3) as of 2026-07-03; `gas_jet`/`cluster` have no source data yet (no gas-jet capture in LabFrog) |
-| Material | LabFrog `OTHER` target export | `metadata.target.material` | string | `NXsample.chemical_formula` | Present for captured manual target records; wiki-selected curated material still needs per-shot enrichment |
+| Target type | `target` (free-form) | `metadata.target.type` | string enum | `NXsample.type` (field name; HZDR enum values) | Types: `foil`, `gas_jet`, `cluster`, `liquid`, `structured`, `other`; mapped for manual and wiki-sourced targets (wiki vocabulary → enum per target-ontology.md §2.3) as of 2026-07-03; written to `/entry/sample/type` since profile v0.5 (2026-07-17); `gas_jet`/`cluster` have no source data yet (no gas-jet capture in LabFrog) |
+| Material | LabFrog `OTHER` target export | `metadata.target.material` | string | `NXsample.material` (profile ext.); `chemical_formula` derived only when the value parses as a formula (profile v0.4) | Present for captured manual target records; wiki-selected curated material still needs per-shot enrichment |
 | Thickness | LabFrog `OTHER` target export | `metadata.target.thickness` | nm | `NXsample.thickness` | Present for captured manual target records; DAMNIT converts known export units to canonical nm |
 | Diameter | — | `metadata.target.diameter_mm` | mm | — | **Missing** |
 | Substrate material | — | `metadata.target.substrate_material` | string | `NXsample.substrate_material` | **Missing** — relevant for structured targets |
@@ -164,33 +164,44 @@ currently has only the free-form emulator `target` string.
 HELPMI groups environmental sensors under a `Devices` vocabulary that includes pressure,
 temperature, and humidity sensors. There is a direct NeXus mapping.
 
-| HELPMI Devices term | Current emulator key | Recommended key | Unit | NeXus equivalent | Gap / note |
+| HELPMI Devices term | Current emulator key | Registry key | Unit | NeXus equivalent | Gap / note |
 | --- | --- | --- | --- | --- | --- |
-| Chamber pressure | `chamber_pressure_mbar` | `metadata.vacuum.chamber_pressure_mbar` | mbar | `NXenvironment.pressure` | Rename namespace; unit convention is fine |
-| Pre-shot vacuum level | — | `metadata.vacuum.pre_shot_pressure_mbar` | mbar | — | **Missing** — pressure immediately before shot |
-| Residual gas analyser reading | — | `metadata.vacuum.rga_dominant_species` | string | — | **Missing** — optional but useful for foil pre-ablation |
+| Chamber pressure | `chamber_pressure` (namespaced) | `metadata.vacuum.chamber_pressure` | mbar | `/entry/sample/environment/chamber_pressure` (`NXenvironment`) | Written to the canonical NeXus file since 2026-07-17 when a shot carries it (emulator does) |
+| Pre-shot vacuum level | — | `metadata.vacuum.pre_shot_pressure` | mbar | `/entry/sample/environment/pre_shot_pressure` | Writer path done 2026-07-17; **no producer captures it yet** |
+| Residual gas analyser reading | — | `metadata.vacuum.rga_dominant_species` | string | `/entry/sample/environment/rga_dominant_species` | Writer path done 2026-07-17; **no producer captures it yet** — optional but useful for foil pre-ablation |
 
 > **Decided 2026-07-02:** stored keys are bare (see
-> [target-ontology.md §5](target-ontology.md#5-units-convention)); the suffixed
-> names in this table (`chamber_pressure_mbar`, `pre_shot_pressure_mbar`) are
-> the HELPMI cross-walk labels only. Canonical units live in the metadata key
-> registry; SQLite carries them in the `units` table.
+> [target-ontology.md §5](target-ontology.md#5-units-convention)). Canonical
+> units live in the metadata key registry; SQLite carries them in the `units`
+> table. **Since 2026-07-17** `write_nexus_vacuum_group()` maps available
+> `metadata.vacuum.*` keys to `/entry/sample/environment` (`NXenvironment`) —
+> the same canonical placement the NeXus Design Studio catalog assigns the
+> class (`BASE_CLASS_PATHS: NXenvironment → /entry/sample/environment`). The
+> group sits outside the NXhzdr_target NXDL's modelled scope (like
+> `/entry/instrument`), so it needs no profile version bump.
 
 ### 3.6 Diagnostics and detectors
 
 Data products from diagnostics (detector images, spectra, particle counts) arrive as
-`HZDRDataProduct` records. The mapping to HELPMI `DetectorClasses` and NeXus `NXdetector`
-is currently structural (path + dataset name) rather than semantic.
+`HZDRDataProduct` records. **Since 2026-07-17 two semantic promotion layers exist**
+on top of the structural tables: per-shot `metadata.diagnostic.*` scalars become
+`/entry/instrument/<key>` (`NXdetector`, shot-indexed `data` array — legacy flat
+spellings `xray_counts`/`detector_signal_mean`/`alignment_score` are folded in by
+the writer), and each semantic data-product *kind* becomes
+`/entry/instrument/detector_<kind>` (`NXdetector` with `detector_type` when the
+kind maps, carrying product-id/shot-key/path references back to the
+`/entry/data_products` rows). The flow-monitor emulator emits the namespaced
+`metadata.diagnostic.*` keys; real producers should follow.
 
 | HELPMI DetectorClasses | Current location | NeXus class | Recommended path | Gap / note |
 | --- | --- | --- | --- | --- |
-| X-ray / particle count | `shot.metadata["xray_counts"]` (emulator scalar) | `NXdetector.data` | `metadata.diagnostic.xray_counts` | Emulator scalar only; real diagnostics deliver arrays |
-| Streak camera image | `HZDRDataProduct` with `kind="streak_camera"` | `NXdetector` with `detector_type="STREAK"` | `/entry/data_products/{id}/values` | File path captured; `NXdetector.detector_type` attribute missing |
-| Proton/ion spectrum | `HZDRDataProduct` with `kind="proton_spectrometer"` | `NXdetector` with `type="POS"` | `/entry/data_products/{id}/values` | File path captured; energy axis not structured |
-| Thomson parabola | — | `NXdetector` with `type="THOMSON"` | — | **Missing** — important DRACO diagnostic |
-| FROG trace | — | `NXdetector` with `detector_type="FROG"` | — | **Missing** |
-| Scintillator screen | `HZDRDataProduct.source` | `NXdetector.detector_type="SCINT"` | — | Kind known; no structured detector geometry |
-| Alignment score | `shot.metadata["detector_signal_mean"]` | — | `metadata.diagnostic.detector_signal_mean` | Generic; useful for quick go/no-go QA |
+| X-ray / particle count | `metadata.diagnostic.xray_counts` (emulator) | `NXdetector.data` | `/entry/instrument/xray_counts/data` | ✅ per-shot NXdetector series written 2026-07-17; real diagnostics deliver arrays (still producer-side) |
+| Streak camera image | `HZDRDataProduct` with `kind="streak_camera"` | `NXdetector` with `detector_type="STREAK"` | `/entry/instrument/detector_streak_camera` + `/entry/data_products` rows | ✅ `detector_type` stamped 2026-07-17; pixel data stays in the referenced files |
+| Proton/ion spectrum | `HZDRDataProduct` with `kind="proton_spectrometer"` | `NXdetector` with `detector_type="POS"` | `/entry/instrument/detector_proton_spectrometer` | ✅ `detector_type` stamped 2026-07-17; energy axis not structured |
+| Thomson parabola | — | `NXdetector` with `detector_type="THOMSON"` | `/entry/instrument/detector_thomson_parabola` | Writer maps the kind; **no producer sends it yet** — important DRACO diagnostic |
+| FROG trace | — | `NXdetector` with `detector_type="FROG"` | `/entry/instrument/detector_frog` | Writer maps the kind; **no producer sends it yet** |
+| Scintillator screen | `HZDRDataProduct.source` | `NXdetector.detector_type="SCINT"` | `/entry/instrument/detector_scintillator` | Writer maps the kind; no structured detector geometry |
+| Alignment score | `metadata.diagnostic.detector_signal_mean` (emulator) | `NXdetector.data` | `/entry/instrument/detector_signal_mean/data` | ✅ per-shot NXdetector series written 2026-07-17 |
 | Detector integration time | — | `NXdetector.count_time` | — | **Missing** in all real and emulated data |
 
 ### 3.7 NeXus bridge group class mapping
@@ -201,14 +212,16 @@ definitions are finalized, and the effort to migrate.
 
 | Current path | Current `NX_class` | Target class (HELPMI/NeXus) | Migration note |
 | --- | --- | --- | --- |
-| `/entry` | `NXentry` | `NXentry` | Correct; set `entry/start_time` from first shot |
+| `/entry` | `NXentry` | `NXentry` | Correct; `/entry/experiment_identifier` written by the bridge itself since 2026-07-17 (no longer dependent on the preserved LabFrog projection); `entry/start_time` from first shot still open |
 | `/entry/shots` | `NXcollection` | `NXcollection` | DAMNIT-internal shot table; custom class intentional |
 | `/entry/source_events` | `NXcollection` | `NXcollection` | DAMNIT-internal event table; no standard equivalent |
-| `/entry/data_products` | `NXcollection` | `NXcollection` + per-product `NXdetector` | Add `NXdetector` sub-group per product kind; needs HELPMI class map |
-| `/entry/laserdata` | `NXcollection` | `NXbeam` or `NXsource` | LaserData time-series → `NXbeam` per shot; system properties → `NXsource` |
+| `/entry/data_products` | `NXcollection` | `NXcollection` + per-kind `NXdetector` | ✅ done 2026-07-17: `/entry/instrument/detector_<kind>` (`NXdetector`, `detector_type` tagged) per semantic product kind, referencing the table rows; the flat table stays `NXcollection` |
+| `/entry/laserdata` | `NXcollection` | `NXbeam` or `NXsource` | 🟡 per-shot laser series done 2026-07-17 as `/entry/instrument/laser/shot_series` (`NXdata`, per-shot `metadata.laser.*` arrays); the raw payload collections stay `NXcollection` |
 | `/entry/watchdog` | `NXcollection` | `NXcollection` (keep custom) | File-arrival log; no standard class; keep as-is |
 | — | — | `/entry/instrument/laser` → `NXsource` + `NXbeam` | Done in DAMNIT for available `metadata.laser.*`; producer-side fixed fields still need capture |
 | — | — | `/entry/sample` → `NXsample` | Done for available `metadata.target.*`, including wiki extras (`wiki_page`/`wiki_ref`/`status`/`provider`/`amount`/`type`/`production_date`/`origin`); gas fields have no source data (no gas-jet capture in LabFrog) |
+| — | — | `/entry/sample/environment` → `NXenvironment` | Done 2026-07-17 for available `metadata.vacuum.*` (`chamber_pressure`, `pre_shot_pressure`, `rga_dominant_species`); outside the NXhzdr_target NXDL's modelled scope, like `/entry/instrument` |
+| — | — | `/entry/instrument/<key>` → `NXdetector` (per `metadata.diagnostic.*` scalar) | Done 2026-07-17: shot-indexed `data` array per key, aligned with `/entry/shots`; legacy flat spellings (`xray_counts`, `detector_signal_mean`, `alignment_score`) folded in by the writer |
 
 ### 3.8 Plasma-MDS cross-walk
 
@@ -287,10 +300,10 @@ The simplest alignment: document which `metadata` keys in `HZDRShot.metadata` an
 in producers. Example:
 
 ```
-metadata.laser.energy_j        → HELPMI LaserClasses: pulse_energy
-metadata.laser.pulse_width_fs  → HELPMI LaserClasses: pulse_duration
-metadata.target.material       → HELPMI TargetClasses: material
-metadata.vacuum.pressure_mbar  → HELPMI Devices: vacuum_sensor.pressure
+metadata.laser.pulse_energy      → HELPMI LaserClasses: pulse_energy
+metadata.laser.pulse_duration    → HELPMI LaserClasses: pulse_duration
+metadata.target.material         → HELPMI TargetClasses: material
+metadata.vacuum.chamber_pressure → HELPMI Devices: vacuum_sensor.pressure
 ```
 
 This is purely a documentation + convention change; no schema bump needed. The `hzdr_nexus.py`
@@ -384,9 +397,11 @@ writer and analysis tooling concern.
 | Add `metadata.target.*` fields from LabFrog shot record | ✅ base path done; ✅ wiki extras (`wiki_page`/`wiki_ref`/`status`/`provider`/`amount`/`type`/`production_date`/`origin`) persisted, exported, and mapped end-to-end 2026-07-03; 🟡 gas species/pressure blocked on LabFrog gas-jet capture | §3.4, §3.10 |
 | Add `/entry/instrument/laser` (`NXsource`/`NXbeam`) to NeXus bridge | ✅ done for available `metadata.laser.*`; producer enrichment still open | §3.7, Route 2 |
 | Add `/entry/sample` (`NXsample`) to NeXus bridge | ✅ done for available target metadata | §3.7, Route 2 |
-| Per-product `NXdetector` sub-groups in NeXus bridge | ⬜ medium effort | §3.6, §3.7 |
+| Add `/entry/sample/environment` (`NXenvironment`) vacuum group to NeXus bridge | ✅ done 2026-07-17 for available `metadata.vacuum.*`; producer capture of `pre_shot_pressure`/`rga_dominant_species` still open | §3.5, §3.7 |
+| Per-kind `NXdetector` groups in NeXus bridge (`detector_<kind>` + `detector_type` + row references) | ✅ done 2026-07-17 | §3.6, §3.7 |
+| Per-shot `metadata.diagnostic.*` → `NXdetector` series + `laser/shot_series` `NXdata` | ✅ done 2026-07-17 (emulator emits `diagnostic.*` namespace; real producers still open) | §3.5, §3.6, §3.7 |
 | Official `NXlaser` / `NXtarget` groups from HELPMI | ❌ cancelled 2026-07-02 — HELPMI finished | Route 2 |
-| HZDR-local `NXhzdr_target` profile / NXDL | ✅ done 2026-07-13 (v0.2, current v0.3): NXDL application definition (`hzdr/nxdl/NXhzdr_target.nxdl.xml`) + `/entry/definition` stamped by the bridge + pynxtools certification via `nds validate --pynxtools --definitions`; v0.3 fixes the canonical temperature unit string to `degC` ([nxhzdr-target-profile.md](nxhzdr-target-profile.md)); `NX_class` swap decision still open (profile doc §6) | Route 2, Route 4 |
+| HZDR-local `NXhzdr_target` profile / NXDL | ✅ done 2026-07-13 (v0.2, current v0.5): NXDL application definition (`hzdr/nxdl/NXhzdr_target.nxdl.xml`) + `/entry/definition` stamped by the bridge + pynxtools certification via `nds validate --pynxtools --definitions`; v0.3 fixes the canonical temperature unit string to `degC`, v0.4 routes `target.material` to the free-text `material` dataset with `chemical_formula` derived only when the value parses as a formula, v0.5 writes the ontology-required `type` dataset with the §3 enum fixed in the NXDL ([nxhzdr-target-profile.md](nxhzdr-target-profile.md)); `NX_class` swap decision still open (profile doc §6) | Route 2, Route 4 |
 | SciCat registration + `scicat_pid` back-population (via existing HZDR SciCat plugin) | 🟡 plugin built (HTTP `/scicat/from-json` \| `/scicat/push`); DAMNIT builder post-step + API link not yet wired | Route 3, [roadmap §SciCat Registration](status/integration-roadmap.md#scicat-registration) |
 | NeXus Ontology annotation for federated search | ⬜ HZDR-owned design; no HELPMI blocker | Route 4 |
 | openPMD interoperability (simulation links) | ⬜ HZDR-owned link/manifest design; comparison tooling deferred | Route 5 |

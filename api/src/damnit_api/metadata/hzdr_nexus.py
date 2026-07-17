@@ -1151,17 +1151,16 @@ def write_nexus_bridge(
             # (pynxtools) can certify the file against hzdr/nxdl/. Profile >= 0.2.
             if "definition" not in entry:
                 entry.create_dataset("definition", data="NXhzdr_target")
+            # Standard NXentry field. The LabFrog projection writes it too, but
+            # a canonical build without a source_nexus must not depend on the
+            # preserved projection for the campaign's primary identifier.
+            if "experiment_identifier" not in entry:
+                entry.create_dataset("experiment_identifier", data=experiment_id)
             entry.attrs["damnit_shot_table"] = "shots"
             entry.attrs["damnit_source_events"] = "source_events"
             entry.attrs["damnit_data_products"] = "data_products"
 
-            laser = _first_shot_laser(shots)
-            if laser is not None:
-                write_nexus_laser_group(entry, laser)
-
-            target = _first_shot_target(shots)
-            if target is not None:
-                write_nexus_sample(entry, target)
+            _write_semantic_metadata_groups(entry, shots)
 
             shots_group = entry.require_group("shots")
             if "NX_class" not in shots_group.attrs:
@@ -1184,12 +1183,39 @@ def write_nexus_bridge(
             _fill_default_product_paths(products, output_path)
             _write_source_events(entry, events)
             _write_data_products(entry, products, output_path=output_path)
+            write_nexus_detector_groups(entry, products)
 
         temp_path.replace(output_path)
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise
     return products
+
+
+def _write_semantic_metadata_groups(
+    entry: h5py.Group, shots: list[dict[str, Any]]
+) -> None:
+    """Promote namespaced `metadata.*` blocks into their semantic NeXus homes.
+
+    Campaign-level snapshots (laser -> NXsource/NXbeam, target -> NXsample,
+    vacuum -> NXenvironment) come from the first shot carrying the block;
+    the inherently per-shot families (laser shot series, diagnostic scalars)
+    are written as full series.
+    """
+    laser = _first_shot_laser(shots)
+    if laser is not None:
+        write_nexus_laser_group(entry, laser)
+    write_nexus_laser_shot_series(entry, shots)
+
+    target = _first_shot_target(shots)
+    if target is not None:
+        write_nexus_sample(entry, target)
+
+    vacuum = _first_shot_vacuum(shots)
+    if vacuum is not None:
+        write_nexus_vacuum_group(entry, vacuum)
+
+    write_nexus_diagnostic_groups(entry, shots)
 
 
 def _stage_bridge_temp_file(
@@ -1235,6 +1261,37 @@ def _first_shot_laser(shots: list[dict[str, Any]]) -> dict[str, Any] | None:
                 "Shot %s has a laser metadata block that differs from the "
                 "campaign's chosen block (shot_key=%s); only the first "
                 "shot's laser block is written to /entry/instrument/laser.",
+                shot.get("shot_number"),
+                shot.get("shot_key"),
+            )
+            warned = True
+    return chosen
+
+
+def _first_shot_vacuum(shots: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Pick the first namespaced vacuum metadata block for `/entry/sample/environment`.
+
+    Same single campaign-level group limitation as `_first_shot_laser` above /
+    `_first_shot_target` below: later shots carrying a *different* non-empty
+    vacuum block are dropped, with one warning so a mid-campaign pressure-regime
+    change is at least visible instead of silently ignored.
+    """
+    chosen: dict[str, Any] | None = None
+    warned = False
+    for shot in shots:
+        metadata = shot.get("metadata")
+        if not isinstance(metadata, dict):
+            continue
+        vacuum = metadata.get("vacuum")
+        if not (isinstance(vacuum, dict) and vacuum):
+            continue
+        if chosen is None:
+            chosen = vacuum
+        elif not warned and vacuum != chosen:
+            logger.warning(
+                "Shot %s has a vacuum metadata block that differs from the "
+                "campaign's chosen block (shot_key=%s); only the first "
+                "shot's vacuum block is written to /entry/sample/environment.",
                 shot.get("shot_number"),
                 shot.get("shot_key"),
             )
@@ -1362,7 +1419,7 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
 # mapping; the profile doc version AND the damnit_nxdl_version enumeration in
 # hzdr/nxdl/NXhzdr_target.nxdl.xml must be bumped to match.
 # See hzdr/docs/nxhzdr-target-profile.md.
-HZDR_TARGET_PROFILE_VERSION = "0.4"
+HZDR_TARGET_PROFILE_VERSION = "0.5"
 
 # All 118 IUPAC element symbols, for the conservative formula check below.
 _ELEMENTS = (
@@ -1422,6 +1479,9 @@ def write_nexus_sample(entry_group: h5py.Group, target: Any) -> None:
     sample.attrs["damnit_nxdl_version"] = HZDR_TARGET_PROFILE_VERSION
 
     _write_optional_string_dataset(sample, "name", target.get("name"))
+    # Ontology-required classification (target-ontology.md section 3 enum);
+    # standard NXsample field name, HZDR enum values. Profile v0.5.
+    _write_optional_string_dataset(sample, "type", target.get("type"))
     material = target.get("material")
     _write_optional_string_dataset(sample, "material", material)
     if material is not None and _is_chemical_formula(str(material)):
@@ -1465,6 +1525,307 @@ def write_nexus_sample(entry_group: h5py.Group, target: Any) -> None:
             if value is None:
                 continue
             sample.attrs[f"prop_{key}"] = value
+
+
+def write_nexus_vacuum_group(entry_group: h5py.Group, vacuum: dict[str, Any]) -> None:
+    """Write `/entry/sample/environment` (`NXenvironment`) from `metadata.vacuum.*`.
+
+    The chamber vacuum describes the sample surroundings, so it lands under
+    NXsample as an NXenvironment group — the canonical placement the
+    nexus-design-studio catalog assigns the class (BASE_CLASS_PATHS:
+    NXenvironment -> /entry/sample/environment). `@units` come from
+    METADATA_KEY_REGISTRY like every other namespaced writer. The group is
+    outside the NXhzdr_target profile scope (the NXDL models the target.* ->
+    sample field mapping only, like the unmodelled /entry/instrument), so no
+    profile version bump; the sample profile marker attrs are still stamped
+    when absent so a vacuum-only file keeps /entry/sample certifiable.
+    """
+    sample = entry_group.require_group("sample")
+    if "NX_class" not in sample.attrs:
+        sample.attrs["NX_class"] = "NXsample"
+        sample.attrs["damnit_nx_class"] = "NXhzdr_target"
+        sample.attrs["damnit_nxdl_version"] = HZDR_TARGET_PROFILE_VERSION
+
+    environment = sample.require_group("environment")
+    environment.attrs["NX_class"] = "NXenvironment"
+    _write_optional_string_dataset(environment, "description", "target chamber vacuum")
+    _write_optional_numeric_dataset(
+        environment,
+        "chamber_pressure",
+        vacuum.get("chamber_pressure"),
+        unit_key="vacuum.chamber_pressure",
+    )
+    _write_optional_numeric_dataset(
+        environment,
+        "pre_shot_pressure",
+        vacuum.get("pre_shot_pressure"),
+        unit_key="vacuum.pre_shot_pressure",
+    )
+    _write_optional_string_dataset(
+        environment,
+        "rga_dominant_species",
+        vacuum.get("rga_dominant_species"),
+    )
+
+
+def _collect_laser_series(shots: list[dict[str, Any]]) -> dict[str, list[float]]:
+    """Numeric `metadata.laser.<key>` series across shots, NaN where absent."""
+    series: dict[str, list[float]] = {}
+    for index, shot in enumerate(shots):
+        metadata = shot.get("metadata")
+        laser = metadata.get("laser") if isinstance(metadata, dict) else None
+        if not isinstance(laser, dict):
+            continue
+        for key, value in laser.items():
+            name = str(key)
+            if not _DIAGNOSTIC_NAME_PATTERN.fullmatch(name):
+                continue
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                series.setdefault(name, [np.nan] * len(shots))[index] = float(value)
+    return series
+
+
+def write_nexus_laser_shot_series(
+    entry_group: h5py.Group, shots: list[dict[str, Any]]
+) -> None:
+    """Write `/entry/instrument/laser/shot_series` (`NXdata`): per-shot laser values.
+
+    The campaign-level `/entry/instrument/laser` NXsource (+ nested NXbeam)
+    holds a first-shot snapshot; per-shot variation (energy jitter is data,
+    not noise) was previously dropped by the warn-once picker. Every numeric
+    `metadata.laser.<key>` seen on any shot becomes a shot-indexed dataset
+    here, aligned with the canonical `/entry/shots` table, NaN where a shot
+    lacks the key, `@units` from METADATA_KEY_REGISTRY. String-valued keys
+    (system, polarization) stay campaign-level in the NXsource group. The
+    signal is `pulse_energy` when present (standards-alignment section 3.7:
+    LaserData series belong in per-shot NXbeam-shaped data, not only in a
+    campaign scalar).
+    """
+    series = _collect_laser_series(shots)
+    if not series:
+        return
+
+    instrument = entry_group.require_group("instrument")
+    if "NX_class" not in instrument.attrs:
+        instrument.attrs["NX_class"] = "NXinstrument"
+    laser_group = instrument.require_group("laser")
+    if "NX_class" not in laser_group.attrs:
+        laser_group.attrs["NX_class"] = "NXsource"
+    group = _replace_group(laser_group, "shot_series")
+    group.attrs["NX_class"] = "NXdata"
+    group.attrs["description"] = (
+        "Per-shot metadata.laser.* values aligned with the canonical "
+        "/entry/shots table; the parent NXsource group holds the "
+        "campaign-level first-shot snapshot."
+    )
+    names = sorted(series)
+    signal = "pulse_energy" if "pulse_energy" in series else names[0]
+    group.attrs["signal"] = signal
+    group.attrs["axes"] = "shot_index"
+    auxiliary = [name for name in names if name != signal]
+    if auxiliary:
+        group.attrs["auxiliary_signals"] = auxiliary
+    group.create_dataset("shot_index", data=list(range(len(shots))))
+    for name in names:
+        dataset = group.create_dataset(name, data=series[name])
+        unit = METADATA_KEY_REGISTRY.get(f"laser.{name}")
+        if unit is not None:
+            dataset.attrs["units"] = unit
+
+
+# Data-product kind -> NeXus-style detector_type tag (standards-alignment
+# section 3.6). Deliberately small and exact: an unknown kind still gets its
+# NXdetector group, just without a detector_type claim.
+_DETECTOR_TYPE_BY_KIND = {
+    "streak_camera": "STREAK",
+    "proton_spectrometer": "POS",
+    "thomson_parabola": "THOMSON",
+    "frog": "FROG",
+    "scintillator": "SCINT",
+}
+
+# Generic transport kinds that describe how a product arrived, not what
+# recorded it - they carry no detector identity to promote.
+_NON_DETECTOR_PRODUCT_KINDS = frozenset({"hdf5_dataset", "file"})
+
+
+def write_nexus_detector_groups(
+    entry_group: h5py.Group, products: list[dict[str, Any]]
+) -> None:
+    """Write one `NXdetector` group per data-product kind.
+
+    `/entry/data_products` stays the flat transport table; this adds the
+    semantic layer standards-alignment section 3.6/3.7 calls for: per kind a
+    `/entry/instrument/detector_<kind>` (`NXdetector`) group carrying
+    `detector_type` (when the kind maps to a known tag) and the
+    product-id/shot-key/file-path/dataset-name references back to the rows,
+    so a NeXus reader can find "everything this diagnostic recorded" without
+    knowing DAMNIT's table layout. Generic transport kinds (`hdf5_dataset`,
+    `file`) are skipped - they say how a product arrived, not what recorded
+    it. Groups owned by someone else are never overwritten.
+    """
+    by_kind: dict[str, list[dict[str, Any]]] = {}
+    for product in products:
+        kind = str(product.get("kind") or "")
+        if not kind or kind in _NON_DETECTOR_PRODUCT_KINDS:
+            continue
+        if not _DIAGNOSTIC_NAME_PATTERN.fullmatch(kind):
+            continue
+        by_kind.setdefault(kind, []).append(product)
+    if not by_kind:
+        return
+
+    instrument = entry_group.require_group("instrument")
+    if "NX_class" not in instrument.attrs:
+        instrument.attrs["NX_class"] = "NXinstrument"
+    for kind in sorted(by_kind):
+        name = f"detector_{kind}"
+        if not _claim_damnit_group(instrument, name, "data_products"):
+            logger.warning(
+                "Skipping detector group %r: /entry/instrument/%s already "
+                "exists and is not a DAMNIT data-product detector group",
+                kind,
+                name,
+            )
+            continue
+        detector = instrument.create_group(name)
+        detector.attrs["NX_class"] = "NXdetector"
+        detector.attrs["damnit_source"] = "data_products"
+        detector.attrs["description"] = (
+            f"Data products of kind '{kind}'; rows in /entry/data_products."
+        )
+        detector_type = _DETECTOR_TYPE_BY_KIND.get(kind)
+        if detector_type is not None:
+            detector.attrs["detector_type"] = detector_type
+        rows = by_kind[kind]
+        detector.create_dataset(
+            "product_ids", data=[str(row.get("product_id") or "") for row in rows]
+        )
+        detector.create_dataset(
+            "shot_keys", data=[str(row.get("shot_key") or "") for row in rows]
+        )
+        detector.create_dataset(
+            "file_paths", data=[str(row.get("path") or "") for row in rows]
+        )
+        detector.create_dataset(
+            "dataset_names",
+            data=[str(row.get("dataset_name") or "") for row in rows],
+        )
+
+
+# Known pre-namespace producer spellings of diagnostic scalars, folded into
+# `metadata.diagnostic.*` by the NeXus writer only. The linter's
+# LEGACY_KEY_MAP is registry-backed and diagnostic.* keys have no registry
+# entry (per-detector docs own their units), so the fold lives here, not
+# there. Producers should emit metadata.diagnostic.<name> going forward.
+_LEGACY_DIAGNOSTIC_SCALARS = ("xray_counts", "detector_signal_mean", "alignment_score")
+
+_DIAGNOSTIC_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _shot_diagnostic_values(shot: dict[str, Any]) -> dict[str, Any]:
+    """One shot's diagnostic scalars: namespaced dict plus legacy flat spellings."""
+    metadata = shot.get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+    values: dict[str, Any] = {}
+    for legacy_key in _LEGACY_DIAGNOSTIC_SCALARS:
+        if metadata.get(legacy_key) is not None:
+            values[legacy_key] = metadata[legacy_key]
+    diagnostic = metadata.get("diagnostic")
+    if isinstance(diagnostic, dict):
+        for name, value in diagnostic.items():
+            if value is not None:
+                # The namespaced spelling wins over a legacy duplicate.
+                values[str(name)] = value
+    return values
+
+
+def write_nexus_diagnostic_groups(
+    entry_group: h5py.Group, shots: list[dict[str, Any]]
+) -> None:
+    """Write one `NXdetector` group per `metadata.diagnostic.*` scalar.
+
+    Each diagnostic key becomes `/entry/instrument/<key>` (`NXdetector`) with
+    a shot-indexed `data` dataset aligned with the canonical `/entry/shots`
+    table - multiple NXdetector groups under NXinstrument is standard NeXus,
+    and NXdetector is the nexus-design-studio ruling for the `diagnostic.*`
+    registry namespace. Unlike the laser/target/vacuum campaign-level groups
+    these are inherently per-shot QA scalars, so the full series is written
+    (NaN / "" where a shot lacks the key) instead of a first-shot snapshot.
+    `@units` comes from METADATA_KEY_REGISTRY when a `diagnostic.<key>` entry
+    exists; a name that collides with a non-DAMNIT group (e.g. a preserved
+    LabFrog projection group) is skipped with a warning, never overwritten.
+    """
+    series: dict[str, list[Any]] = {}
+    for index, shot in enumerate(shots):
+        for name, value in _shot_diagnostic_values(shot).items():
+            series.setdefault(name, [None] * len(shots))[index] = value
+    if not series:
+        return
+
+    instrument = entry_group.require_group("instrument")
+    if "NX_class" not in instrument.attrs:
+        instrument.attrs["NX_class"] = "NXinstrument"
+    for name in sorted(series):
+        if not _DIAGNOSTIC_NAME_PATTERN.fullmatch(name):
+            logger.warning("Skipping diagnostic %r: not a safe HDF5 group name", name)
+            continue
+        if not _claim_damnit_group(instrument, name, "metadata.diagnostic"):
+            logger.warning(
+                "Skipping diagnostic %r: /entry/instrument/%s already exists "
+                "and is not a DAMNIT diagnostic group",
+                name,
+                name,
+            )
+            continue
+        _write_diagnostic_detector(instrument, name, series[name])
+
+
+def _claim_damnit_group(parent: h5py.Group, name: str, damnit_source: str) -> bool:
+    """Delete a previously DAMNIT-written child so it can be rewritten.
+
+    Returns False (claim refused) when the name is taken by anything that
+    does not carry the matching `damnit_source` marker — e.g. a preserved
+    LabFrog projection group — so preserved content is never overwritten.
+    """
+    existing = parent.get(name)
+    if existing is None:
+        return True
+    if (
+        not isinstance(existing, h5py.Group)
+        or existing.attrs.get("damnit_source") != damnit_source
+    ):
+        return False
+    del parent[name]
+    return True
+
+
+def _write_diagnostic_detector(
+    instrument: h5py.Group, name: str, values: list[Any]
+) -> None:
+    detector = instrument.create_group(name)
+    detector.attrs["NX_class"] = "NXdetector"
+    detector.attrs["damnit_source"] = "metadata.diagnostic"
+    detector.attrs["coordinates"] = "/entry/shots/shot_index"
+    numeric = all(
+        value is None
+        or (isinstance(value, (int, float)) and not isinstance(value, bool))
+        for value in values
+    )
+    if numeric:
+        data = detector.create_dataset(
+            "data",
+            data=[np.nan if value is None else float(value) for value in values],
+        )
+    else:
+        data = detector.create_dataset(
+            "data",
+            data=["" if value is None else str(value) for value in values],
+        )
+    unit = METADATA_KEY_REGISTRY.get(f"diagnostic.{name}")
+    if unit is not None:
+        data.attrs["units"] = unit
 
 
 def _write_optional_string_dataset(group: h5py.Group, name: str, value: Any) -> None:

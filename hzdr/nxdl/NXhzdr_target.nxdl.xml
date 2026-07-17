@@ -65,7 +65,7 @@
             HZDR_TARGET_PROFILE_VERSION and the profile document version.
           </doc>
           <enumeration>
-            <item value="0.4"></item>
+            <item value="0.5"></item>
           </enumeration>
         </attribute>
         <attribute name="damnit_provenance" optional="true">
@@ -99,6 +99,24 @@
           <doc>
             Descriptive name of the target (standard NXsample field).
           </doc>
+        </field>
+        <field name="type" optional="true">
+          <doc>
+            Target class per the binding target ontology (target-ontology.md
+            section 3). Standard NXsample field name, but the value vocabulary
+            is the HZDR laser-target enumeration, not the upstream NXsample
+            sample/can/buffer list (profile doc section 2, since v0.5). Wiki
+            catalog types are mapped onto this enum by the reconciler with the
+            original text preserved in the prop_wiki_type attribute.
+          </doc>
+          <enumeration>
+            <item value="foil"></item>
+            <item value="gas_jet"></item>
+            <item value="cluster"></item>
+            <item value="liquid"></item>
+            <item value="structured"></item>
+            <item value="other"></item>
+          </enumeration>
         </field>
         <field name="material" optional="true">
           <doc>

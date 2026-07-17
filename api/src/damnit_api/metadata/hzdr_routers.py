@@ -1130,8 +1130,12 @@ def enrich_latest_emulated_shot(
     metadata["emulated_enrich_count"] = enrich_count
     metadata["emulated_last_enrichment_source"] = event_source
     metadata["emulated_last_enrichment_kind"] = event_kind
-    metadata["detector_signal_mean"] = round(
-        float(metadata.get("detector_signal_mean", 2.25)) + 0.11,
+    diagnostic_metadata = metadata.setdefault("diagnostic", {})
+    if not isinstance(diagnostic_metadata, dict):
+        diagnostic_metadata = {}
+        metadata["diagnostic"] = diagnostic_metadata
+    diagnostic_metadata["detector_signal_mean"] = round(
+        float(diagnostic_metadata.get("detector_signal_mean", 2.25)) + 0.11,
         4,
     )
     laser_metadata = metadata.setdefault("laser", {})
@@ -1217,13 +1221,17 @@ def _build_flow_monitor_metadata(
                 2.5e-5 * (1 + index * 0.04 + rng.uniform(-0.01, 0.01)), 8
             ),
         },
-        "xray_counts": int(1450 + index * 37 + rng.randint(-18, 18)),
-        "detector_signal_mean": round(
-            2.25 + index * 0.22 + rng.uniform(-0.06, 0.06), 4
-        ),
-        "alignment_score": round(
-            0.82 + (index % 6) * 0.025 + rng.uniform(-0.01, 0.01), 4
-        ),
+        # Namespaced per the metadata key registry's diagnostic.* convention;
+        # the NeXus writer maps these to per-shot NXdetector groups.
+        "diagnostic": {
+            "xray_counts": int(1450 + index * 37 + rng.randint(-18, 18)),
+            "detector_signal_mean": round(
+                2.25 + index * 0.22 + rng.uniform(-0.06, 0.06), 4
+            ),
+            "alignment_score": round(
+                0.82 + (index % 6) * 0.025 + rng.uniform(-0.01, 0.01), 4
+            ),
+        },
         "operator": ["alex", "sam", "lee"][index % 3],
     }
     _apply_event_source_metadata(
@@ -1349,6 +1357,10 @@ def _payload_ref_for_event_source(
 
 def _values_for_event_source(event_source: str, metadata: dict) -> list[float]:
     """Return representative signal values for one staged flow-monitor event."""
+    diagnostic = metadata.get("diagnostic")
+    if isinstance(diagnostic, dict) and "detector_signal_mean" in diagnostic:
+        return [float(diagnostic.get("detector_signal_mean") or 0.0)]
+    # Pre-namespace flat spelling, kept for hand-written source fixtures.
     return [float(metadata.get("detector_signal_mean", 0.0))]
 
 
