@@ -99,7 +99,12 @@ This design means:
 **Option A — Additive fields in `metadata` (no schema bump):**
 The most common path. New producer-side information goes in `metadata.my_new_field`,
 or behind `payload_ref.my_new_ref`. No schema version change, no cross-repo
-coordination overhead.
+coordination overhead. Mind the reserved namespaces: `target`, `laser`, `vacuum`,
+`run`, and `diagnostic` follow the metadata key registry (bare keys, canonical
+unit fixed in `METADATA_KEY_REGISTRY` — see the root `CLAUDE.md` table; a new
+`diagnostic.*` scalar must be registered before it is produced), and
+`simulation` is the openPMD link object
+([openpmd-linking.md](openpmd-linking.md)).
 
 **Option B — New required field or constraint change (schema bump to `hzdr-event-v2`):**
 If a new field must be present in every event (e.g. a `sample_id` join key) or an

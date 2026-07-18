@@ -259,7 +259,9 @@ namespace is registry-governed: its keys are registered below, the legacy flat
 spellings (`xray_counts`, …) are in `LEGACY_KEY_MAP`, and the linter additionally
 warns about a `metadata.diagnostic` key with no registry entry (register the key
 here + in code before producing it; unregistered keys are still written, but
-unitless).
+unitless). The `simulation.*` namespace (openPMD links,
+[hzdr/docs/openpmd-linking.md](hzdr/docs/openpmd-linking.md)) is reserved and
+non-numeric — no registry rows, linter stays silent on it.
 
 | Namespace | Key | Canonical unit |
 | --- | --- | --- |
