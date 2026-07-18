@@ -256,9 +256,11 @@ semantic map and compatibility-attribute contract, and `write_nexus_sample()` st
 `HZDR_TARGET_PROFILE_VERSION` in `hzdr_nexus.py`; the profile doc is the versioned
 reference) on `/entry/sample` while leaving `NX_class="NXsample"`. **Done in profile
 v0.2 (2026-07-13):** the NXDL application definition
-(`hzdr/nxdl/NXhzdr_target.nxdl.xml`) ships with pynxtools-based validation; whether
-HZDR-profile files should set `NX_class="NXhzdr_target"` directly remains open
-(see nxhzdr-target-profile.md §6).
+(`hzdr/nxdl/NXhzdr_target.nxdl.xml`) ships with pynxtools-based validation.
+**Decided 2026-07-18 (profile v0.6):** `NX_class` stays `"NXsample"`
+permanently — the profile identity is carried by `/entry/definition` and
+`damnit_nx_class`, and swapping the class would break generic NXsample
+consumers for no validation gain (see nxhzdr-target-profile.md §6).
 HELPMI DDC names remain the documentation cross-walk; see
 [standards-alignment.md Route 2](standards-alignment.md#route-2-nxsource-nxbeam-and-nxsample-groups-in-the-nexus-bridge-ready).
 
@@ -275,7 +277,7 @@ HELPMI DDC names remain the documentation cross-walk; see
 | LabFrog export carries captured target fields | ✅ done 2026-07-02 |
 | DAMNIT reconciler maps exported LabFrog target columns to `metadata.target.*` | ✅ done 2026-07-02 |
 | `write_nexus_sample()` (`NXsample`) reads `metadata.target.*` | ✅ done 2026-07-02 |
-| HZDR-local `NXhzdr_target` profile / NXDL drafted | ✅ profile doc + compatibility attrs done 2026-07-02; NXDL application definition + pynxtools certification done in v0.2 (2026-07-13); `type` dataset written since v0.5 (2026-07-17) — [nxhzdr-target-profile.md](nxhzdr-target-profile.md) §4 for history; `NX_class` swap decision still open — Phase 5 |
+| HZDR-local `NXhzdr_target` profile / NXDL drafted | ✅ profile doc + compatibility attrs done 2026-07-02; NXDL application definition + pynxtools certification done in v0.2 (2026-07-13); `type` dataset written since v0.5 (2026-07-17); NXDL scope grown to the whole canonical entry and `NX_class` swap decision closed (keep `NXsample`) in v0.6 (2026-07-18) — [nxhzdr-target-profile.md](nxhzdr-target-profile.md) §4 for history |
 | Target→wiki link surfaced in API/UI (`target_wiki_ref` / `target_wiki_page`, table + shot detail links) | ✅ done 2026-07-02 |
 | Wiki catalog (`IonenTargetOrigin`) → ontology mapping documented (§2.3); SQLite v9 extras columns mapped by the reconciler | ✅ implemented locally 2026-07-03 |
 | LabFrog persists wiki extras (`wiki_page`/`wiki_ref`/status/provider/amount) per shot | ✅ done 2026-07-03 (labfrog) |
