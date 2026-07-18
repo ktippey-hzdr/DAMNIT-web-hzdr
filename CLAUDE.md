@@ -254,7 +254,12 @@ since its keys have no registry entry.
 in code and warn (never reject) when a legacy suffixed key is seen; wired into
 `hzdr_nexus._normalize_event()` so every normalized event is linted. The flow-monitor
 emulator (`routers._build_flow_monitor_metadata`) already emits the namespaced bare
-keys, so the linter is silent on its output.
+keys, so the linter is silent on its output. **Since 2026-07-18** the `diagnostic.*`
+namespace is registry-governed: its keys are registered below, the legacy flat
+spellings (`xray_counts`, …) are in `LEGACY_KEY_MAP`, and the linter additionally
+warns about a `metadata.diagnostic` key with no registry entry (register the key
+here + in code before producing it; unregistered keys are still written, but
+unitless).
 
 | Namespace | Key | Canonical unit |
 | --- | --- | --- |
@@ -275,7 +280,9 @@ keys, so the linter is silent on its output.
 | `vacuum.*` | `pre_shot_pressure` | mbar |
 | `vacuum.*` | `rga_dominant_species` | — (string) |
 | `run.*` | `facility`, `beamline`, `pi`, `start_utc`, `end_utc` | n/a (non-numeric) |
-| `diagnostic.*` | per-detector scalars | see detector-specific docs |
+| `diagnostic.*` | `xray_counts` | counts |
+| `diagnostic.*` | `detector_signal_mean` | — (arbitrary/dimensionless) |
+| `diagnostic.*` | `alignment_score` | — (dimensionless, 0–1) |
 
 See [hzdr/docs/target-ontology.md §5](hzdr/docs/target-ontology.md#5-units-convention) and
 [hzdr/docs/standards-alignment.md §3.3/§3.5](hzdr/docs/standards-alignment.md#33-laser-parameters)
