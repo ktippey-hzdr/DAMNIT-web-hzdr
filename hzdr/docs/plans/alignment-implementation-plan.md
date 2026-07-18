@@ -166,13 +166,19 @@ data the earlier phases already captured.
    for every campaign build via `hzdr-hdf5-builder.py`). Tolerates the legacy string
    form of `metadata.target` via `_normalize_target_metadata`. Tests in
    `api/tests/test_hzdr_nexus_sample.py`.
-3. ⬜ In `_write_data_products`, write a per-product `NXdetector` sub-group with
-   `detector_type`/`type` derived from the product `kind`; add the missing kinds
-   (Thomson parabola, FROG) to the kind→class map.
-4. Set `entry/start_time` from the first shot's `fired_at`.
+3. ✅ **Done 2026-07-17:** `write_nexus_detector_groups()` writes a per-kind
+   `/entry/instrument/detector_<kind>` (`NXdetector`) group with `detector_type`
+   derived from the product `kind` (Thomson parabola and FROG included in
+   `_DETECTOR_TYPE_BY_KIND`), referencing the flat `/entry/data_products` rows;
+   per-diagnostic `NXdetector` series come from `write_nexus_diagnostic_groups()`.
+   See [nexus-semantic-maps.md §4](../nexus-semantic-maps.md).
+4. ✅ **Done 2026-07-18 (profile v0.6):** `entry/start_time` and `entry/end_time`
+   are written from the earliest/latest shot `fired_at`
+   (`_write_campaign_time_bounds()`), refreshed on rebuild under a
+   `damnit_source="shots"` marker so a non-DAMNIT dataset is never overwritten.
 5. ✅ **Done 2026-07-02 for the laser bridge:** existing `hzdr_nexus` bridge test now asserts
-   `/entry/instrument/laser`, nested `beam`, `NX_class`, and `@units`; keep extending it
-   for the future `NXdetector` product groups.
+   `/entry/instrument/laser`, nested `beam`, `NX_class`, and `@units`; detector-group and
+   time-bounds tests added alongside (`test_hzdr_nexus.py`).
 
 **Files:** `api/src/damnit_api/metadata/hzdr_nexus.py`, `api/tests/` (NeXus writer tests).
 
@@ -258,20 +264,26 @@ name.
 2. ✅ **Done 2026-07-02:** `write_nexus_sample()` in `hzdr_nexus.py` keeps `/entry/sample`
    as `NX_class="NXsample"` for standard-tool compatibility and now stamps
    `damnit_nx_class="NXhzdr_target"` / `damnit_nxdl_version` (module constant
-   `HZDR_TARGET_PROFILE_VERSION = "0.1"`, matching the profile doc version). Deciding
-   whether to set `NX_class="NXhzdr_target"` directly once a real NXDL is bundled with
-   validation remains open (profile doc §6). Registry namespaces (`laser`, `target`,
-   `vacuum`, `run`, `diagnostic`) beyond `target` are not yet covered by an equivalent
-   profile doc/annotation pass.
-3. For openPMD, start with **linking/manifest interoperability**, not a wholesale
-   conversion of the campaign NeXus file. Capture references from an experimental shot
-   or data product to a PIC/openPMD series (path/URI, iteration/window, code name,
-   checksum/version when available) so comparison tools can join experimental NeXus and
-   simulation output explicitly.
+   `HZDR_TARGET_PROFILE_VERSION`, matching the profile doc version).
+   ✅ **Closed 2026-07-18 (profile v0.6):** the `NX_class` swap decision —
+   `NX_class="NXsample"` is permanent (profile doc §6 has the rationale).
+   ✅ **Done 2026-07-18:** the remaining registry namespaces now have an
+   equivalent semantic-map doc — [nexus-semantic-maps.md](../nexus-semantic-maps.md)
+   covers `laser.*`, `vacuum.*`, and `diagnostic.*` (the `diagnostic.*` namespace
+   also gained binding registry entries + a linter warning for unregistered keys),
+   and the NXDL now certifies those groups. `run.*` is non-NeXus-mapped catalog
+   metadata and needs no profile doc.
+3. ✅ **Done 2026-07-18 (schema only, per this item's own scoping):** the link
+   object — series path/URI, iteration/window, code name/version,
+   checksum, optional SciCat PID — is specified as `metadata.simulation` in
+   [openpmd-linking.md](../openpmd-linking.md); no conversion, no comparison
+   tooling (deferred until a concrete analysis user, §6 there).
 4. Tests: ✅ **done 2026-07-02 for the target profile** — `api/tests/test_hzdr_nexus_sample.py`
-   asserts `damnit_nx_class`/`damnit_nxdl_version` on a fixture file. Still open: a
-   static coverage test for the full semantic map once other namespaces get an
-   equivalent profile doc, and a manifest-link unit test for openPMD. No live ontology
+   asserts `damnit_nx_class`/`damnit_nxdl_version` on a fixture file.
+   ✅ **Done 2026-07-18:** the registry↔writer static coverage test
+   (`test_metadata_keys.py::TestRegistryWriterCoverage`) spans every registry
+   namespace, and the openPMD manifest-link round-trip is pinned by
+   `api/tests/test_hzdr_simulation_link.py`. No live ontology
    service is required; a gated/live test only becomes relevant if a site service later
    consumes the annotations.
 
@@ -296,7 +308,7 @@ for full openPMD comparison tooling or any future live ontology/search-service i
 4. **Phase 2 — target/sample from LabFrog** 🟢. Base export/reconciler path is done for captured manual target fields, and LabFrog now persists all current wiki extras (`wiki_page`/`wiki_ref`/`status`/`provider`/`amount`/`type`/`production_date`/`origin`) per shot, exported by `labfrog-sqlite-tools` and mapped through by DAMNIT's reconciler; gas species/pressure remain blocked on LabFrog adding gas-jet target capture.
 5. **Phase 4 — SciCat registration** 🟡. Wire up the existing HZDR SciCat plugin
    (no custom client); gated test when a live instance is up.
-6. **Phase 5 — ontology / openPMD** 🟡/🔴. HELPMI is finished; define the HZDR semantic profile ourselves. Start with a local key->NeXus->ontology map, an HZDR `NXhzdr_target` profile, and openPMD links; defer full comparison tooling until there is a concrete analysis user.
+6. **Phase 5 — ontology / openPMD** 🟡/🔴. HELPMI is finished; define the HZDR semantic profile ourselves. ✅ As of 2026-07-18 the local semantic layer is complete: every NeXus-mapped registry namespace has a versioned profile/map doc, the `NXhzdr_target` NXDL certifies the whole canonical entry (profile v0.6), and the openPMD link schema is specified. Still deferred by design: NeXus Ontology URI annotation (needs a federated-search consumer) and openPMD comparison tooling (needs a concrete analysis user).
 
 None of these block the integration go-live gate (see
 [remaining-work-plan.md](remaining-work-plan.md)); they are FAIR-data quality improvements

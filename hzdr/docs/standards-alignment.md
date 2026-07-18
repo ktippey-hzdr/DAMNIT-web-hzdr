@@ -212,7 +212,7 @@ definitions are finalized, and the effort to migrate.
 
 | Current path | Current `NX_class` | Target class (HELPMI/NeXus) | Migration note |
 | --- | --- | --- | --- |
-| `/entry` | `NXentry` | `NXentry` | Correct; `/entry/experiment_identifier` written by the bridge itself since 2026-07-17 (no longer dependent on the preserved LabFrog projection); `entry/start_time` from first shot still open |
+| `/entry` | `NXentry` | `NXentry` | Correct; `/entry/experiment_identifier` written by the bridge itself since 2026-07-17 (no longer dependent on the preserved LabFrog projection); ✅ `entry/start_time`/`end_time` from earliest/latest shot `fired_at` done 2026-07-18 (profile v0.6, refreshed on rebuild under a `damnit_source="shots"` marker) |
 | `/entry/shots` | `NXcollection` | `NXcollection` | DAMNIT-internal shot table; custom class intentional |
 | `/entry/source_events` | `NXcollection` | `NXcollection` | DAMNIT-internal event table; no standard equivalent |
 | `/entry/data_products` | `NXcollection` | `NXcollection` + per-kind `NXdetector` | ✅ done 2026-07-17: `/entry/instrument/detector_<kind>` (`NXdetector`, `detector_type` tagged) per semantic product kind, referencing the table rows; the flat table stays `NXcollection` |
@@ -220,8 +220,8 @@ definitions are finalized, and the effort to migrate.
 | `/entry/watchdog` | `NXcollection` | `NXcollection` (keep custom) | File-arrival log; no standard class; keep as-is |
 | — | — | `/entry/instrument/laser` → `NXsource` + `NXbeam` | Done in DAMNIT for available `metadata.laser.*`; producer-side fixed fields still need capture |
 | — | — | `/entry/sample` → `NXsample` | Done for available `metadata.target.*`, including wiki extras (`wiki_page`/`wiki_ref`/`status`/`provider`/`amount`/`type`/`production_date`/`origin`); gas fields have no source data (no gas-jet capture in LabFrog) |
-| — | — | `/entry/sample/environment` → `NXenvironment` | Done 2026-07-17 for available `metadata.vacuum.*` (`chamber_pressure`, `pre_shot_pressure`, `rga_dominant_species`); outside the NXhzdr_target NXDL's modelled scope, like `/entry/instrument` |
-| — | — | `/entry/instrument/<key>` → `NXdetector` (per `metadata.diagnostic.*` scalar) | Done 2026-07-17: shot-indexed `data` array per key, aligned with `/entry/shots`; legacy flat spellings (`xray_counts`, `detector_signal_mean`, `alignment_score`) folded in by the writer |
+| — | — | `/entry/sample/environment` → `NXenvironment` | Done 2026-07-17 for available `metadata.vacuum.*` (`chamber_pressure`, `pre_shot_pressure`, `rga_dominant_species`); covered by the NXhzdr_target NXDL since profile v0.6 (2026-07-18) — see [nexus-semantic-maps.md §3](nexus-semantic-maps.md#3-vacuum-map-metadatavacuum--entrysampleenvironment) |
+| — | — | `/entry/instrument/<key>` → `NXdetector` (per `metadata.diagnostic.*` scalar) | Done 2026-07-17: shot-indexed `data` array per key, aligned with `/entry/shots`; legacy flat spellings (`xray_counts`, `detector_signal_mean`, `alignment_score`) folded in by the writer and linter-flagged since 2026-07-18, when `diagnostic.*` became registry-governed (`@units` stamped from the registry) — see [nexus-semantic-maps.md §4](nexus-semantic-maps.md#4-diagnostic-map-metadatadiagnostic-and-data-products--nxdetector) |
 
 ### 3.8 Plasma-MDS cross-walk
 
@@ -332,13 +332,16 @@ only (§3.3, §3.4). This requires:
    ([hzdr/docs/nxhzdr-target-profile.md](nxhzdr-target-profile.md)) and `write_nexus_sample()`
    now stamps the compatibility attrs (`damnit_nx_class="NXhzdr_target"`,
    `damnit_nxdl_version`) on `/entry/sample` while keeping `NX_class="NXsample"`.
-   ✅ **Done 2026-07-13 (profile v0.2; current v0.5 — temperature unit string
-   `"degC"`):** NXDL formalization — the application definition
+   ✅ **Done 2026-07-13 (profile v0.2; current v0.6 — whole-entry NXDL scope):**
+   NXDL formalization — the application definition
    `hzdr/nxdl/NXhzdr_target.nxdl.xml` encodes the profile, `write_nexus_bridge()` declares
    it via `/entry/definition`, and files are certified with
    `nds validate <file> --pynxtools --definitions hzdr/nxdl` (pynxtools; wired into the
-   meta-repo alignment checker's `nexus` group). The `NX_class="NXhzdr_target"` swap
-   decision (profile doc §6) is still open.
+   meta-repo alignment checker's `nexus` group). Since v0.6 (2026-07-18) the NXDL also
+   models the laser/vacuum/diagnostic groups and `start_time`/`end_time`
+   ([nexus-semantic-maps.md](nexus-semantic-maps.md)), and the
+   `NX_class="NXhzdr_target"` swap decision is closed: `NX_class="NXsample"` is
+   permanent (profile doc §6).
 4. No change to the transport envelope; the data is already in `metadata`/`values`.
 
 ### Route 3: SciCat registration (lower effort — existing plugin)
@@ -374,7 +377,12 @@ ontology deliverable should be an `NXhzdr_target` profile with explicit mappings
 `NXsample`, HELPMI DDC target terms, and NeXus Ontology URIs where they exist.
 **Done 2026-07-02:** the v0.1 profile document
 ([hzdr/docs/nxhzdr-target-profile.md](nxhzdr-target-profile.md)) delivers that explicit
-mapping; NeXus Ontology URI annotation itself remains open.
+mapping, and since profile v0.6 (2026-07-18)
+[nexus-semantic-maps.md](nexus-semantic-maps.md) extends the "Upstream NeXus
+field?" bookkeeping to the laser/vacuum/diagnostic namespaces — the complete
+input for a future URI pass. NeXus Ontology URI annotation itself remains
+open, deliberately deferred until a federated-search consumer (e.g. the PaN
+portal) exists.
 
 ### Route 5: openPMD interoperability (for simulation comparisons)
 
@@ -383,6 +391,15 @@ DRACO experiments, this would enable linking the experimental NeXus file to PIC
 simulation output in openPMD format, making comparison plots in the same analysis
 pipeline straightforward. The transport envelope is unchanged; this is a NeXus
 writer and analysis tooling concern.
+
+**Done 2026-07-18 (link schema):** the `metadata.simulation` link object —
+series URI/path, matched iteration or window, code name/version, checksum,
+optional SciCat PID — is specified in
+[openpmd-linking.md](openpmd-linking.md) and characterization-tested to
+round-trip the event normalizer losslessly
+(`api/tests/test_hzdr_simulation_link.py`). Comparison tooling and a NeXus
+`NXnote` mapping stay deferred until there is a concrete analysis user
+(openpmd-linking.md §5–§6).
 
 ---
 
@@ -401,7 +418,7 @@ writer and analysis tooling concern.
 | Per-kind `NXdetector` groups in NeXus bridge (`detector_<kind>` + `detector_type` + row references) | ✅ done 2026-07-17 | §3.6, §3.7 |
 | Per-shot `metadata.diagnostic.*` → `NXdetector` series + `laser/shot_series` `NXdata` | ✅ done 2026-07-17 (emulator emits `diagnostic.*` namespace; real producers still open) | §3.5, §3.6, §3.7 |
 | Official `NXlaser` / `NXtarget` groups from HELPMI | ❌ cancelled 2026-07-02 — HELPMI finished | Route 2 |
-| HZDR-local `NXhzdr_target` profile / NXDL | ✅ done 2026-07-13 (v0.2, current v0.5): NXDL application definition (`hzdr/nxdl/NXhzdr_target.nxdl.xml`) + `/entry/definition` stamped by the bridge + pynxtools certification via `nds validate --pynxtools --definitions`; v0.3 fixes the canonical temperature unit string to `degC`, v0.4 routes `target.material` to the free-text `material` dataset with `chemical_formula` derived only when the value parses as a formula, v0.5 writes the ontology-required `type` dataset with the §3 enum fixed in the NXDL ([nxhzdr-target-profile.md](nxhzdr-target-profile.md)); `NX_class` swap decision still open (profile doc §6) | Route 2, Route 4 |
+| HZDR-local `NXhzdr_target` profile / NXDL | ✅ done 2026-07-13 (v0.2, current v0.6): NXDL application definition (`hzdr/nxdl/NXhzdr_target.nxdl.xml`) + `/entry/definition` stamped by the bridge + pynxtools certification via `nds validate --pynxtools --definitions`; v0.3 fixes the canonical temperature unit string to `degC`, v0.4 routes `target.material` to the free-text `material` dataset with `chemical_formula` derived only when the value parses as a formula, v0.5 writes the ontology-required `type` dataset with the §3 enum fixed in the NXDL, v0.6 grows the NXDL to the whole canonical entry (laser/vacuum/diagnostic groups, `start_time`/`end_time`) and closes the `NX_class` swap decision as keep-`NXsample` ([nxhzdr-target-profile.md](nxhzdr-target-profile.md), [nexus-semantic-maps.md](nexus-semantic-maps.md)) | Route 2, Route 4 |
 | SciCat registration + `scicat_pid` back-population (via existing HZDR SciCat plugin) | 🟡 plugin built (HTTP `/scicat/from-json` \| `/scicat/push`); DAMNIT builder post-step + API link not yet wired | Route 3, [roadmap §SciCat Registration](status/integration-roadmap.md#scicat-registration) |
-| NeXus Ontology annotation for federated search | ⬜ HZDR-owned design; no HELPMI blocker | Route 4 |
-| openPMD interoperability (simulation links) | ⬜ HZDR-owned link/manifest design; comparison tooling deferred | Route 5 |
+| NeXus Ontology annotation for federated search | ⬜ HZDR-owned design; no HELPMI blocker; deliberately deferred until a federated-search consumer exists (the "Upstream NeXus field?" columns in the profile docs are the prepared input) | Route 4 |
+| openPMD interoperability (simulation links) | ✅ link schema (`metadata.simulation`) specified + normalizer round-trip pinned 2026-07-18 ([openpmd-linking.md](openpmd-linking.md)); ⬜ comparison tooling deferred until a concrete analysis user | Route 5 |
