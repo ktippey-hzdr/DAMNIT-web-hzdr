@@ -116,3 +116,68 @@ class TestLintMetadataKeys:
         assert lint_metadata_keys({"laser": "not-a-dict"}) == []
         assert lint_metadata_keys({"laser": None}) == []
         assert lint_metadata_keys({"laser": [1, 2, 3]}) == []
+
+
+# Registry keys that are deliberately captured-but-unwritten: signed off into
+# METADATA_KEY_REGISTRY but not (yet) routed anywhere by the NeXus writer.
+# Every entry needs a reason - an empty set means the writer covers the whole
+# registry. (vacuum.* sat here implicitly and undetected from sign-off
+# 2026-07-02 until the NXenvironment group landed 2026-07-17; this test exists
+# so that state is a visible ruling, never a silent gap.)
+EXPECTED_UNWRITTEN_KEYS: dict[str, str] = {}
+
+
+class TestRegistryWriterCoverage:
+    """Every registry key is either written by hzdr_nexus.py or exempted above.
+
+    A key lands in the writer as a literal in one of two forms: a
+    ``unit_key="namespace.key"`` argument (numeric datasets, @units stamped
+    from the registry) or a ``<namespace>.get("key")`` lookup on the namespace
+    dict (string-valued datasets/attributes). Where a key routes is a semantic
+    ruling, so this test only detects - it can never auto-fix.
+    """
+
+    @staticmethod
+    def _writer_source() -> str:
+        import inspect
+
+        from damnit_api.metadata import hzdr_nexus
+
+        return inspect.getsource(hzdr_nexus)
+
+    def test_every_registry_key_reaches_the_writer(self):
+        import re
+
+        source = self._writer_source()
+        uncovered = []
+        for registry_key in METADATA_KEY_REGISTRY:
+            namespace, _, bare_key = registry_key.partition(".")
+            patterns = (
+                rf'unit_key="{re.escape(registry_key)}"',
+                rf'\b{re.escape(namespace)}\.get\(\s*"{re.escape(bare_key)}"',
+                rf'\.get\(\s*"{re.escape(registry_key)}"',
+            )
+            if not any(re.search(pattern, source) for pattern in patterns):
+                uncovered.append(registry_key)
+
+        unexpected = [key for key in uncovered if key not in EXPECTED_UNWRITTEN_KEYS]
+        assert not unexpected, (
+            "registry keys captured but never written by hzdr_nexus.py "
+            f"(route them or add them to EXPECTED_UNWRITTEN_KEYS with a "
+            f"reason): {unexpected}"
+        )
+
+    def test_exemption_list_is_not_stale(self):
+        source = self._writer_source()
+        stale = [
+            key
+            for key in EXPECTED_UNWRITTEN_KEYS
+            if f'"{key}"' in source or f'unit_key="{key}"' in source
+        ]
+        assert not stale, (
+            f"keys listed as unwritten but referenced by the writer: {stale}"
+        )
+
+    def test_exemptions_are_registry_keys(self):
+        unknown = [k for k in EXPECTED_UNWRITTEN_KEYS if k not in METADATA_KEY_REGISTRY]
+        assert not unknown, f"exempted keys missing from the registry: {unknown}"

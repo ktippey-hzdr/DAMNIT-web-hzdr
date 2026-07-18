@@ -332,7 +332,7 @@ only (§3.3, §3.4). This requires:
    ([hzdr/docs/nxhzdr-target-profile.md](nxhzdr-target-profile.md)) and `write_nexus_sample()`
    now stamps the compatibility attrs (`damnit_nx_class="NXhzdr_target"`,
    `damnit_nxdl_version`) on `/entry/sample` while keeping `NX_class="NXsample"`.
-   ✅ **Done 2026-07-13 (profile v0.2; current v0.3 — temperature unit string
+   ✅ **Done 2026-07-13 (profile v0.2; current v0.5 — temperature unit string
    `"degC"`):** NXDL formalization — the application definition
    `hzdr/nxdl/NXhzdr_target.nxdl.xml` encodes the profile, `write_nexus_bridge()` declares
    it via `/entry/definition`, and files are certified with

@@ -147,7 +147,11 @@ retyped, a unit changed, or an attribute renamed. The writer constant, this
 document's version, and the `damnit_nxdl_version` enumeration in
 `hzdr/nxdl/NXhzdr_target.nxdl.xml` must always agree (all three, bumped
 together); a mismatch means one of them was updated without the others. The
-meta-repo alignment checker's `ontology` group verifies all three. Non-semantic
+meta-repo alignment checker's `ontology` group verifies all three, plus the
+fourth transcription in nexus-design-studio (`profiles/nxhzdr_target.yaml` —
+rows, units, version, and its `source_ref` pin to this document's last commit)
+and every registered current-version mention across the docs; its `run --fix`
+mode rewrites the mechanical mirrors after a bump. Non-semantic
 edits to this document (wording, typo fixes) do not require a bump.
 
 Current version: **0.5** (`target.type` written as the `type` dataset with the
@@ -188,7 +192,7 @@ History:
   enforces nor forbids this placement; revisit if the NXDL's scope ever grows
   to instrument groups.
 
-No other deviations are tracked in v0.3.
+No other deviations are tracked in v0.5.
 
 ## 6. Future work
 
