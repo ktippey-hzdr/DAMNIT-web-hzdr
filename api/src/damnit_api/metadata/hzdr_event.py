@@ -199,6 +199,15 @@ METADATA_KEY_REGISTRY: dict[str, str | None] = {
     "vacuum.chamber_pressure": "mbar",
     "vacuum.pre_shot_pressure": "mbar",
     "vacuum.rga_dominant_species": None,
+    # diagnostic.* per-shot QA scalars (registered 2026-07-18). Each key is one
+    # detector-derived scalar per shot; the NeXus writer emits a shot-indexed
+    # NXdetector series per key and stamps the unit below as `@units`. A new
+    # diagnostic scalar must be registered here (and in the CLAUDE.md registry
+    # table) before a producer emits it; an unregistered key is still written,
+    # but unitless and flagged by lint_metadata_keys().
+    "diagnostic.xray_counts": "counts",
+    "diagnostic.detector_signal_mean": None,
+    "diagnostic.alignment_score": None,
 }
 
 
@@ -226,6 +235,13 @@ LEGACY_KEY_MAP: dict[str, str] = {
     "thickness_nm": "target.thickness",
     "diameter_mm": "target.diameter",
     "gas_pressure_bar": "target.gas_pressure",
+    # Pre-namespace flat spellings of the diagnostic.* scalars (registered
+    # 2026-07-18). Unlike the suffixed keys above, the legacy name equals the
+    # namespaced bare name, so lint_metadata_keys() skips the identity case
+    # (metadata.diagnostic.xray_counts is canonical, not legacy).
+    "xray_counts": "diagnostic.xray_counts",
+    "detector_signal_mean": "diagnostic.detector_signal_mean",
+    "alignment_score": "diagnostic.alignment_score",
 }
 
 # Namespace sub-objects exempt from legacy-key linting: the `properties`
@@ -235,13 +251,22 @@ _LINT_EXEMPT_SUBOBJECTS = frozenset({"properties"})
 
 
 def lint_metadata_keys(metadata: dict[str, Any]) -> list[str]:
-    """Warn (never reject) about legacy suffixed metadata keys.
+    """Warn (never reject) about legacy or unregistered metadata keys.
 
     Pure/read-only: never mutates `metadata`, never raises. Checks top-level
     keys directly against LEGACY_KEY_MAP, and - one level down - each key of
     any nested namespace dict (e.g. `metadata["laser"]`, `metadata["vacuum"]`,
     `metadata["target"]`) except a sub-object literally named `properties`,
-    which is exempt by design (see docs/target-ontology.md §4).
+    which is exempt by design (see docs/target-ontology.md §4). A nested key
+    whose namespaced path IS the canonical spelling (e.g.
+    `diagnostic.xray_counts`, whose legacy flat spelling has the same bare
+    name) is never flagged as legacy.
+
+    Additionally warns about `metadata.diagnostic` keys with no
+    `diagnostic.<key>` registry entry: the diagnostic namespace is
+    registry-governed (registered 2026-07-18), so an unregistered scalar is
+    written to the NeXus bridge without `@units` — register the key (code
+    registry + CLAUDE.md table) before producing it.
 
     Returns a list of human-readable warning strings; does not log by itself
     (callers decide whether/how to log - see the call site in
@@ -261,11 +286,17 @@ def lint_metadata_keys(metadata: dict[str, Any]) -> list[str]:
         if key in _LINT_EXEMPT_SUBOBJECTS or not isinstance(value, dict):
             continue
         for inner_key in value:
-            if inner_key in LEGACY_KEY_MAP:
-                path = f"{key}.{inner_key}"
+            path = f"{key}.{inner_key}"
+            if inner_key in LEGACY_KEY_MAP and LEGACY_KEY_MAP[inner_key] != path:
                 warnings.append(
                     f"legacy metadata key '{path}' is superseded by "
                     f"'{LEGACY_KEY_MAP[inner_key]}' (bare key, canonical unit "
                     "in METADATA_KEY_REGISTRY)"
+                )
+            elif key == "diagnostic" and path not in METADATA_KEY_REGISTRY:
+                warnings.append(
+                    f"unregistered diagnostic metadata key '{path}': add it to "
+                    "METADATA_KEY_REGISTRY (and the CLAUDE.md registry table) "
+                    "so the NeXus writer can stamp @units"
                 )
     return warnings

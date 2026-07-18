@@ -988,6 +988,84 @@ def test_bridge_without_source_nexus_writes_experiment_identifier(tmp_path: Path
         assert identifier.asstr()[()] == "HELPMI"
 
 
+def test_bridge_writes_campaign_time_bounds(tmp_path: Path):
+    """entry/start_time and end_time come from the earliest/latest shot
+    fired_at (standard NXentry fields, profile v0.6)."""
+    output_nexus = tmp_path / "canonical.nxs"
+    shots, events = reconcile_canonical_shots(
+        [
+            normalized_event(),
+            normalized_event(
+                shot_id="shot-000018", timestamp="2026-06-10T12:05:00Z"
+            ),
+        ],
+        experiment_id="HELPMI",
+        source_key="hzdr-labfrog",
+        labfrog_shots=[],
+    )
+    write_nexus_bridge(
+        output_path=output_nexus,
+        experiment_id="HELPMI",
+        shots=shots,
+        events=events,
+    )
+
+    with h5py.File(output_nexus, "r") as handle:
+        start = cast("h5py.Dataset", handle["entry/start_time"])
+        end = cast("h5py.Dataset", handle["entry/end_time"])
+        assert start.asstr()[()] == "2026-06-10T12:00:00+00:00"
+        assert end.asstr()[()] == "2026-06-10T12:05:00+00:00"
+        assert start.attrs["damnit_source"] == "shots"
+        assert end.attrs["damnit_source"] == "shots"
+
+
+def test_time_bounds_refresh_damnit_written_datasets(tmp_path: Path):
+    """Bounds written by DAMNIT (damnit_source marker) are rewritten on a
+    later build so end_time tracks a growing campaign."""
+    from damnit_api.metadata.hzdr_nexus import _write_campaign_time_bounds
+
+    path = tmp_path / "campaign.nxs"
+    with h5py.File(path, "w") as handle:
+        entry = handle.create_group("entry")
+        _write_campaign_time_bounds(
+            entry, [{"fired_at": "2026-06-10T12:00:00Z"}]
+        )
+        _write_campaign_time_bounds(
+            entry,
+            [
+                {"fired_at": "2026-06-10T12:00:00Z"},
+                {"fired_at": "2026-06-10T13:00:00Z"},
+            ],
+        )
+
+    with h5py.File(path, "r") as handle:
+        start = cast("h5py.Dataset", handle["entry/start_time"])
+        end = cast("h5py.Dataset", handle["entry/end_time"])
+        assert start.asstr()[()] == "2026-06-10T12:00:00+00:00"
+        assert end.asstr()[()] == "2026-06-10T13:00:00+00:00"
+
+
+def test_time_bounds_never_overwrite_a_foreign_dataset(tmp_path: Path):
+    """A start_time written by someone else (no damnit_source marker, e.g. a
+    future LabFrog projection) is preserved, mirroring the group claim rule."""
+    from damnit_api.metadata.hzdr_nexus import _write_campaign_time_bounds
+
+    path = tmp_path / "campaign.nxs"
+    with h5py.File(path, "w") as handle:
+        entry = handle.create_group("entry")
+        entry.create_dataset("start_time", data="2026-01-01T00:00:00Z")
+        _write_campaign_time_bounds(
+            entry, [{"fired_at": "2026-06-10T12:00:00Z"}]
+        )
+
+    with h5py.File(path, "r") as handle:
+        start = cast("h5py.Dataset", handle["entry/start_time"])
+        end = cast("h5py.Dataset", handle["entry/end_time"])
+        assert start.asstr()[()] == "2026-01-01T00:00:00Z"
+        assert "damnit_source" not in start.attrs
+        assert end.asstr()[()] == "2026-06-10T12:00:00+00:00"
+
+
 def test_diagnostic_groups_write_per_shot_series_and_respect_owners(tmp_path: Path):
     """Namespaced values win over legacy flat spellings, non-numeric series
     fall back to strings, and a group owned by someone else (e.g. a preserved
@@ -1013,6 +1091,8 @@ def test_diagnostic_groups_write_per_shot_series_and_respect_owners(tmp_path: Pa
         xray = cast("h5py.Dataset", handle["entry/instrument/xray_counts/data"])
         assert xray[0] == pytest.approx(1500.0)
         assert xray[1] == pytest.approx(1550.0)
+        # Registry-stamped since diagnostic.* gained registry entries (2026-07-18).
+        assert xray.attrs["units"] == "counts"
         # The pre-existing non-DAMNIT group was left untouched.
         foreign = cast("h5py.Group", handle["entry/instrument/rga_species"])
         assert foreign.attrs["NX_class"] == "NXcollection"

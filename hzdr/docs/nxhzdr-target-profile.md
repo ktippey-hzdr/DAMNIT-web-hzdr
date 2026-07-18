@@ -1,6 +1,6 @@
-# `NXhzdr_target` Profile — v0.5
+# `NXhzdr_target` Profile — v0.6
 
-Updated: 2026-07-17
+Updated: 2026-07-18
 
 The versioned definition of the HZDR-local `NXhzdr_target` profile: the
 semantic map from `metadata.target.*` to the `/entry/sample` NeXus group, and
@@ -8,8 +8,14 @@ the compatibility-attribute contract the writer stamps. Since v0.2 the profile
 is also encoded as a real NXDL application definition
 (`hzdr/nxdl/NXhzdr_target.nxdl.xml`), declared by the bridge file via
 `/entry/definition`, so generated files can be certified with standard NXDL
-tooling (`nds validate <file> --pynxtools --definitions hzdr/nxdl`). This
-document stays the normative prose reference — see §6 for what's still open.
+tooling (`nds validate <file> --pynxtools --definitions hzdr/nxdl`). Since
+v0.6 the application definition covers the **whole canonical entry** — the
+laser (`NXsource`/`NXbeam`), vacuum (`NXenvironment`), and diagnostic
+(`NXdetector`) groups plus `start_time`/`end_time` — whose semantic maps live
+in the companion document
+[nexus-semantic-maps.md](nexus-semantic-maps.md); this document remains the
+normative reference for the target/sample map and the shared versioning rule.
+See §6 for what's still open.
 
 Related docs: [target-ontology.md §2/§5/§8](target-ontology.md#2-the-schema)
 (binding key registry and NeXus mapping this profile is derived from),
@@ -32,8 +38,8 @@ on `/entry/sample` so any standard NeXus/HELPMI tool can still read them. The
 HZDR profile is layered on top as attributes, not as a replacement class:
 `damnit_nx_class="NXhzdr_target"` and `damnit_nxdl_version` (this document's
 version). Since v0.2 a real `NXhzdr_target` NXDL ships alongside this document
-and the file declares it via `/entry/definition`; whether profile files should
-additionally set `NX_class="NXhzdr_target"` remains an open decision (§6).
+and the file declares it via `/entry/definition`. **Decision closed
+2026-07-18 (v0.6):** `NX_class` stays `"NXsample"` permanently — see §6.
 
 ## 1.1 Literature and standards basis
 
@@ -120,9 +126,9 @@ Stamped on the `/entry/sample` group by `write_nexus_sample()`:
 
 | Attribute | Value | Required | Notes |
 | --- | --- | --- | --- |
-| `NX_class` | `"NXsample"` | always | Compatibility class; never changes to `NXhzdr_target` until §6 is resolved |
+| `NX_class` | `"NXsample"` | always | Compatibility class — permanent (decision closed 2026-07-18, §6) |
 | `damnit_nx_class` | `"NXhzdr_target"` | always | Marks the group as following this profile |
-| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.5"`) | always | Must match this document's version and the NXDL enumeration (§4) |
+| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.6"`) | always | Must match this document's version and the NXDL enumeration (§4) |
 | `damnit_provenance` | `"wiki"` \| `"manual"` | if `provenance` present | Curated vs. hand-entered target |
 | `target_ref` | string (URL or stable id) | if `wiki_ref` present | Link back to the MediaWiki target record |
 | `gas_species` | string (e.g. `"Ar"`, `"N2"`, `"He"`) | if `gas_species` present | Gas-jet / cluster species |
@@ -154,11 +160,27 @@ and every registered current-version mention across the docs; its `run --fix`
 mode rewrites the mechanical mirrors after a bump. Non-semantic
 edits to this document (wording, typo fixes) do not require a bump.
 
-Current version: **0.5** (`target.type` written as the `type` dataset with the
-ontology's six-value enumeration fixed in the NXDL, 2026-07-17).
+Current version: **0.6** (NXDL scope grown to the whole canonical entry —
+laser/vacuum/diagnostic groups and `start_time`/`end_time`; `NX_class` swap
+decision closed as keep-`NXsample`; `diagnostic.*` registry governance,
+2026-07-18).
 
 History:
 
+- **0.6** (2026-07-18): the application definition now covers the whole
+  canonical entry, not just `/entry/sample`: optional
+  `/entry/instrument/laser` (`NXsource` + nested `beam` `NXbeam` +
+  `shot_series` `NXdata`), `/entry/sample/environment` (`NXenvironment`),
+  per-diagnostic and per-product-kind `NXdetector` groups, and the new
+  standard `NXentry` fields `start_time`/`end_time` (earliest/latest shot
+  `fired_at`, refreshed on rebuild under a `damnit_source="shots"` marker).
+  Semantic maps for the non-target namespaces are documented in the new
+  companion [nexus-semantic-maps.md](nexus-semantic-maps.md). The `NX_class`
+  swap decision (§6) is closed: the compatibility value `"NXsample"` is
+  permanent. The `diagnostic.*` registry namespace gained binding key/unit
+  entries (`METADATA_KEY_REGISTRY`) and a linter warning for unregistered
+  diagnostic keys. `/entry/sample` group semantics (§2/§3) are unchanged
+  except the version value itself.
 - **0.5** (2026-07-17): `target.type` (target-ontology.md §3, the ontology's
   only *required* classification key) is now written to `/entry/sample/type`.
   Standard `NXsample.type` field name with HZDR enum values
@@ -187,12 +209,13 @@ History:
   or attaches it under `NXsample` (the beam incident on the sample). HZDR's
   nesting groups the beam with its originating source instead, which reads
   naturally for a single-laser beamline but is not the most common upstream
-  pattern. **Accepted as a deviation for now** — the v0.2 NXDL deliberately
-  covers only the entry's `definition` and the sample group, so it neither
-  enforces nor forbids this placement; revisit if the NXDL's scope ever grows
-  to instrument groups.
+  pattern. **Accepted and encoded since v0.6** — the NXDL's scope now covers
+  the instrument groups and deliberately models `beam` as a nested `NXbeam`
+  inside the laser `NXsource`, so the deviation is a documented, certified
+  part of the profile rather than an unmodelled gap. Moving the beam group
+  would be a semantic-map change requiring a version bump.
 
-No other deviations are tracked in v0.5.
+No other deviations are tracked in v0.6.
 
 ## 6. Future work
 
@@ -210,16 +233,27 @@ No other deviations are tracked in v0.5.
   string is `"degC"` (not `"C"`, which unit-aware validators parse as
   coulomb), so `temperature` carries the standard `NX_TEMPERATURE` units
   category.
-- **`NX_class="NXhzdr_target"` decision.** The NXDL now ships with validation
-  tooling; deciding whether HZDR-profile files should set
-  `NX_class="NXhzdr_target"` directly on `/entry/sample` (dropping, or
-  keeping alongside, the `NX_class="NXsample"` compatibility value) remains
-  open. Tracked
-  as [alignment-implementation-plan.md Phase 5](plans/alignment-implementation-plan.md#phase-5--hzdr-owned-ontology-annotation--openpmd-interoperability-).
+- ✅ **`NX_class="NXhzdr_target"` decision — closed in v0.6 (2026-07-18):
+  keep `NX_class="NXsample"` permanently.** Rationale: the profile identity
+  is already carried twice, machine-readably — `/entry/definition`
+  (certified by the NXDL) and the `damnit_nx_class` group attribute — so
+  swapping or double-stamping `NX_class` would add no validation power;
+  it *would* break any generic NeXus/HELPMI consumer that dispatches on
+  `NX_class == "NXsample"`, which is exactly the compatibility this profile
+  promises (§1). HDF5 attributes hold one value, so "both classes" is not
+  expressible without inventing a list convention no standard reader
+  understands. Revisit only if NIAC ever standardizes a target class, which
+  would be a new profile major version anyway.
 - ✅ **`type` field — done in v0.5 (2026-07-17).** `metadata.target.type`
   (target-ontology.md §3) is written as the `/entry/sample/type` dataset;
   the NXDL enumerates the six ontology values.
+- ✅ **NXDL scope beyond the sample group — done in v0.6 (2026-07-18).**
+  The application definition now models the laser `NXsource`/`NXbeam`/
+  `NXdata` groups, the vacuum `NXenvironment` group, the diagnostic /
+  data-product `NXdetector` groups, and `start_time`/`end_time`; semantic
+  maps in [nexus-semantic-maps.md](nexus-semantic-maps.md).
 - **NeXus Ontology URIs.** Route 4 (standards-alignment.md) calls for
   annotating covered fields with `nexusformat/NeXusOntology` URIs where they
-  exist; §2's "Upstream NeXus field?" column is the starting point for that
-  pass.
+  exist; §2's "Upstream NeXus field?" column (and its counterpart columns in
+  nexus-semantic-maps.md) is the starting point for that pass. Deliberately
+  deferred until a federated-search consumer (e.g. the PaN portal) exists.

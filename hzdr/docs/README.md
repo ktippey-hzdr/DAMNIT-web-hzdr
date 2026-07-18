@@ -34,7 +34,9 @@ Real-broker ingestion end-to-end and the pilot replay remain — see the
 | [Event schema](event-schema.md) | The `hzdr-event-v1` transport envelope: fields, constraints, and rationale |
 | [Standards alignment](standards-alignment.md) | DAPHNE4NFDI / HELPMI / NeXus / SciCat field cross-walk, gap analysis, and routes |
 | [Target ontology](target-ontology.md) | The `metadata.target.*` sub-schema: wiki-curated vs "OTHER" targets, units, provenance, NeXus mapping |
-| [NXhzdr_target profile](nxhzdr-target-profile.md) | The `NXhzdr_target` NeXus application-definition profile for target metadata |
+| [NXhzdr_target profile](nxhzdr-target-profile.md) | The `NXhzdr_target` NeXus application-definition profile: target map, versioning rule, compatibility contract |
+| [NeXus semantic maps](nexus-semantic-maps.md) | The `laser.*` / `vacuum.*` / `diagnostic.*` maps onto `NXsource`/`NXbeam`/`NXenvironment`/`NXdetector`, covered by the NXDL since profile v0.6 |
+| [openPMD linking](openpmd-linking.md) | The `metadata.simulation` link object for referencing PIC/openPMD simulation output per shot |
 | [MediaWiki integration](mediawiki-integration.md) | Read-only campaign-to-wiki link, configuration, and API endpoint |
 
 ## Plans — active

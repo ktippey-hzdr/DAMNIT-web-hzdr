@@ -1160,6 +1160,7 @@ def write_nexus_bridge(
             entry.attrs["damnit_source_events"] = "source_events"
             entry.attrs["damnit_data_products"] = "data_products"
 
+            _write_campaign_time_bounds(entry, shots)
             _write_semantic_metadata_groups(entry, shots)
 
             shots_group = entry.require_group("shots")
@@ -1190,6 +1191,37 @@ def write_nexus_bridge(
         temp_path.unlink(missing_ok=True)
         raise
     return products
+
+
+def _write_campaign_time_bounds(
+    entry: h5py.Group, shots: list[dict[str, Any]]
+) -> None:
+    """Write `/entry/start_time` and `/entry/end_time` (standard NXentry fields).
+
+    Derived from the earliest/latest parseable shot `fired_at` (itself the
+    minimum event timestamp per shot, or the LabFrog date_time fallback).
+    Standard NeXus catalog tooling and the SciCat mapping read these first, so
+    they are refreshed on every rebuild as the campaign grows — but only when
+    DAMNIT wrote them: an existing dataset without the `damnit_source` marker
+    (e.g. from a future LabFrog projection) is preserved, mirroring the
+    `_claim_damnit_group` rule for groups.
+    """
+    times = []
+    for shot in shots:
+        parsed = parse_datetime(shot.get("fired_at"))
+        if parsed is not None:
+            times.append(parsed)
+    if not times:
+        return
+    bounds = {"start_time": min(times), "end_time": max(times)}
+    for name, value in bounds.items():
+        existing = entry.get(name)
+        if existing is not None:
+            if existing.attrs.get("damnit_source") != "shots":
+                continue
+            del entry[name]
+        dataset = entry.create_dataset(name, data=value.isoformat())
+        dataset.attrs["damnit_source"] = "shots"
 
 
 def _write_semantic_metadata_groups(
@@ -1415,11 +1447,14 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
 
 
 # HZDR-local NXhzdr_target profile version. Bump on any semantic-map change
-# (fields added/removed/retyped) to the metadata.target.* -> /entry/sample
-# mapping; the profile doc version AND the damnit_nxdl_version enumeration in
-# hzdr/nxdl/NXhzdr_target.nxdl.xml must be bumped to match.
-# See hzdr/docs/nxhzdr-target-profile.md.
-HZDR_TARGET_PROFILE_VERSION = "0.5"
+# (fields added/removed/retyped) covered by the application definition — since
+# v0.6 that is the whole canonical entry (sample, instrument/laser,
+# sample/environment, detector series, start_time/end_time), not just the
+# metadata.target.* -> /entry/sample mapping; the profile doc version AND the
+# damnit_nxdl_version enumeration in hzdr/nxdl/NXhzdr_target.nxdl.xml must be
+# bumped to match. See hzdr/docs/nxhzdr-target-profile.md (target map) and
+# hzdr/docs/nexus-semantic-maps.md (laser/vacuum/diagnostic maps).
+HZDR_TARGET_PROFILE_VERSION = "0.6"
 
 # All 118 IUPAC element symbols, for the conservative formula check below.
 _ELEMENTS = (
@@ -1466,8 +1501,10 @@ def write_nexus_sample(entry_group: h5py.Group, target: Any) -> None:
     `damnit_nx_class="NXhzdr_target"` and `damnit_nxdl_version` (see
     hzdr/docs/nxhzdr-target-profile.md). The profile's NXDL lives at
     hzdr/nxdl/NXhzdr_target.nxdl.xml (declared via /entry/definition, written
-    by write_nexus_bridge); swapping NX_class to "NXhzdr_target" remains
-    deferred (profile doc §6).
+    by write_nexus_bridge). Decision closed 2026-07-18 (profile doc §6):
+    NX_class stays "NXsample" permanently — /entry/definition plus
+    damnit_nx_class carry the profile identity, and swapping the class would
+    break generic NXsample consumers for no validation gain.
     """
     target = _normalize_target_metadata(target)
     if not isinstance(target, dict):
@@ -1534,11 +1571,11 @@ def write_nexus_vacuum_group(entry_group: h5py.Group, vacuum: dict[str, Any]) ->
     NXsample as an NXenvironment group — the canonical placement the
     nexus-design-studio catalog assigns the class (BASE_CLASS_PATHS:
     NXenvironment -> /entry/sample/environment). `@units` come from
-    METADATA_KEY_REGISTRY like every other namespaced writer. The group is
-    outside the NXhzdr_target profile scope (the NXDL models the target.* ->
-    sample field mapping only, like the unmodelled /entry/instrument), so no
-    profile version bump; the sample profile marker attrs are still stamped
-    when absent so a vacuum-only file keeps /entry/sample certifiable.
+    METADATA_KEY_REGISTRY like every other namespaced writer. Since profile
+    v0.6 the NXhzdr_target application definition covers this group (optional
+    NXenvironment under sample — see hzdr/docs/nexus-semantic-maps.md §3); the
+    sample profile marker attrs are still stamped when absent so a vacuum-only
+    file keeps /entry/sample certifiable.
     """
     sample = entry_group.require_group("sample")
     if "NX_class" not in sample.attrs:
@@ -1714,10 +1751,12 @@ def write_nexus_detector_groups(
 
 
 # Known pre-namespace producer spellings of diagnostic scalars, folded into
-# `metadata.diagnostic.*` by the NeXus writer only. The linter's
-# LEGACY_KEY_MAP is registry-backed and diagnostic.* keys have no registry
-# entry (per-detector docs own their units), so the fold lives here, not
-# there. Producers should emit metadata.diagnostic.<name> going forward.
+# `metadata.diagnostic.*` by the NeXus writer. Since 2026-07-18 the
+# diagnostic.* namespace is registry-backed (METADATA_KEY_REGISTRY carries
+# `diagnostic.<name>` entries and LEGACY_KEY_MAP maps these flat spellings),
+# so the linter warns about them too; this fold stays here because it moves
+# data, which the warn-only linter never does. Producers should emit
+# metadata.diagnostic.<name> going forward.
 _LEGACY_DIAGNOSTIC_SCALARS = ("xray_counts", "detector_signal_mean", "alignment_score")
 
 _DIAGNOSTIC_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")

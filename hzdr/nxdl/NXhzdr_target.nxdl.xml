@@ -4,9 +4,11 @@
 # bridge files written by DAMNIT-web-hzdr.
 #
 # This is the machine-readable encoding of hzdr/docs/nxhzdr-target-profile.md
-# (sections 2 and 3). The prose document remains the normative reference; this
-# NXDL exists so generated files can be certified with standard NXDL tooling
-# (pynxtools, via nds validate with the pynxtools and definitions options).
+# (sections 2 and 3, the target/sample map) and, since profile 0.6,
+# hzdr/docs/nexus-semantic-maps.md (the laser/vacuum/diagnostic maps). The
+# prose documents remain the normative reference; this NXDL exists so
+# generated files can be certified with standard NXDL tooling (pynxtools, via
+# nds validate with the pynxtools and definitions options).
 #
 # Versioning: the enumerated value of sample/@damnit_nxdl_version below MUST
 # equal both HZDR_TARGET_PROFILE_VERSION in
@@ -23,17 +25,24 @@
     <doc>
       HZDR laser-target campaign profile (NXhzdr_target).
 
-      Certifies the /entry/sample group of a DAMNIT NeXus bridge file against
-      the NXhzdr_target profile: standard NXsample fields plus HZDR profile
-      extensions for solid-target and gas-jet metadata. All sample fields are
-      optional because the writer skips absent/null metadata keys entirely
-      (profile doc section 2); the profile marker attributes damnit_nx_class
-      and damnit_nxdl_version are required whenever the sample group exists.
+      Certifies the canonical entry of a DAMNIT NeXus bridge file against the
+      NXhzdr_target profile. Since profile 0.6 the definition covers the whole
+      semantic layer the writer emits, not just the target group: the
+      /entry/sample target map (standard NXsample fields plus HZDR profile
+      extensions), the /entry/sample/environment chamber-vacuum group
+      (NXenvironment), the /entry/instrument/laser NXsource with its nested
+      NXbeam and per-shot NXdata series, per-diagnostic and per-product-kind
+      NXdetector groups, and the campaign start_time/end_time entry fields.
+      All content groups and fields are optional because the writer skips
+      absent/null metadata keys entirely (profile doc section 2); the profile
+      marker attributes damnit_nx_class and damnit_nxdl_version are required
+      whenever the sample group exists.
 
       The open extras bag is modelled as the partial-name attribute prop_KEY
-      (free-form keys, string or number values). The transport-layer groups of
-      the bridge file (/entry/shots, /entry/instrument, per-source payload
-      collections) are intentionally not modelled here.
+      (free-form keys, string or number values). The flat transport tables of
+      the bridge file (/entry/shots, /entry/source_events,
+      /entry/data_products, per-source payload collections) are DAMNIT-internal
+      NXcollection groups and are intentionally not modelled here.
     </doc>
     <group type="NXentry">
       <field name="definition">
@@ -44,6 +53,142 @@
           <item value="NXhzdr_target"></item>
         </enumeration>
       </field>
+      <field name="start_time" type="NX_DATE_TIME" optional="true">
+        <doc>
+          Campaign start: earliest shot fired_at (standard NXentry field,
+          written since profile 0.6; refreshed on rebuild while carrying the
+          damnit_source="shots" marker attribute).
+        </doc>
+      </field>
+      <field name="end_time" type="NX_DATE_TIME" optional="true">
+        <doc>
+          Campaign end: latest shot fired_at (standard NXentry field, written
+          since profile 0.6; refreshed on rebuild while carrying the
+          damnit_source="shots" marker attribute).
+        </doc>
+      </field>
+      <group type="NXinstrument" name="instrument" optional="true">
+        <doc>
+          Instrument-side semantic groups (nexus-semantic-maps.md sections 2
+          and 4): the campaign laser source and per-diagnostic /
+          per-product-kind detector groups. Optional as a whole - a campaign
+          without laser or diagnostic metadata has no instrument group.
+        </doc>
+        <group type="NXsource" name="laser" optional="true">
+          <doc>
+            Campaign-level laser snapshot from the first shot's
+            metadata.laser.* block (nexus-semantic-maps.md section 2). The
+            nested beam group is a documented deviation from the more common
+            sibling placement: the beam is grouped with its originating
+            source (nxhzdr-target-profile.md section 5).
+          </doc>
+          <field name="type" optional="true">
+            <doc>
+              Constant "Laser" (standard NXsource field).
+            </doc>
+          </field>
+          <field name="probe" optional="true">
+            <doc>
+              Constant "optical laser" (standard NXsource field).
+            </doc>
+          </field>
+          <field name="name" optional="true">
+            <doc>
+              Laser system label; source key metadata.laser.system.
+            </doc>
+          </field>
+          <field name="frequency" type="NX_FLOAT" units="NX_FREQUENCY" optional="true">
+            <doc>
+              Repetition rate; canonical unit Hz; source key
+              metadata.laser.repetition_rate.
+            </doc>
+          </field>
+          <field name="pulse_energy" type="NX_FLOAT" units="NX_ENERGY" optional="true">
+            <doc>
+              Pulse energy; canonical unit J; source key
+              metadata.laser.pulse_energy.
+            </doc>
+          </field>
+          <group type="NXbeam" name="beam" optional="true">
+            <doc>
+              Beam-shaped laser fields (nexus-semantic-maps.md section 2.2).
+            </doc>
+            <field name="incident_energy" type="NX_FLOAT" units="NX_ENERGY" optional="true">
+              <doc>
+                Pulse energy on target; canonical unit J; source key
+                metadata.laser.pulse_energy.
+              </doc>
+            </field>
+            <field name="pulse_duration" type="NX_FLOAT" units="NX_TIME" optional="true">
+              <doc>
+                Pulse duration; canonical unit fs; source key
+                metadata.laser.pulse_duration.
+              </doc>
+            </field>
+            <field name="incident_wavelength" type="NX_FLOAT" units="NX_WAVELENGTH" optional="true">
+              <doc>
+                Central wavelength; canonical unit nm; source key
+                metadata.laser.wavelength.
+              </doc>
+            </field>
+            <field name="incident_polarization" optional="true">
+              <doc>
+                Polarization label (string enum, registry key
+                laser.polarization).
+              </doc>
+            </field>
+            <field name="beam_position_x" type="NX_FLOAT" units="NX_LENGTH" optional="true">
+              <doc>
+                Beam position x; canonical unit mm; source key
+                metadata.laser.beam_pos_x.
+              </doc>
+            </field>
+            <field name="beam_position_y" type="NX_FLOAT" units="NX_LENGTH" optional="true">
+              <doc>
+                Beam position y; canonical unit mm; source key
+                metadata.laser.beam_pos_y.
+              </doc>
+            </field>
+            <field name="extent_x" type="NX_FLOAT" units="NX_LENGTH" optional="true">
+              <doc>
+                Beam waist x; canonical unit um; source key
+                metadata.laser.beam_waist_x.
+              </doc>
+            </field>
+            <field name="extent_y" type="NX_FLOAT" units="NX_LENGTH" optional="true">
+              <doc>
+                Beam waist y; canonical unit um; source key
+                metadata.laser.beam_waist_y.
+              </doc>
+            </field>
+            <field name="contrast_ratio" type="NX_FLOAT" units="NX_DIMENSIONLESS" optional="true">
+              <doc>
+                Temporal contrast ratio (dimensionless); source key
+                metadata.laser.contrast_ratio (HZDR profile extension - no
+                standard NXbeam field).
+              </doc>
+            </field>
+          </group>
+          <group type="NXdata" name="shot_series" optional="true">
+            <doc>
+              Per-shot numeric metadata.laser.* series aligned with the
+              canonical /entry/shots table, NaN where a shot lacks a key;
+              @units from the metadata key registry
+              (nexus-semantic-maps.md section 2.3).
+            </doc>
+          </group>
+        </group>
+        <group type="NXdetector" optional="true">
+          <doc>
+            One group per metadata.diagnostic.* scalar (shot-indexed data
+            series, damnit_source="metadata.diagnostic") or per data-product
+            kind (row references back to /entry/data_products,
+            damnit_source="data_products"); nexus-semantic-maps.md section 4.
+            Group names are the diagnostic key / detector_&lt;kind&gt;, so the
+            match here is by class, not name.
+          </doc>
+        </group>
+      </group>
       <group type="NXsample" name="sample" optional="true">
         <doc>
           Target metadata for the campaign (profile doc section 2). Written
@@ -53,7 +198,8 @@
           <doc>
             Marks the group as following the NXhzdr_target profile while the
             group keeps NX_class="NXsample" for compatibility (profile doc
-            section 3).
+            section 3; decision closed 2026-07-18 - the compatibility value
+            is permanent).
           </doc>
           <enumeration>
             <item value="NXhzdr_target"></item>
@@ -65,7 +211,7 @@
             HZDR_TARGET_PROFILE_VERSION and the profile document version.
           </doc>
           <enumeration>
-            <item value="0.5"></item>
+            <item value="0.6"></item>
           </enumeration>
         </attribute>
         <attribute name="damnit_provenance" optional="true">
@@ -172,6 +318,38 @@
             metadata.target.notes).
           </doc>
         </field>
+        <group type="NXenvironment" name="environment" optional="true">
+          <doc>
+            Target-chamber vacuum from metadata.vacuum.* (registry namespace
+            vacuum.*; nexus-semantic-maps.md section 3). Placed under the
+            sample group because the chamber vacuum describes the sample
+            surroundings. Covered by the application definition since profile
+            0.6.
+          </doc>
+          <field name="description" optional="true">
+            <doc>
+              Constant "target chamber vacuum".
+            </doc>
+          </field>
+          <field name="chamber_pressure" type="NX_FLOAT" units="NX_PRESSURE" optional="true">
+            <doc>
+              Chamber pressure at shot time; canonical unit mbar; source key
+              metadata.vacuum.chamber_pressure.
+            </doc>
+          </field>
+          <field name="pre_shot_pressure" type="NX_FLOAT" units="NX_PRESSURE" optional="true">
+            <doc>
+              Pressure immediately before the shot; canonical unit mbar;
+              source key metadata.vacuum.pre_shot_pressure.
+            </doc>
+          </field>
+          <field name="rga_dominant_species" optional="true">
+            <doc>
+              Dominant residual-gas species reported by the RGA (string;
+              registry key vacuum.rga_dominant_species).
+            </doc>
+          </field>
+        </group>
       </group>
     </group>
 </definition>
