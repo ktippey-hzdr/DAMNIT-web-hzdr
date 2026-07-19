@@ -52,6 +52,18 @@ uv run python scripts\hzdr-hdf5-builder.py `
   --sources-file <hzdr_sources.json>
 ```
 
+For a first build against retained real campaign files, force
+`DW_API_HZDR_SCICAT__ENABLED=false` in the builder process even if the local
+`.env` enables registration. Validate the NeXus and source catalog before
+allowing an external write.
+
+A build that combines a real LabFrog export with synthetic acceptance events is
+a mixed integration candidate, not a representative campaign. Keep automatic
+DAMNIT registration disabled for that build. If the deployed plugin boundary
+itself needs testing, submit a separately titled `TEST` payload with
+`release_evidence=false` and `representative=false`; enable builder-driven
+registration only for the intended all-real campaign artifact.
+
 Point the API at the catalog:
 
 ```powershell

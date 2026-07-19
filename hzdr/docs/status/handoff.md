@@ -133,6 +133,15 @@ broker roundtrip tests needing `KAFKA_TEST_BROKER`, 14 ASAPO sibling-repo tests)
   end-to-end verified with a real builder run against a mock plugin. Plan in
   `hzdr/docs/plans/done/scicat-registration-plan.md`.
 
+  **Observed deployment evidence (2026-07-19):** the locally hosted plugin
+  authenticated to the production SciCat API, then accepted one
+  `POST /scicat/push` for a private mixed RadBio candidate. The dataset was
+  explicitly titled as a non-release TEST and carried
+  `release_evidence=false` plus `representative=false`; SciCat returned a PID
+  and version hash, and read-back by PID succeeded. This direct plugin test did
+  not invoke the DAMNIT builder, so builder-side PID catalog back-population and
+  deployed unchanged-artifact replay remain open integration evidence.
+
 - **Builder auto-trigger** — closes the last durable-spool gap. New module
   `consumer/builder_trigger.py` (`BuilderTrigger`): each spool consumer's
   `on_new_events_hook` signals a shared, debounced background task that reruns
