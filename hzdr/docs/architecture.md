@@ -200,7 +200,7 @@ The LabFrog NeXus structure is preserved and DAMNIT adds:
 ```text
 /entry/definition                    NXhzdr_target application-definition declaration
 /entry/experiment_identifier         campaign id (standard NXentry field)
-/entry/shots                         canonical shot rows and match provenance
+/entry/shots                         canonical shot rows, match provenance, per-shot target JSON
 /entry/source_events                 normalized events, including unmatched events
 /entry/data_products                 files and internal dataset references
 /entry/laserdata                     embedded small event arrays

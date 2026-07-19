@@ -1,6 +1,6 @@
-# `NXhzdr_target` Profile — v0.7
+# `NXhzdr_target` Profile — v0.8
 
-Updated: 2026-07-18
+Updated: 2026-07-19
 
 The versioned definition of the HZDR-local `NXhzdr_target` profile: the
 semantic map from `metadata.target.*` to the `/entry/sample` NeXus group, and
@@ -95,6 +95,13 @@ profile. `material`, `diameter`, `gas_pressure`, `substrate_material` are
 tooling can still read the value), but there is no upstream `NXsample` field
 they map to — they only have meaning under the `NXhzdr_target` semantic layer.
 
+Since v0.8, `/entry/sample` is explicitly the first-target campaign
+snapshot. Every canonical row also stores its complete sorted
+`metadata.target` object in the shot-aligned
+`/entry/shots/target_metadata_json` column (`NXcollection`). This preserves
+nonuniform target campaigns losslessly without inventing multiple campaign-level
+`NXsample` groups; consumers join by the existing row/`shot_key` alignment.
+
 Since v0.4, `material` routes to the free-text `material` extension dataset
 instead of `chemical_formula`. Real target-inventory values are mostly **not**
 CIF-convention formulas — the curated wiki records carry polymer trade names
@@ -128,7 +135,7 @@ Stamped on the `/entry/sample` group by `write_nexus_sample()`:
 | --- | --- | --- | --- |
 | `NX_class` | `"NXsample"` | always | Compatibility class — permanent (decision closed 2026-07-18, §6) |
 | `damnit_nx_class` | `"NXhzdr_target"` | always | Marks the group as following this profile |
-| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.7"`) | always | Must match this document's version and the NXDL enumeration (§4) |
+| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.8"`) | always | Must match this document's version and the NXDL enumeration (§4) |
 | `damnit_provenance` | `"wiki"` \| `"manual"` | if `provenance` present | Curated vs. hand-entered target |
 | `target_ref` | string (URL or stable id) | if `wiki_ref` present | Link back to the MediaWiki target record |
 | `gas_species` | string (e.g. `"Ar"`, `"N2"`, `"He"`) | if `gas_species` present | Gas-jet / cluster species |
@@ -160,12 +167,18 @@ and every registered current-version mention across the docs; its `run --fix`
 mode rewrites the mechanical mirrors after a bump. Non-semantic
 edits to this document (wording, typo fixes) do not require a bump.
 
-Current version: **0.7** (strict certification of populated synthetic domain
-evidence: standards-valid `NXsource.probe`, declared diagnostic writer
-attributes, and no undocumented `NXdata` description attribute, 2026-07-19).
+Current version: **0.8** (lossless per-shot target preservation in the
+canonical bridge while retaining `/entry/sample` as the campaign snapshot,
+2026-07-19).
 
 History:
 
+- **0.8** (2026-07-19): every canonical shot now retains its complete
+  `metadata.target` block as JSON in the shot-aligned
+  `/entry/shots/target_metadata_json` bridge column. `/entry/sample` remains
+  the first-target campaign snapshot for standard `NXsample` consumers; a
+  warning identifies nonuniform campaigns. The additive shot-table column
+  also bumps the bridge layout to `hzdr-canonical-shot-v2`.
 - **0.7** (2026-07-19): the first non-null synthetic golden-domain run exposed
   strict pynxtools warnings hidden by sparse fixtures. The laser probe constant
   is now the standard `NXsource.probe` enum value `"visible light"`;
@@ -221,7 +234,7 @@ History:
   part of the profile rather than an unmodelled gap. Moving the beam group
   would be a semantic-map change requiring a version bump.
 
-No other deviations are tracked in v0.7.
+No other deviations are tracked in v0.8.
 
 ## 6. Future work
 

@@ -290,9 +290,9 @@ See [hzdr/docs/target-ontology.md §5](hzdr/docs/target-ontology.md#5-units-conv
 [hzdr/docs/standards-alignment.md §3.3/§3.5](hzdr/docs/standards-alignment.md#33-laser-parameters)
 for the full rationale and HELPMI cross-walk.
 
-### NeXus bridge profile: `hzdr-canonical-shot-v1`
+### NeXus bridge profile: `hzdr-canonical-shot-v2`
 
-Stamped as `damnit_bridge_profile` on HDF5 root and `/entry/shots`. Current value: `"hzdr-canonical-shot-v1"`. Bump this string if the bridge table layout changes (columns added/removed from the shot or source-events groups).
+Stamped as `damnit_bridge_profile` on HDF5 root and `/entry/shots`. Current value: `"hzdr-canonical-shot-v2"`. Version 2 adds the shot-aligned `target_metadata_json` column so campaign-varying targets are not lost behind the `/entry/sample` snapshot. Bump this string if the bridge table layout changes (columns added/removed from the shot or source-events groups).
 
 ### Shared Pydantic field constraints (`api/src/damnit_api/shared/models.py`)
 

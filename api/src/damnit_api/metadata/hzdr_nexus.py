@@ -1169,7 +1169,7 @@ def write_nexus_bridge(
 
         mode = "r+" if temp_path.exists() else "w"
         with h5py.File(temp_path, mode) as handle:
-            handle.attrs["damnit_bridge_profile"] = "hzdr-canonical-shot-v1"
+            handle.attrs["damnit_bridge_profile"] = HZDR_BRIDGE_PROFILE_VERSION
             handle.attrs["experiment_id"] = experiment_id
             handle.attrs["damnit_bridge_updated_at"] = datetime.now(UTC).isoformat()
             if "default" not in handle.attrs:
@@ -1359,6 +1359,15 @@ def _first_shot_vacuum(shots: list[dict[str, Any]]) -> dict[str, Any] | None:
     return chosen
 
 
+def _shot_target_metadata(shot: dict[str, Any]) -> dict[str, Any]:
+    """Return one shot's canonical target block for lossless bridge storage."""
+    metadata = shot.get("metadata")
+    if not isinstance(metadata, dict):
+        return {}
+    target = metadata.get("target")
+    return target if isinstance(target, dict) else {}
+
+
 def _first_shot_target(shots: list[dict[str, Any]]) -> Any:
     """Pick the campaign's target for `/entry/sample` from the shot list.
 
@@ -1367,10 +1376,10 @@ def _first_shot_target(shots: list[dict[str, Any]]) -> Any:
     single campaign-level NeXus group, not a per-shot one (target-ontology.md
     §8: one `write_nexus_sample()` call per built file). A LabFrog campaign is
     overwhelmingly single-target in practice, so the first shot carrying a
-    non-empty `metadata.target` is used; later shots with a different target
-    are not reconciled here - that is a future per-shot NXsample extension,
-    not part of this phase. A subsequent shot with a differing target block
-    is logged once (module logger) so the silent drop is at least visible.
+    non-empty `metadata.target` is used for that snapshot. Every canonical
+    per-shot block is also retained losslessly in
+    `/entry/shots/target_metadata_json`; a later differing block logs once so
+    consumers know the campaign snapshot is not uniform.
     """
     chosen: Any = None
     warned = False
@@ -1386,8 +1395,9 @@ def _first_shot_target(shots: list[dict[str, Any]]) -> Any:
         elif not warned and target != chosen:
             logger.warning(
                 "Shot %s has a target metadata block that differs from the "
-                "campaign's chosen block (shot_key=%s); only the first "
-                "shot's target block is written to /entry/sample.",
+                "campaign's chosen block (shot_key=%s); /entry/sample uses "
+                "the first block while every shot is preserved in "
+                "/entry/shots/target_metadata_json.",
                 shot.get("shot_number"),
                 shot.get("shot_key"),
             )
@@ -1482,7 +1492,8 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
 # damnit_nxdl_version enumeration in hzdr/nxdl/NXhzdr_target.nxdl.xml must be
 # bumped to match. See hzdr/docs/nxhzdr-target-profile.md (target map) and
 # hzdr/docs/nexus-semantic-maps.md (laser/vacuum/diagnostic maps).
-HZDR_TARGET_PROFILE_VERSION = "0.7"
+HZDR_TARGET_PROFILE_VERSION = "0.8"
+HZDR_BRIDGE_PROFILE_VERSION = "hzdr-canonical-shot-v2"
 
 # All 118 IUPAC element symbols, for the conservative formula check below.
 _ELEMENTS = (
@@ -1948,7 +1959,7 @@ def write_sources_catalog(
     source_metadata: dict[str, Any] = {
         "facility": "HZDR",
         "source_type": "canonical-nexus",
-        "integration_profile": "hzdr-canonical-shot-v1",
+        "integration_profile": HZDR_BRIDGE_PROFILE_VERSION,
         "experiment_id": experiment_id,
         "canonical_nexus_path": str(nexus_path),
         "combined_hdf5_path": str(nexus_path),
@@ -2874,10 +2885,14 @@ def _write_shot_bridge_columns(
             else shot["match_time_delta_s"]
             for shot in shots
         ],
+        "target_metadata_json": [
+            json.dumps(_shot_target_metadata(shot), sort_keys=True, default=str)
+            for shot in shots
+        ],
     }
     for name, values in columns.items():
         _replace_dataset(group, name, values)
-    group.attrs["damnit_bridge_profile"] = "hzdr-canonical-shot-v1"
+    group.attrs["damnit_bridge_profile"] = HZDR_BRIDGE_PROFILE_VERSION
     group.attrs["stable_key"] = "shot_key"
 
 

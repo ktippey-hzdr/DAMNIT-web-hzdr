@@ -261,6 +261,9 @@ v0.2 (2026-07-13):** the NXDL application definition
 permanently — the profile identity is carried by `/entry/definition` and
 `damnit_nx_class`, and swapping the class would break generic NXsample
 consumers for no validation gain (see nxhzdr-target-profile.md §6).
+**Done 2026-07-19 (profile v0.8):** `/entry/sample` remains that
+campaign snapshot while `/entry/shots/target_metadata_json` preserves each
+canonical shot's complete target block, including campaigns that change target.
 HELPMI DDC names remain the documentation cross-walk; see
 [standards-alignment.md Route 2](standards-alignment.md#route-2-nxsource-nxbeam-and-nxsample-groups-in-the-nexus-bridge-ready).
 

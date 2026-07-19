@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from damnit_api.metadata.hzdr_nexus import (
+    HZDR_BRIDGE_PROFILE_VERSION,
     HZDR_TARGET_PROFILE_VERSION,
     BuilderAlreadyRunningError,
     _first_shot_laser,
@@ -929,11 +930,11 @@ def test_active_keyed_supersede_warns_when_active_row_not_latest(
 
 
 def test_first_shot_target_warns_once_when_a_later_shot_differs(caplog):
-    """A LabFrog campaign is overwhelmingly single-target, so only the first
-    shot's non-empty `metadata.target` is written to /entry/sample. A later
-    shot with a genuinely different target must not be silently dropped -
-    it should log exactly one warning, and the first shot's target still
-    wins (behavior unchanged)."""
+    """The first target remains the campaign snapshot while differences warn.
+
+    Full per-shot blocks are preserved by `write_nexus_bridge` in the canonical
+    shot table; this helper only chooses `/entry/sample`.
+    """
     shots = [
         {
             "shot_number": 1,
@@ -966,6 +967,60 @@ def test_first_shot_target_warns_once_when_a_later_shot_differs(caplog):
     # Only the first divergent shot (shot_number=3) is named; shot 4 (also
     # divergent) does not trigger a second warning.
     assert warnings[0].args[0] == 3
+
+
+def test_bridge_preserves_per_shot_target_metadata(tmp_path: Path, caplog):
+    output_nexus = tmp_path / "campaign-targets.nxs"
+    shots = [
+        {
+            "shot_number": 1,
+            "shot_key": "HELPMI:20260610:000001",
+            "metadata": {"target": {"name": "Al foil", "type": "foil"}},
+        },
+        {
+            "shot_number": 2,
+            "shot_key": "HELPMI:20260610:000002",
+            "metadata": {
+                "target": {
+                    "name": "gas jet",
+                    "type": "gas_jet",
+                    "gas_species": "N2",
+                    "gas_pressure": 12.5,
+                }
+            },
+        },
+    ]
+
+    with caplog.at_level("WARNING"):
+        write_nexus_bridge(
+            output_path=output_nexus,
+            experiment_id="HELPMI",
+            shots=shots,
+            events=[],
+        )
+
+    with h5py.File(output_nexus, "r") as handle:
+        target_series = cast("h5py.Dataset", handle["entry/shots/target_metadata_json"])
+        assert [json.loads(value) for value in target_series.asstr()[...]] == [
+            {"name": "Al foil", "type": "foil"},
+            {
+                "gas_pressure": 12.5,
+                "gas_species": "N2",
+                "name": "gas jet",
+                "type": "gas_jet",
+            },
+        ]
+        sample_name = cast("h5py.Dataset", handle["entry/sample/name"])
+        assert sample_name.asstr()[()] == "Al foil"
+        assert handle.attrs["damnit_bridge_profile"] == HZDR_BRIDGE_PROFILE_VERSION
+        assert (
+            handle["entry/shots"].attrs["damnit_bridge_profile"]
+            == HZDR_BRIDGE_PROFILE_VERSION
+        )
+
+    warnings = [r for r in caplog.records if "target metadata block" in r.message]
+    assert len(warnings) == 1
+    assert "/entry/shots/target_metadata_json" in warnings[0].message
 
 
 def test_first_shot_laser_warns_once_when_a_later_shot_differs(caplog):

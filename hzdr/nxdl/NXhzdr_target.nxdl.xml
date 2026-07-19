@@ -229,8 +229,9 @@
       </group>
       <group type="NXsample" name="sample" optional="true">
         <doc>
-          Target metadata for the campaign (profile doc section 2). Written
-          once per campaign file from the first shot's metadata.target.
+          Target metadata snapshot for the campaign (profile doc section 2),
+          written from the first shot's metadata.target. Full shot-aligned
+          target blocks remain in /entry/shots/target_metadata_json.
         </doc>
         <attribute name="damnit_nx_class">
           <doc>
@@ -249,7 +250,7 @@
             HZDR_TARGET_PROFILE_VERSION and the profile document version.
           </doc>
           <enumeration>
-            <item value="0.7"></item>
+            <item value="0.8"></item>
           </enumeration>
         </attribute>
         <attribute name="damnit_provenance" optional="true">

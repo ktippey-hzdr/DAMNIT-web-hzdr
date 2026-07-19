@@ -36,12 +36,15 @@ convention, family-wide since 2026-07-02).
 
 ## 1. Campaign-level vs per-shot
 
-Laser, target, and vacuum blocks are written as **campaign-level snapshot
-groups** from the first shot carrying the block; a later shot with a
-*different* non-empty block is dropped from the snapshot with one logged
-warning (`_first_shot_laser` / `_first_shot_vacuum` / `_first_shot_target` in
-`hzdr_nexus.py`). Two families are inherently per-shot and are written as full
-shot-indexed series instead:
+Laser, target, and vacuum blocks have **campaign-level snapshot groups**
+from the first shot carrying each block. A later non-empty difference logs one
+warning (`_first_shot_laser` / `_first_shot_vacuum` /
+`_first_shot_target` in `hzdr_nexus.py`). Since profile v0.8, target is
+also preserved losslessly per shot as sorted JSON in
+`/entry/shots/target_metadata_json`; `/entry/sample` remains the standard
+`NXsample` snapshot. Laser and vacuum differences remain warning-only.
+Two other families are inherently per-shot and are written as full
+shot-indexed series:
 
 - every **numeric** `metadata.laser.<key>` → the `shot_series` `NXdata` group
   (§2.3) — energy jitter is data, not noise;
