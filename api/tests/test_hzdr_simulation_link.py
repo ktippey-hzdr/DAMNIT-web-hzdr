@@ -56,9 +56,10 @@ def test_simulation_link_array_form_round_trips_the_normalizer():
 
 
 def test_simulation_link_validates_as_hzdr_event_v1():
-    HZDREventV1.model_validate(
-        {**event_with_simulation(SIMULATION_LINK), "event_id": "evt-1"}
-    )
+    HZDREventV1.model_validate({
+        **event_with_simulation(SIMULATION_LINK),
+        "event_id": "evt-1",
+    })
 
 
 def test_linter_is_silent_on_the_simulation_namespace():

@@ -85,9 +85,7 @@ def test_disabled_allows_missing_plugin_url():
 
 def test_build_body_matches_scicat_plugin_contract_fixture():
     fixture_path = (
-        Path(__file__).parent
-        / "fixtures"
-        / "damnit-campaign-registration.sample.json"
+        Path(__file__).parent / "fixtures" / "damnit-campaign-registration.sample.json"
     )
     fixture = orjson.loads(fixture_path.read_bytes())
     experiment_id = fixture["meta"]["proposalId"]

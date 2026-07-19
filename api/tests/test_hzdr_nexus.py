@@ -995,9 +995,7 @@ def test_bridge_writes_campaign_time_bounds(tmp_path: Path):
     shots, events = reconcile_canonical_shots(
         [
             normalized_event(),
-            normalized_event(
-                shot_id="shot-000018", timestamp="2026-06-10T12:05:00Z"
-            ),
+            normalized_event(shot_id="shot-000018", timestamp="2026-06-10T12:05:00Z"),
         ],
         experiment_id="HELPMI",
         source_key="hzdr-labfrog",
@@ -1027,9 +1025,7 @@ def test_time_bounds_refresh_damnit_written_datasets(tmp_path: Path):
     path = tmp_path / "campaign.nxs"
     with h5py.File(path, "w") as handle:
         entry = handle.create_group("entry")
-        _write_campaign_time_bounds(
-            entry, [{"fired_at": "2026-06-10T12:00:00Z"}]
-        )
+        _write_campaign_time_bounds(entry, [{"fired_at": "2026-06-10T12:00:00Z"}])
         _write_campaign_time_bounds(
             entry,
             [
@@ -1054,9 +1050,7 @@ def test_time_bounds_never_overwrite_a_foreign_dataset(tmp_path: Path):
     with h5py.File(path, "w") as handle:
         entry = handle.create_group("entry")
         entry.create_dataset("start_time", data="2026-01-01T00:00:00Z")
-        _write_campaign_time_bounds(
-            entry, [{"fired_at": "2026-06-10T12:00:00Z"}]
-        )
+        _write_campaign_time_bounds(entry, [{"fired_at": "2026-06-10T12:00:00Z"}])
 
     with h5py.File(path, "r") as handle:
         start = cast("h5py.Dataset", handle["entry/start_time"])

@@ -1193,9 +1193,7 @@ def write_nexus_bridge(
     return products
 
 
-def _write_campaign_time_bounds(
-    entry: h5py.Group, shots: list[dict[str, Any]]
-) -> None:
+def _write_campaign_time_bounds(entry: h5py.Group, shots: list[dict[str, Any]]) -> None:
     """Write `/entry/start_time` and `/entry/end_time` (standard NXentry fields).
 
     Derived from the earliest/latest parseable shot `fired_at` (itself the
