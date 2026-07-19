@@ -138,8 +138,9 @@ broker roundtrip tests needing `KAFKA_TEST_BROKER`, 14 ASAPO sibling-repo tests)
   `POST /scicat/push` for a private mixed RadBio candidate. The dataset was
   explicitly titled as a non-release TEST and carried
   `release_evidence=false` plus `representative=false`; SciCat returned a PID
-  and version hash, and read-back by PID succeeded. This direct plugin test did
-  not invoke the DAMNIT builder, so builder-side PID catalog back-population and
+  and version hash, and read-back by PID succeeded. The registered file was
+  the earlier bridge-v1 artifact; the certified bridge-v2 rebuild has not been
+  registered. This direct plugin test did not invoke the DAMNIT builder, so builder-side PID catalog back-population and
   deployed unchanged-artifact replay remain open integration evidence.
 
 - **Builder auto-trigger** — closes the last durable-spool gap. New module
