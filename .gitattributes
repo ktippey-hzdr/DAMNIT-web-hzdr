@@ -17,3 +17,4 @@
 *.zip binary
 *.woff binary
 *.woff2 binary
+api/tests/fixtures/semantic-golden-domain.synthetic.json text eol=lf

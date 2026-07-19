@@ -51,7 +51,16 @@ required. Its committed
 LabFrog rows additionally prove non-null target, laser, vacuum, diagnostic,
 and simulation-link metadata preservation. The check asserts canonical units
 and semantic NeXus paths; the filename and source label deliberately prevent
-this fixture from being mistaken for representative facility data.
+this fixture from being mistaken for representative facility data. It also
+reloads the staged inputs to prove stable event IDs, exercises the real SciCat
+request/checksum/catalog-readback logic with only the remote HTTP response
+mocked, and proves an unchanged-artifact replay makes one POST total.
+
+Pass `--output-dir <new-or-empty-directory>` to retain an inspectable bundle.
+The generated `catalog/semantic-golden-evidence.json` records the
+classification, fixture/event identities, output checksums, SciCat version
+hash, and replay POST count. This remains local synthetic contract evidence,
+not production-like SciCat proof.
 
 `asapo-for-hzdr-damnit/tests/test_local_message_suite.py` now covers both the
 local broker internals and the HTTP/CLI surface: publish, claim, ack, consume,

@@ -24,6 +24,7 @@ Exits non-zero (and prints which step failed) if any step does not hold.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import math
 import os
@@ -351,6 +352,134 @@ def rebuild_catalog(
     return output_nexus, sources_file
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def verify_event_replay_identity(events_dir: Path) -> list[str]:
+    """Load the staged inputs twice and prove stable, unique event identity."""
+    from damnit_api.metadata.hzdr_nexus import load_normalized_events
+
+    paths = sorted(events_dir.glob("*.jsonl"))
+    first = [event["event_id"] for event in load_normalized_events(paths)]
+    second = [event["event_id"] for event in load_normalized_events(paths)]
+    assert first == second
+    assert len(first) == len(set(first)), "fixture event_id values must be unique"
+    return first
+
+
+def verify_local_scicat_replay(
+    *, nexus_path: Path, sources_file: Path, event_ids: list[str]
+) -> dict[str, Any]:
+    """Prove catalog persistence and unchanged-artifact SciCat POST dedup.
+
+    This deliberately mocks only the remote HTTP response. The DAMNIT request
+    builder, source checksum, catalog stamping/readback, and replay skip are the
+    production functions. It is local contract evidence, not a production-like
+    SciCat deployment.
+    """
+    from unittest.mock import patch
+
+    import httpx
+
+    from damnit_api.metadata.hzdr_nexus import write_json_atomic
+    from damnit_api.metadata.scicat import (
+        read_previous_registration,
+        register_campaign_nexus,
+    )
+    from damnit_api.shared.hzdr_settings import HZDRScicatSettings
+
+    calls: list[dict[str, Any]] = []
+
+    def local_post(url, json, timeout):
+        calls.append({"url": url, "json": json, "timeout": timeout})
+        checksum = json["files"][0]["checksum"]
+        request = httpx.Request("POST", url)
+        return httpx.Response(
+            200,
+            json={
+                "ok": True,
+                "pid": "synthetic-local/campaign",
+                "version_hash": f"local-{checksum[:16]}",
+            },
+            request=request,
+        )
+
+    scicat_settings = HZDRScicatSettings(
+        enabled=True,
+        plugin_url="http://synthetic-scicat.invalid",
+        frontend_url="http://synthetic-scicat.invalid",
+        endpoint="push",
+    )
+    registration_args = {
+        "settings": scicat_settings,
+        "nexus_path": nexus_path,
+        "experiment_id": EXPERIMENT_ID,
+        "source_key": SOURCE_KEY,
+        "scientific_metadata": {
+            "fixtureClassification": "synthetic",
+            "eventIds": event_ids,
+        },
+        "source_folder": str(nexus_path.parent),
+    }
+    with patch("httpx.post", side_effect=local_post):
+        first = register_campaign_nexus(**registration_args)
+        assert first is not None
+        assert len(calls) == 1
+
+        catalog = json.loads(sources_file.read_text(encoding="utf-8"))
+        catalog["sources"][0]["metadata"].update(first)
+        write_json_atomic(sources_file, catalog)
+        previous = read_previous_registration(sources_file, SOURCE_KEY)
+        assert previous == first
+
+        second = register_campaign_nexus(**registration_args, previous=previous)
+        assert second == first
+        assert len(calls) == 1, "unchanged registration replay must not POST again"
+
+    return {
+        "mode": "mocked-local-contract",
+        "pid": first["scicat_pid"],
+        "versionHash": first["scicat_version_hash"],
+        "sourceSha256": first["scicat_source_sha256"],
+        "postCountAfterReplay": len(calls),
+    }
+
+
+def write_semantic_evidence_report(
+    *,
+    path: Path,
+    nexus_path: Path,
+    sources_file: Path,
+    event_ids: list[str],
+    scicat: dict[str, Any],
+) -> None:
+    report = {
+        "schemaVersion": 1,
+        "classification": "synthetic",
+        "experimentId": EXPERIMENT_ID,
+        "fixture": {
+            "path": SEMANTIC_FIXTURE.name,
+            "sha256": sha256_file(SEMANTIC_FIXTURE),
+        },
+        "normalizedEventIds": event_ids,
+        "nexus": {
+            "path": nexus_path.name,
+            "sha256": sha256_file(nexus_path),
+        },
+        "catalog": {
+            "path": sources_file.name,
+            "sha256": sha256_file(sources_file),
+        },
+        "scicat": scicat,
+    }
+    path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+
+
 class Step:
     """Print a step header and re-raise with context on failure."""
 
@@ -369,8 +498,16 @@ class Step:
         return False
 
 
-def run_acceptance(*, keep: bool) -> bool:
-    work_dir = Path(tempfile.mkdtemp(prefix="hzdr-local-acceptance-"))
+def run_acceptance(*, keep: bool, output_dir: Path | None = None) -> bool:
+    if output_dir is None:
+        work_dir = Path(tempfile.mkdtemp(prefix="hzdr-local-acceptance-"))
+    else:
+        work_dir = output_dir.resolve()
+        if work_dir.exists() and any(work_dir.iterdir()):
+            message = f"--output-dir must be absent or empty: {work_dir}"
+            raise ValueError(message)
+        work_dir.mkdir(parents=True, exist_ok=True)
+        keep = True
     ok = True
     try:
         events_dir = work_dir / "events"
@@ -378,6 +515,7 @@ def run_acceptance(*, keep: bool) -> bool:
         output_dir = work_dir / "catalog"
         output_nexus = output_dir / f"{EXPERIMENT_ID}.nxs"
         sources_file = output_dir / "hzdr_sources.json"
+        evidence_file = output_dir / "semantic-golden-evidence.json"
 
         # All settings env vars must be set before the first damnit_api
         # import anywhere in this process: Settings() is constructed once,
@@ -392,6 +530,9 @@ def run_acceptance(*, keep: bool) -> bool:
         with Step("Write staged events (JSONL)"):
             staged_paths = write_staged_events(events_dir)
             assert all(path.exists() for path in staged_paths)
+
+        with Step("Replay staged inputs with stable event identity"):
+            event_ids = verify_event_replay_identity(events_dir)
 
         with Step("Write synthetic LabFrog source data"):
             write_minimal_labfrog_sqlite(labfrog_sqlite)
@@ -409,6 +550,13 @@ def run_acceptance(*, keep: bool) -> bool:
 
         with Step("Verify synthetic semantic domains in NeXus"):
             verify_semantic_nexus(output_nexus)
+
+        with Step("Register and replay against local SciCat contract"):
+            scicat_evidence = verify_local_scicat_replay(
+                nexus_path=output_nexus,
+                sources_file=sources_file,
+                event_ids=event_ids,
+            )
 
         with Step("Boot API and verify review endpoint sees rebuilt state"):
             from fastapi.testclient import TestClient
@@ -496,9 +644,20 @@ def run_acceptance(*, keep: bool) -> bool:
                 assert final_review["match_summary"]["ambiguous"] == 0
                 assert final_review["match_summary"]["unmatched"] == 0
 
+        with Step("Write synthetic golden evidence report"):
+            write_semantic_evidence_report(
+                path=evidence_file,
+                nexus_path=output_nexus,
+                sources_file=sources_file,
+                event_ids=event_ids,
+                scicat=scicat_evidence,
+            )
+            assert evidence_file.exists()
+
         print("\nAll local acceptance steps passed.")
         print(f"Catalog: {sources_file}")
         print(f"Export (NeXus/HDF5): {output_nexus}")
+        print(f"Evidence: {evidence_file}")
         print(f"Generated at: {datetime.now(UTC).isoformat()}")
     except AssertionError as exc:
         print(f"\nAcceptance check failed: {exc}", file=sys.stderr)
@@ -521,9 +680,14 @@ def main() -> None:
         action="store_true",
         help="Do not delete the generated temp directory; print its path instead.",
     )
+    parser.add_argument(
+        "--output-dir",
+        type=Path,
+        help="Write the inspectable synthetic bundle to a new or empty directory.",
+    )
     args = parser.parse_args()
 
-    if not run_acceptance(keep=args.keep):
+    if not run_acceptance(keep=args.keep, output_dir=args.output_dir):
         raise SystemExit(1)
 
 

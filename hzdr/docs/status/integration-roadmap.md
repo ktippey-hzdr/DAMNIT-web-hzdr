@@ -100,7 +100,9 @@ Committed and tested:
   events through Confirm Matches over a real FastAPI `TestClient`, no sibling
   repo or broker required. The committed synthetic semantic-domain event now
   verifies non-null target/laser/vacuum/diagnostic NeXus output and preserves
-  its simulation link in the normalized source-event table.
+  its simulation link in the normalized source-event table. A retained run
+  emits `semantic-golden-evidence.json` with fixture/output hashes, stable
+  replayed event IDs, and local SciCat catalog/dedup evidence.
 - Shared example payloads in `api/examples/` using the canonical
   `hzdr-event-v1` schema-version string; lightweight anonymized LabFrog SQLite
   fixture at `api/examples/Example_Campaign_06.2026.light.sqlite`.
