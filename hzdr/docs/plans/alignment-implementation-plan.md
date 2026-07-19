@@ -125,23 +125,23 @@ keys with NeXus `@units`, `provenance` (`wiki`/`manual`), `wiki_ref`, and an ope
    and folds `target_production_date`/`target_origin` into
    `properties.production_date`/`properties.origin`.
 
-**Remaining:** Gas species/pressure have no source field in LabFrog's target capture
-at all (not just unexported) — LabFrog would need to add gas-jet fields to its target
-form/wiki-catalog capture before there is anything for `labfrog-sqlite-tools` or DAMNIT
-to carry. `element` needs no separate column: the wiki catalog stores material as
-`element`, and `labfrog-sqlite-tools` already folds it into `target_material` when no
-`material` value is present.
+**Completed 2026-07-19:** LabFrog now captures manual gas-jet/cluster type,
+species, and backing pressure, while selectable metadata accepts historical gas and
+backing-pressure aliases. SQLite schema v11 normalizes recognized pressure units to
+bar, and DAMNIT carries the typed values into `metadata.target`. Existing records
+without gas values remain valid with nullable columns. `element` needs no separate
+column: the wiki catalog stores material as `element`, and `labfrog-sqlite-tools`
+already folds it into `target_material` when no `material` value is present.
 
 **Files:** sibling `labfrog-sqlite-tools` export, `api/src/damnit_api/metadata/hzdr_nexus.py`
 (reconciler merge), `api/tests/test_hzdr_nexus.py`.
 
 **Exit:** target material/thickness visible per shot in the API and catalog for captured
 LabFrog manual target records; wiki `wiki_page`/`wiki_ref`/`status`/`provider`/`amount`/
-`type`/`production_date`/`origin` visible per shot for wiki-sourced targets; gas
-species/pressure tracked as a follow-up pending LabFrog target-capture support.
+`type`/`production_date`/`origin` visible per shot for wiki-sourced targets; gas species/pressure captured and carried as canonical target metadata.
 
-**Effort:** Phase 2 is green end-to-end for captured LabFrog fields and all current wiki
-extras; gas species/pressure remain medium (blocked on LabFrog capture, not DAMNIT).
+**Effort:** Phase 2 is green end-to-end for captured LabFrog fields, all current wiki
+extras, and gas species/pressure.
 
 ## Phase 3 — NeXus structural groups (`NXsource`, `NXsample`, `NXdetector`) 🟢
 

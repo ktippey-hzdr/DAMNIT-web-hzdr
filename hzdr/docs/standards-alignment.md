@@ -139,8 +139,9 @@ can be claimed.
 
 ### 3.4 Target / sample
 
-HELPMI `TargetClasses` covers solid foil, gas jet, cluster, and liquid targets. DAMNIT
-currently has only the free-form emulator `target` string.
+HELPMI `TargetClasses` covers solid foil, gas jet, cluster, and liquid targets. LabFrog
+now captures structured manual target type plus gas species and backing pressure; DAMNIT
+normalizes the portable SQLite columns into the binding target schema.
 
 > **The binding target schema lives in [target-ontology.md](target-ontology.md).** It
 > supersedes the *Recommended key* and *Unit* columns below: stored keys are **bare**
@@ -150,14 +151,14 @@ currently has only the free-form emulator `target` string.
 
 | HELPMI TargetClasses field | Current emulator key | Recommended key | Unit | NeXus equivalent | Gap / note |
 | --- | --- | --- | --- | --- | --- |
-| Target type | `target` (free-form) | `metadata.target.type` | string enum | `NXsample.type` (field name; HZDR enum values) | Types: `foil`, `gas_jet`, `cluster`, `liquid`, `structured`, `other`; mapped for manual and wiki-sourced targets (wiki vocabulary → enum per target-ontology.md §2.3) as of 2026-07-03; written to `/entry/sample/type` since profile v0.5 (2026-07-17); `gas_jet`/`cluster` have no source data yet (no gas-jet capture in LabFrog) |
+| Target type | LabFrog manual/selectable target | `metadata.target.type` | string enum | `NXsample.type` (field name; HZDR enum values) | Types: `foil`, `gas_jet`, `cluster`, `liquid`, `structured`, `other`; manual gas-jet/cluster capture added 2026-07-19; written to `/entry/sample/type` since profile v0.5 |
 | Material | LabFrog `OTHER` target export | `metadata.target.material` | string | `NXsample.material` (profile ext.); `chemical_formula` derived only when the value parses as a formula (profile v0.4) | Present for captured manual target records; wiki-selected curated material still needs per-shot enrichment |
 | Thickness | LabFrog `OTHER` target export | `metadata.target.thickness` | nm | `NXsample.thickness` | Present for captured manual target records; DAMNIT converts known export units to canonical nm |
 | Diameter | — | `metadata.target.diameter_mm` | mm | — | **Missing** |
 | Substrate material | — | `metadata.target.substrate_material` | string | `NXsample.substrate_material` | **Missing** — relevant for structured targets |
 | Sample temperature | `sample_temperature_c` | `metadata.target.temperature` | °C | `NXsample.temperature` | Present in emulator; bare-key namespace adopted |
-| Gas species (gas jet) | — | `metadata.target.gas_species` | string | — | **Missing** — `"Ar"`, `"N2"`, `"He"` |
-| Gas pressure (gas jet) | — | `metadata.target.gas_pressure_bar` | bar | `NXsample.gas_pressure` | **Missing** |
+| Gas species (gas jet) | LabFrog `target.gas_species` | `metadata.target.gas_species` | string | `/entry/sample` `gas_species` attribute | Captured and mapped end to end since 2026-07-19 |
+| Gas pressure (gas jet) | LabFrog `target.gas_pressure` | `metadata.target.gas_pressure` | bar | `/entry/sample/gas_pressure` | SQLite schema v11 normalizes accepted source units to bar; mapped end to end since 2026-07-19 |
 
 ### 3.5 Environment / vacuum
 
@@ -219,7 +220,7 @@ definitions are finalized, and the effort to migrate.
 | `/entry/laserdata` | `NXcollection` | `NXbeam` or `NXsource` | 🟡 per-shot laser series done 2026-07-17 as `/entry/instrument/laser/shot_series` (`NXdata`, per-shot `metadata.laser.*` arrays); the raw payload collections stay `NXcollection` |
 | `/entry/watchdog` | `NXcollection` | `NXcollection` (keep custom) | File-arrival log; no standard class; keep as-is |
 | — | — | `/entry/instrument/laser` → `NXsource` + `NXbeam` | Done in DAMNIT for available `metadata.laser.*`; producer-side fixed fields still need capture |
-| — | — | `/entry/sample` → `NXsample` | Done for available `metadata.target.*`, including wiki extras (`wiki_page`/`wiki_ref`/`status`/`provider`/`amount`/`type`/`production_date`/`origin`); gas fields have no source data (no gas-jet capture in LabFrog) |
+| — | — | `/entry/sample` → `NXsample` | Done for available `metadata.target.*`, including wiki extras (`wiki_page`/`wiki_ref`/`status`/`provider`/`amount`/`type`/`production_date`/`origin`); gas fields are captured by LabFrog and normalized by SQLite schema v11 |
 | — | — | `/entry/sample/environment` → `NXenvironment` | Done 2026-07-17 for available `metadata.vacuum.*` (`chamber_pressure`, `pre_shot_pressure`, `rga_dominant_species`); covered by the NXhzdr_target NXDL since profile v0.6 (2026-07-18) — see [nexus-semantic-maps.md §3](nexus-semantic-maps.md#3-vacuum-map-metadatavacuum--entrysampleenvironment) |
 | — | — | `/entry/instrument/<key>` → `NXdetector` (per `metadata.diagnostic.*` scalar) | Done 2026-07-17: shot-indexed `data` array per key, aligned with `/entry/shots`; legacy flat spellings (`xray_counts`, `detector_signal_mean`, `alignment_score`) folded in by the writer and linter-flagged since 2026-07-18, when `diagnostic.*` became registry-governed (`@units` stamped from the registry) — see [nexus-semantic-maps.md §4](nexus-semantic-maps.md#4-diagnostic-map-metadatadiagnostic-and-data-products--nxdetector) |
 
@@ -411,7 +412,7 @@ round-trip the event normalizer losslessly
 | Gap analysis: 16 missing fields with effort estimates | ✅ committed | §3.10 |
 | Rename `metadata` keys to HELPMI-aligned namespace (`metadata.laser.*` etc.) | ⬜ post-pilot | §3.3, Route 1 |
 | Add `metadata.laser.wavelength_nm`, `polarization`, `repetition_rate_hz` | ⬜ low effort | §3.3, §3.10 |
-| Add `metadata.target.*` fields from LabFrog shot record | ✅ base path done; ✅ wiki extras (`wiki_page`/`wiki_ref`/`status`/`provider`/`amount`/`type`/`production_date`/`origin`) persisted, exported, and mapped end-to-end 2026-07-03; 🟡 gas species/pressure blocked on LabFrog gas-jet capture | §3.4, §3.10 |
+| Add `metadata.target.*` fields from LabFrog shot record | ✅ base path done; ✅ wiki extras (`wiki_page`/`wiki_ref`/`status`/`provider`/`amount`/`type`/`production_date`/`origin`) persisted, exported, and mapped end-to-end 2026-07-03; ✅ gas species/pressure captured, normalized to bar, and mapped end-to-end 2026-07-19 | §3.4, §3.10 |
 | Add `/entry/instrument/laser` (`NXsource`/`NXbeam`) to NeXus bridge | ✅ done for available `metadata.laser.*`; producer enrichment still open | §3.7, Route 2 |
 | Add `/entry/sample` (`NXsample`) to NeXus bridge | ✅ done for available target metadata | §3.7, Route 2 |
 | Add `/entry/sample/environment` (`NXenvironment`) vacuum group to NeXus bridge | ✅ done 2026-07-17 for available `metadata.vacuum.*`; producer capture of `pre_shot_pressure`/`rga_dominant_species` still open | §3.5, §3.7 |

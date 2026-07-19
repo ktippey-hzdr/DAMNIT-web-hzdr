@@ -282,3 +282,4 @@ HELPMI DDC names remain the documentation cross-walk; see
 | Wiki catalog (`IonenTargetOrigin`) → ontology mapping documented (§2.3); SQLite v9 extras columns mapped by the reconciler | ✅ implemented locally 2026-07-03 |
 | LabFrog persists wiki extras (`wiki_page`/`wiki_ref`/status/provider/amount) per shot | ✅ done 2026-07-03 (labfrog) |
 | SQLite `target_type`/`target_production_date`/`target_origin` columns (schema v10) mapped by the reconciler; wiki `type` vocabulary mapped to the §3 enum (`properties.wiki_type` keeps the original) | ✅ done 2026-07-03 |
+| LabFrog gas-jet type/species/pressure capture → SQLite schema v11 canonical bar columns → DAMNIT `metadata.target` | ✅ done 2026-07-19 |
