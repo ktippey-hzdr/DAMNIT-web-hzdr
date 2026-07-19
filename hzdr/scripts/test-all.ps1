@@ -40,6 +40,10 @@ $ErrorActionPreference = "Stop"
 $gitlabRoot = Resolve-Path "$PSScriptRoot\..\..\.."
 $damnitRoot = Resolve-Path "$PSScriptRoot\..\.."
 $script:coverage = -not $NoCoverage
+$script:testTempRoot = Join-Path $gitlabRoot ".tmp\test-all-$PID"
+New-Item -ItemType Directory -Path $script:testTempRoot -Force | Out-Null
+$env:TEMP = $script:testTempRoot
+$env:TMP = $script:testTempRoot
 
 # In PowerShell 5.1, $ErrorActionPreference = "Stop" does not apply to native
 # executables. Wrap every native command that should fail the suite with this.
@@ -57,6 +61,15 @@ function Invoke-Exe {
 function Get-CovArgs {
     if ($script:coverage) { return @("--cov-report=json:cover/coverage.json") }
     return @()
+}
+
+# Keep pytest's basetemp and cache away from Windows user-temp and repo-local
+# cache directories, both of which can be unreadable on managed workstations.
+# One suite-specific directory also prevents cross-repo cache contamination.
+function Get-PytestTempArgs([string] $suite) {
+    $base = Join-Path $script:testTempRoot $suite
+    $cache = Join-Path $base ".pytest_cache"
+    return @("--basetemp=$base", "-o", "cache_dir=$cache")
 }
 
 # Refresh a repo's own per-area coverage map after its suite ran with coverage.
@@ -101,9 +114,9 @@ $allSuites = [ordered]@{
             # `--group test` activates pytest-cov (api sets default-groups = []).
             # `--cov=damnit_api` is passed here rather than in api/pyproject.toml
             # so the plain `uv run pytest` workflow stays coverage-free.
-            $pa = @('run', 'python', '-m', 'pytest', '-q')
+            $pa = @('run', 'python', '-m', 'pytest', '-q') + (Get-PytestTempArgs "damnit")
             if ($script:coverage) {
-                $pa = @('run', '--group', 'test', 'python', '-m', 'pytest', '-q', '--cov=damnit_api') + (Get-CovArgs)
+                $pa = @('run', '--group', 'test', 'python', '-m', 'pytest', '-q', '--cov=damnit_api') + (Get-PytestTempArgs "damnit") + (Get-CovArgs)
             }
             Invoke-Exe uv @pa
             # DAMNIT API has no per-area map; its api/cover/coverage.json feeds
@@ -117,7 +130,8 @@ $allSuites = [ordered]@{
                 $brokerAddr = if ($env:KAFKA_TEST_BROKER) { $env:KAFKA_TEST_BROKER } else { "localhost:9092" }
                 Write-Host "    KAFKA_TEST_BROKER=$brokerAddr" -ForegroundColor DarkGray
                 $env:KAFKA_TEST_BROKER = $brokerAddr
-                Invoke-Exe uv run python -m pytest -q -m integration_docker tests/test_hzdr_broker_roundtrip.py
+                $dockerArgs = @('run', 'python', '-m', 'pytest', '-q', '-m', 'integration_docker', 'tests/test_hzdr_broker_roundtrip.py') + (Get-PytestTempArgs "damnit-docker")
+                Invoke-Exe uv @dockerArgs
             }
         }
     }
@@ -128,7 +142,7 @@ $allSuites = [ordered]@{
             $env:LABFROG_TESTING    = "1"
             $env:SKIP_CUSTOM_OPTIONS = "1"
             $env:SKIP_MEDIAWIKI     = "1"
-            $pa = @('run', '--group', 'testing', 'python', '-m', 'pytest', '-q', '-s', 'tests', '-k', 'not webkit') + (Get-CovArgs)
+            $pa = @('run', '--group', 'testing', 'python', '-m', 'pytest', '-q', '-s', 'tests', '-k', 'not webkit') + (Get-PytestTempArgs "labfrog") + (Get-CovArgs)
             Invoke-Exe uv @pa
             Update-RepoMap "hzdr/scripts/docs/refresh_coverage_map.py"
         }
@@ -137,7 +151,7 @@ $allSuites = [ordered]@{
         label = "labfrog-sqlite-tools-repo"
         path  = Resolve-Repo "labfrog-sqlite-tools-repo"
         run   = {
-            $pa = @('run', 'python', '-m', 'pytest', '-q') + (Get-CovArgs)
+            $pa = @('run', 'python', '-m', 'pytest', '-q') + (Get-PytestTempArgs "sqlite-tools") + (Get-CovArgs)
             Invoke-Exe uv @pa
             Update-RepoMap "hzdr/scripts/docs/refresh_coverage_map.py"
         }
@@ -146,7 +160,7 @@ $allSuites = [ordered]@{
         label = "planet-watchdog"
         path  = Resolve-Repo "planet-watchdog"
         run   = {
-            $pa = @('run', 'python', '-m', 'pytest', '-q') + (Get-CovArgs)
+            $pa = @('run', 'python', '-m', 'pytest', '-q') + (Get-PytestTempArgs "planet-watchdog") + (Get-CovArgs)
             Invoke-Exe uv @pa
             Update-RepoMap "hzdr/scripts/docs/refresh_coverage_map.py"
         }
@@ -155,7 +169,7 @@ $allSuites = [ordered]@{
         label = "shotcounter"
         path  = Resolve-Repo "shotcounter"
         run   = {
-            $pa = @('run', 'python', '-m', 'pytest', '-q', '-k', 'not ntp') + (Get-CovArgs)
+            $pa = @('run', 'python', '-m', 'pytest', '-q', '-k', 'not ntp') + (Get-PytestTempArgs "shotcounter") + (Get-CovArgs)
             Invoke-Exe uv @pa
             Update-RepoMap "hzdr/scripts/docs/refresh_coverage_map.py"
         }
@@ -164,7 +178,7 @@ $allSuites = [ordered]@{
         label = "asapo-for-hzdr-damnit"
         path  = Resolve-Repo "asapo-for-hzdr-damnit"
         run   = {
-            $pa = @('run', 'python', '-m', 'pytest', '-q') + (Get-CovArgs)
+            $pa = @('run', 'python', '-m', 'pytest', '-q') + (Get-PytestTempArgs "asapo") + (Get-CovArgs)
             Invoke-Exe uv @pa
             Update-RepoMap "hzdr/scripts/docs/refresh_coverage_map.py"
         }
