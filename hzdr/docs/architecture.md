@@ -189,9 +189,11 @@ and fallback:
 
 Archived/superseded LabFrog rows from curated exports are kept as provenance but
 are excluded from automatic matching when an active row for the same
-campaign/date/shot number exists. The result records `match_status`,
-`match_quality`, and `match_time_delta_s`. No ambiguous event is silently
-attached.
+campaign/date/shot number exists. If more than one row is marked `active`, all
+remain current because source status is authoritative, but DAMNIT logs a
+source-owner-review warning even when their version numbers match. The result
+records `match_status`, `match_quality`, and `match_time_delta_s`. No ambiguous
+event is silently attached.
 
 ## Canonical Outputs
 

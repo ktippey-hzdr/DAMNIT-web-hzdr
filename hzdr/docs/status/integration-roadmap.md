@@ -365,10 +365,11 @@ Follow-ups:
 2. **`has_newer_version` for SQLite is keyed on `status == active`, not version
    number** — ✅ guarded. The decision still follows `status == active` (the
    accepted pilot simplification), but `_mark_superseded_labfrog_rows` now logs a
-   warning via `_warn_if_active_row_not_latest` when a curated export marks a
-   non-latest `version` row active, so the malformed case is observable instead
-   of silently wrong. A characterization test pins both the well-formed and
-   malformed cases. Revisit keying on `version` if curated data proves noisier.
+   warning via `_warn_if_active_row_not_latest` when a curated export marks
+   multiple rows active or marks a non-latest `version` row active, so both
+   malformed cases are observable instead of silently wrong. Characterization
+   tests pin the well-formed, non-latest-active, and same-version duplicate-active
+   cases. Revisit keying on `version` if curated data proves noisier.
 3. **Kafka spool consumer for shotcounter/Watchdog** — ✅ landed as
    `KafkaSpoolConsumer` (`consumer/kafka.py`); identity matching was already
    ready to consume those linking fields. Next real work is now the real-broker
@@ -709,9 +710,10 @@ Status of the three deferred follow-ups after this pass:
   identity and ambiguous-review action still key on `shot_number`; that larger
   UI refactor remains tracked separately.
 - **`has_newer_version` keyed on `status == active`** — ✅ guarded: still keyed on
-  status (accepted pilot simplification), but now warns when an export marks a
-  non-latest `version` row active (`_warn_if_active_row_not_latest`), with a
-  characterization test for both cases.
+  status (accepted pilot simplification), but now warns when an export marks
+  multiple rows active or a non-latest `version` row active
+  (`_warn_if_active_row_not_latest`), with characterization tests for each
+  malformed case.
 - **Kafka spool consumer** — ✅ now implemented (`KafkaSpoolConsumer`,
   `consumer/kafka.py`). The drift guard above de-risked it: the consumer ingests
   exactly the `hzdr-event-v1` envelope pinned by a conformance test in every
