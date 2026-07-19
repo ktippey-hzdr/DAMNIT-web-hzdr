@@ -294,3 +294,29 @@ def test_nxdl_version_enumeration_matches_writer_constant():
     )
     assert match, f"damnit_nxdl_version enumeration not found in {nxdl}"
     assert match.group(1) == HZDR_TARGET_PROFILE_VERSION
+
+
+def test_nxdl_documents_damnit_owned_campaign_bound_attributes():
+    """Strict NXDL validation must recognise the writer's ownership marker."""
+    import re
+
+    nxdl = (
+        Path(__file__).resolve().parents[2] / "hzdr" / "nxdl" / "NXhzdr_target.nxdl.xml"
+    )
+    text = nxdl.read_text(encoding="utf-8")
+
+    for field_name in ("start_time", "end_time"):
+        field = re.search(
+            rf'<field name="{field_name}"[^>]*>(.*?)</field>',
+            text,
+            flags=re.DOTALL,
+        )
+        assert field, f"{field_name} field not found in {nxdl}"
+        attribute = re.search(
+            r'<attribute name="damnit_source" optional="true">'
+            r"\s*<doc>.+?</doc>\s*<enumeration>\s*"
+            r'<item value="shots"></item>\s*</enumeration>\s*</attribute>',
+            field.group(1),
+            flags=re.DOTALL,
+        )
+        assert attribute, f"documented {field_name}/@damnit_source not found in {nxdl}"

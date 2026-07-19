@@ -59,6 +59,16 @@
           written since profile 0.6; refreshed on rebuild while carrying the
           damnit_source="shots" marker attribute).
         </doc>
+        <attribute name="damnit_source" optional="true">
+          <doc>
+            Marks a campaign bound maintained by the DAMNIT writer from shot
+            fired_at values. The fixed value is "shots"; the attribute is
+            optional so externally authored NXentry bounds remain valid.
+          </doc>
+          <enumeration>
+            <item value="shots"></item>
+          </enumeration>
+        </attribute>
       </field>
       <field name="end_time" type="NX_DATE_TIME" optional="true">
         <doc>
@@ -66,6 +76,16 @@
           since profile 0.6; refreshed on rebuild while carrying the
           damnit_source="shots" marker attribute).
         </doc>
+        <attribute name="damnit_source" optional="true">
+          <doc>
+            Marks a campaign bound maintained by the DAMNIT writer from shot
+            fired_at values. The fixed value is "shots"; the attribute is
+            optional so externally authored NXentry bounds remain valid.
+          </doc>
+          <enumeration>
+            <item value="shots"></item>
+          </enumeration>
+        </attribute>
       </field>
       <group type="NXinstrument" name="instrument" optional="true">
         <doc>
