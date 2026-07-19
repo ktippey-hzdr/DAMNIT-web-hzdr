@@ -46,7 +46,12 @@ deterministic, broker-free suite:
 emulator events → `HZDREventV1` → JSONL staging → catalog rebuild →
 review API → Confirm Matches → export hook, all proven over a real FastAPI
 app via `TestClient`, with no sibling repo, Docker, Mongo, Kafka, or ASAPO
-required.
+required. Its committed
+`api/tests/fixtures/semantic-golden-domain.synthetic.json` event and synthetic
+LabFrog rows additionally prove non-null target, laser, vacuum, diagnostic,
+and simulation-link metadata preservation. The check asserts canonical units
+and semantic NeXus paths; the filename and source label deliberately prevent
+this fixture from being mistaken for representative facility data.
 
 `asapo-for-hzdr-damnit/tests/test_local_message_suite.py` now covers both the
 local broker internals and the HTTP/CLI surface: publish, claim, ack, consume,

@@ -1,0 +1,46 @@
+{
+  "schema_version": "hzdr-event-v1",
+  "event_id": "acc-evt-semantic-2",
+  "experiment_id": "hzdr-local-acceptance",
+  "shot_id": "shot-000002",
+  "shot_number": 2,
+  "source": "DAMNIT-Synthetic-Acceptance",
+  "kind": "semantic.domain_snapshot",
+  "timestamp": "2026-01-01T09:10:02Z",
+  "transport": "fixture",
+  "payload_ref": {
+    "uri": "fixture://semantic-golden-domain.synthetic.json",
+    "record_id": "synthetic-shot-000002"
+  },
+  "metadata": {
+    "laser": {
+      "system": "DRACO synthetic",
+      "pulse_energy": 8.2,
+      "pulse_duration": 30.0,
+      "wavelength": 800.0,
+      "beam_pos_x": 0.12,
+      "beam_pos_y": -0.08,
+      "beam_waist_x": 1.6,
+      "beam_waist_y": 1.4,
+      "repetition_rate": 10.0,
+      "polarization": "horizontal",
+      "contrast_ratio": 1e-10
+    },
+    "vacuum": {
+      "chamber_pressure": 2.4e-6,
+      "pre_shot_pressure": 1.1e-6,
+      "rga_dominant_species": "H2O"
+    },
+    "diagnostic": {
+      "xray_counts": 1450,
+      "detector_signal_mean": 2.25,
+      "alignment_score": 0.98
+    },
+    "simulation": {
+      "openpmd_series": "fixture://simulation/openpmd",
+      "iteration": 4200,
+      "software": "PIConGPU",
+      "software_version": "synthetic"
+    }
+  }
+}

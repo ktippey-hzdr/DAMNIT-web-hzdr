@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import shutil
 import sqlite3
@@ -39,6 +40,10 @@ sys.path.insert(0, str(REPO_ROOT / "api" / "src"))
 
 EXPERIMENT_ID = "hzdr-local-acceptance"
 SOURCE_KEY = "hzdr-local-acceptance"
+SEMANTIC_FIXTURE = (
+    REPO_ROOT / "api" / "tests" / "fixtures" / "semantic-golden-domain.synthetic.json"
+)
+SEMANTIC_EVENT_ID = "acc-evt-semantic-2"
 
 
 def write_minimal_labfrog_sqlite(path: Path) -> None:
@@ -63,11 +68,19 @@ def write_minimal_labfrog_sqlite(path: Path) -> None:
                 version INTEGER,
                 date_time TEXT,
                 campaign TEXT,
-                status TEXT
+                status TEXT,
+                target TEXT,
+                target_name TEXT,
+                target_material TEXT,
+                target_thickness_value REAL,
+                target_thickness_unit TEXT,
+                target_notes TEXT,
+                target_source TEXT,
+                target_series_sample TEXT
             )
         """)
         connection.executemany(
-            "INSERT INTO shots VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO shots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 # Two distinct *active* records, same day, same shot_number: a
                 # shot-numbering collision the matcher cannot auto-resolve. Both
@@ -75,10 +88,55 @@ def write_minimal_labfrog_sqlite(path: Path) -> None:
                 # (+/-2 s) from the LaserData shot-1 event at 09:00:02, so time
                 # disambiguation ties -> a genuine ambiguous case for Confirm
                 # Matches.
-                ("acc-shot-1a", 1, 0, "2026-01-01T09:00:00", EXPERIMENT_ID, "active"),
-                ("acc-shot-1b", 1, 0, "2026-01-01T09:00:04", EXPERIMENT_ID, "active"),
+                (
+                    "acc-shot-1a",
+                    1,
+                    0,
+                    "2026-01-01T09:00:00",
+                    EXPERIMENT_ID,
+                    "active",
+                    "OTHER: synthetic Kapton witness",
+                    "Synthetic Kapton witness",
+                    "Kapton",
+                    0.5,
+                    "um",
+                    "Synthetic acceptance fixture; not facility data",
+                    "operator",
+                    "SYN-01",
+                ),
+                (
+                    "acc-shot-1b",
+                    1,
+                    0,
+                    "2026-01-01T09:00:04",
+                    EXPERIMENT_ID,
+                    "active",
+                    "OTHER: synthetic Kapton witness",
+                    "Synthetic Kapton witness",
+                    "Kapton",
+                    0.5,
+                    "um",
+                    "Synthetic acceptance fixture; not facility data",
+                    "operator",
+                    "SYN-01",
+                ),
                 # One unambiguous shot.
-                ("acc-shot-2-v0", 2, 0, "2026-01-01T09:10:00", EXPERIMENT_ID, "active"),
+                (
+                    "acc-shot-2-v0",
+                    2,
+                    0,
+                    "2026-01-01T09:10:00",
+                    EXPERIMENT_ID,
+                    "active",
+                    "OTHER: synthetic Kapton witness",
+                    "Synthetic Kapton witness",
+                    "Kapton",
+                    0.5,
+                    "um",
+                    "Synthetic acceptance fixture; not facility data",
+                    "operator",
+                    "SYN-01",
+                ),
             ],
         )
         connection.commit()
@@ -188,7 +246,68 @@ def write_staged_events(events_dir: Path) -> list[Path]:
         json.dumps(trigger_event, sort_keys=True) + "\n", encoding="utf-8"
     )
 
-    return [laserdata_path, watchdog_path, trigger_path]
+    semantic_event = json.loads(SEMANTIC_FIXTURE.read_text(encoding="utf-8"))
+    semantic_path = events_dir / "semantic-domain.jsonl"
+    semantic_path.write_text(
+        json.dumps(semantic_event, sort_keys=True) + "\n", encoding="utf-8"
+    )
+
+    return [laserdata_path, watchdog_path, trigger_path, semantic_path]
+
+
+def verify_semantic_nexus(path: Path) -> None:
+    """Assert that every synthetic domain block survives into its NeXus home."""
+    import h5py
+
+    fixture = json.loads(SEMANTIC_FIXTURE.read_text(encoding="utf-8"))
+    with h5py.File(path, "r") as handle:
+        entry = handle["entry"]
+        assert entry["definition"].asstr()[()] == "NXhzdr_target"
+
+        sample = entry["sample"]
+        assert sample.attrs["NX_class"] == "NXsample"
+        assert sample["name"].asstr()[()] == "Synthetic Kapton witness"
+        assert sample["material"].asstr()[()] == "Kapton"
+        assert math.isclose(sample["thickness"][()], 500.0)
+        assert sample["thickness"].attrs["units"] == "nm"
+        assert sample.attrs["damnit_provenance"] == "manual"
+
+        laser = entry["instrument/laser"]
+        assert laser["name"].asstr()[()] == "DRACO synthetic"
+        assert math.isclose(laser["frequency"][()], 10.0)
+        assert laser["frequency"].attrs["units"] == "Hz"
+        assert math.isclose(laser["pulse_energy"][()], 8.2)
+        assert laser["pulse_energy"].attrs["units"] == "J"
+        assert laser["beam/pulse_duration"].attrs["units"] == "fs"
+        assert laser["beam/incident_wavelength"].attrs["units"] == "nm"
+
+        shot_keys = entry["shots/shot_key"].asstr()[...].tolist()
+        shot_index = shot_keys.index(f"{EXPERIMENT_ID}:20260101:000002")
+        assert math.isclose(laser["shot_series/pulse_energy"][shot_index], 8.2)
+        assert laser["shot_series/pulse_energy"].attrs["units"] == "J"
+
+        environment = entry["sample/environment"]
+        assert math.isclose(environment["chamber_pressure"][()], 2.4e-6)
+        assert environment["chamber_pressure"].attrs["units"] == "mbar"
+        assert math.isclose(environment["pre_shot_pressure"][()], 1.1e-6)
+        assert environment["rga_dominant_species"].asstr()[()] == "H2O"
+
+        xray = entry["instrument/xray_counts/data"]
+        assert math.isclose(xray[shot_index], 1450.0)
+        assert xray.attrs["units"] == "counts"
+        assert math.isclose(
+            entry["instrument/detector_signal_mean/data"][shot_index], 2.25
+        )
+        assert math.isclose(entry["instrument/alignment_score/data"][shot_index], 0.98)
+
+        event_ids = entry["source_events/event_id"].asstr()[...].tolist()
+        event_index = event_ids.index(SEMANTIC_EVENT_ID)
+        metadata = json.loads(entry["source_events/metadata_json"].asstr()[event_index])
+        assert metadata == fixture["metadata"]
+        payload_ref = json.loads(
+            entry["source_events/payload_ref_json"].asstr()[event_index]
+        )
+        assert payload_ref == fixture["payload_ref"]
 
 
 def rebuild_catalog(
@@ -287,6 +406,9 @@ def run_acceptance(*, keep: bool) -> bool:
             assert built_sources_file == sources_file
             assert output_nexus.exists(), "export artifact (NeXus) was not written"
             assert sources_file.exists(), "derived catalog was not written"
+
+        with Step("Verify synthetic semantic domains in NeXus"):
+            verify_semantic_nexus(output_nexus)
 
         with Step("Boot API and verify review endpoint sees rebuilt state"):
             from fastapi.testclient import TestClient
