@@ -68,8 +68,9 @@ production SciCat target. Its TEST title and scientific metadata explicitly
 mark it non-release and non-representative, and read-back by the returned PID
 succeeded. The registered file was the earlier bridge-v1 artifact; the
 certified bridge-v2 rebuild has not been registered. That check proves the
-deployed plugin boundary only. It does not replace the local replay test above and does not prove DAMNIT builder PID
-back-population or deployed replay suppression.
+deployed plugin boundary only. It does not replace the local replay test above
+and does not prove DAMNIT builder PID back-population or deployed replay
+suppression.
 
 `asapo-for-hzdr-damnit/tests/test_local_message_suite.py` now covers both the
 local broker internals and the HTTP/CLI surface: publish, claim, ack, consume,
