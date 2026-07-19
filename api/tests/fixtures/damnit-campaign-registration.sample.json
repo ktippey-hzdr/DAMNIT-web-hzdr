@@ -1,0 +1,16 @@
+{
+  "title": "HZDR canonical campaign (Pilot_Verification_07.2026)",
+  "dataset_type": "raw",
+  "source_folder": "/data/campaigns/Pilot_Verification_07.2026",
+  "meta": {
+    "shots_total": 3,
+    "campaign_start": "2026-07-01T08:00:00+00:00",
+    "campaign_end": "2026-07-01T16:30:00+00:00",
+    "proposalId": "Pilot_Verification_07.2026",
+    "experimentId": "Pilot_Verification_07.2026",
+    "instrumentId": "DRACO"
+  },
+  "filepath": "/data/campaigns/Pilot_Verification_07.2026/campaign.nxs",
+  "owner_group": "hzdr-fwkt",
+  "access_groups": ["hzdr-fwkt"]
+}
