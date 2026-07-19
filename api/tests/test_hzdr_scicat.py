@@ -7,7 +7,7 @@ plugin HTTP call is always mocked; no real SciCat or plugin is contacted.
 
 from __future__ import annotations
 
-from pathlib import Path  # noqa: TC003
+from pathlib import Path, PurePosixPath
 
 import httpx
 import orjson
@@ -17,6 +17,7 @@ from fastapi.testclient import TestClient
 from damnit_api.main import create_app
 from damnit_api.metadata.hzdr_nexus import write_sources_catalog
 from damnit_api.metadata.scicat import (
+    _build_body,
     read_previous_registration,
     register_campaign_nexus,
 )
@@ -80,6 +81,38 @@ def test_enabled_requires_plugin_url():
 
 def test_disabled_allows_missing_plugin_url():
     assert HZDRScicatSettings(enabled=False).plugin_url == ""
+
+
+def test_build_body_matches_scicat_plugin_contract_fixture():
+    fixture_path = (
+        Path(__file__).parent
+        / "fixtures"
+        / "damnit-campaign-registration.sample.json"
+    )
+    fixture = orjson.loads(fixture_path.read_bytes())
+    experiment_id = fixture["meta"]["proposalId"]
+    scientific_metadata = {
+        key: value
+        for key, value in fixture["meta"].items()
+        if key not in {"proposalId", "experimentId", "instrumentId"}
+    }
+    settings_obj = HZDRScicatSettings(
+        dataset_type=fixture["dataset_type"],
+        owner_group=fixture["owner_group"],
+        access_groups=fixture["access_groups"],
+        instrument_id=fixture["meta"]["instrumentId"],
+    )
+
+    body = _build_body(
+        settings=settings_obj,
+        nexus_path=PurePosixPath(fixture["filepath"]),
+        experiment_id=experiment_id,
+        scientific_metadata=scientific_metadata,
+        source_folder=fixture["source_folder"],
+        source_sha256="unused-for-from-json",
+    )
+
+    assert body == fixture
 
 
 # ---------------------------------------------------------------------------
