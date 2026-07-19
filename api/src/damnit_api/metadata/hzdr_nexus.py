@@ -1374,7 +1374,7 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
     source = instrument.require_group("laser")
     source.attrs["NX_class"] = "NXsource"
     _write_optional_string_dataset(source, "type", "Laser")
-    _write_optional_string_dataset(source, "probe", "optical laser")
+    _write_optional_string_dataset(source, "probe", "visible light")
     _write_optional_string_dataset(source, "name", laser.get("system"))
     _write_optional_numeric_dataset(
         source,
@@ -1452,7 +1452,7 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
 # damnit_nxdl_version enumeration in hzdr/nxdl/NXhzdr_target.nxdl.xml must be
 # bumped to match. See hzdr/docs/nxhzdr-target-profile.md (target map) and
 # hzdr/docs/nexus-semantic-maps.md (laser/vacuum/diagnostic maps).
-HZDR_TARGET_PROFILE_VERSION = "0.6"
+HZDR_TARGET_PROFILE_VERSION = "0.7"
 
 # All 118 IUPAC element symbols, for the conservative formula check below.
 _ELEMENTS = (
@@ -1648,11 +1648,6 @@ def write_nexus_laser_shot_series(
         laser_group.attrs["NX_class"] = "NXsource"
     group = _replace_group(laser_group, "shot_series")
     group.attrs["NX_class"] = "NXdata"
-    group.attrs["description"] = (
-        "Per-shot metadata.laser.* values aligned with the canonical "
-        "/entry/shots table; the parent NXsource group holds the "
-        "campaign-level first-shot snapshot."
-    )
     names = sorted(series)
     signal = "pulse_energy" if "pulse_energy" in series else names[0]
     group.attrs["signal"] = signal

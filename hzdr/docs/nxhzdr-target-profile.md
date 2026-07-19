@@ -1,4 +1,4 @@
-# `NXhzdr_target` Profile — v0.6
+# `NXhzdr_target` Profile — v0.7
 
 Updated: 2026-07-18
 
@@ -128,7 +128,7 @@ Stamped on the `/entry/sample` group by `write_nexus_sample()`:
 | --- | --- | --- | --- |
 | `NX_class` | `"NXsample"` | always | Compatibility class — permanent (decision closed 2026-07-18, §6) |
 | `damnit_nx_class` | `"NXhzdr_target"` | always | Marks the group as following this profile |
-| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.6"`) | always | Must match this document's version and the NXDL enumeration (§4) |
+| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.7"`) | always | Must match this document's version and the NXDL enumeration (§4) |
 | `damnit_provenance` | `"wiki"` \| `"manual"` | if `provenance` present | Curated vs. hand-entered target |
 | `target_ref` | string (URL or stable id) | if `wiki_ref` present | Link back to the MediaWiki target record |
 | `gas_species` | string (e.g. `"Ar"`, `"N2"`, `"He"`) | if `gas_species` present | Gas-jet / cluster species |
@@ -160,13 +160,19 @@ and every registered current-version mention across the docs; its `run --fix`
 mode rewrites the mechanical mirrors after a bump. Non-semantic
 edits to this document (wording, typo fixes) do not require a bump.
 
-Current version: **0.6** (NXDL scope grown to the whole canonical entry —
-laser/vacuum/diagnostic groups and `start_time`/`end_time`; `NX_class` swap
-decision closed as keep-`NXsample`; `diagnostic.*` registry governance,
-2026-07-18).
+Current version: **0.7** (strict certification of populated synthetic domain
+evidence: standards-valid `NXsource.probe`, declared diagnostic writer
+attributes, and no undocumented `NXdata` description attribute, 2026-07-19).
 
 History:
 
+- **0.7** (2026-07-19): the first non-null synthetic golden-domain run exposed
+  strict pynxtools warnings hidden by sparse fixtures. The laser probe constant
+  is now the standard `NXsource.probe` enum value `"visible light"`;
+  per-diagnostic `damnit_source` and `coordinates` attributes are declared
+  in the application definition; and the undocumented custom `NXdata`
+  description attribute was removed. Target, vacuum, diagnostic data paths and
+  canonical units are otherwise unchanged.
 - **0.6** (2026-07-18): the application definition now covers the whole
   canonical entry, not just `/entry/sample`: optional
   `/entry/instrument/laser` (`NXsource` + nested `beam` `NXbeam` +
@@ -215,7 +221,7 @@ History:
   part of the profile rather than an unmodelled gap. Moving the beam group
   would be a semantic-map change requiring a version bump.
 
-No other deviations are tracked in v0.6.
+No other deviations are tracked in v0.7.
 
 ## 6. Future work
 

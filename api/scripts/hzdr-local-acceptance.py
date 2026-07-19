@@ -275,6 +275,7 @@ def verify_semantic_nexus(path: Path) -> None:
 
         laser = entry["instrument/laser"]
         assert laser["name"].asstr()[()] == "DRACO synthetic"
+        assert laser["probe"].asstr()[()] == "visible light"
         assert math.isclose(laser["frequency"][()], 10.0)
         assert laser["frequency"].attrs["units"] == "Hz"
         assert math.isclose(laser["pulse_energy"][()], 8.2)

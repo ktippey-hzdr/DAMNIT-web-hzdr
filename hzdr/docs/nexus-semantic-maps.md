@@ -60,7 +60,7 @@ skipped entirely — never written as empty datasets.
 | Source | NeXus path (under `/entry/instrument/laser`) | Canonical unit | Upstream NeXus field? |
 | --- | --- | --- | --- |
 | constant | `type` = `"Laser"` | — | Standard `NXsource.type` |
-| constant | `probe` = `"optical laser"` | — | Standard `NXsource.probe` |
+| constant | `probe` = `"visible light"` | — | Standard `NXsource.probe` enum value |
 | `laser.system` | `name` | — (string) | Standard `NXsource.name` |
 | `laser.repetition_rate` | `frequency`, `@units` | Hz | Standard `NXsource.frequency` |
 | `laser.pulse_energy` | `pulse_energy`, `@units` | J | Standard `NXsource.pulse_energy` |

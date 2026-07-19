@@ -109,7 +109,8 @@
           </field>
           <field name="probe" optional="true">
             <doc>
-              Constant "optical laser" (standard NXsource field).
+              Constant "visible light" (standard NXsource field and enum
+              value).
             </doc>
           </field>
           <field name="name" optional="true">
@@ -207,6 +208,23 @@
             Group names are the diagnostic key / detector_&lt;kind&gt;, so the
             match here is by class, not name.
           </doc>
+          <attribute name="damnit_source" optional="true">
+            <doc>
+              Writer ownership marker. Diagnostic series use
+              "metadata.diagnostic"; per-product reference groups use
+              "data_products".
+            </doc>
+            <enumeration>
+              <item value="metadata.diagnostic"></item>
+              <item value="data_products"></item>
+            </enumeration>
+          </attribute>
+          <attribute name="coordinates" optional="true">
+            <doc>
+              Diagnostic-series coordinate path, fixed to
+              /entry/shots/shot_index when present.
+            </doc>
+          </attribute>
         </group>
       </group>
       <group type="NXsample" name="sample" optional="true">
@@ -231,7 +249,7 @@
             HZDR_TARGET_PROFILE_VERSION and the profile document version.
           </doc>
           <enumeration>
-            <item value="0.6"></item>
+            <item value="0.7"></item>
           </enumeration>
         </attribute>
         <attribute name="damnit_provenance" optional="true">

@@ -174,6 +174,7 @@ def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
         assert source_shot_key.asstr()[0] == "HELPMI:20260610:000017"
         assert laser.attrs["NX_class"] == "NXsource"
         assert laser_name.asstr()[()] == "DRACO"
+        assert cast("h5py.Dataset", laser["probe"]).asstr()[()] == "visible light"
         assert laser_frequency.attrs["units"] == "Hz"
         assert laser_frequency[()] == pytest.approx(10.0)
         assert laser_pulse_energy.attrs["units"] == "J"
