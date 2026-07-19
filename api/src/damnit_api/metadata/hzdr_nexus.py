@@ -807,18 +807,34 @@ def _row_version(row: dict[str, Any]) -> int | None:
 def _warn_if_active_row_not_latest(
     active_rows: list[dict[str, Any]], rows: list[dict[str, Any]]
 ) -> None:
-    """Warn when the curated export marks a non-latest row `active`.
+    """Warn when the curated export has conflicting `active` rows.
 
     The supersede decision is keyed on `status == active` (an accepted pilot
-    simplification), which is correct only if the export marks the newest row
-    active. When a `version` is present we can detect the malformed case where
-    an older row is active and surface it without changing the decision.
+    simplification). Multiple active rows require source-owner review even when
+    they carry the same version. When a `version` is present we can also detect
+    the malformed case where one active row is older than the latest row. Both
+    conditions are surfaced without changing the status-authoritative decision.
     """
     known_versions = [v for v in (_row_version(r) for r in rows) if v is not None]
-    if not known_versions:
-        return
-    max_version = max(known_versions)
     active_versions = [_row_version(r) for r in active_rows]
+    max_version = max(known_versions) if known_versions else None
+    if len(active_rows) > 1:
+        sample = active_rows[0]
+        logger.warning(
+            "Curated LabFrog export marks multiple rows active "
+            "(campaign=%s shot_date=%s shot_number=%s active_count=%s "
+            "active_versions=%s max_version=%s); all remain current because "
+            "status is authoritative, but source-owner review is required",
+            sample.get("campaign"),
+            sample.get("shot_date"),
+            sample.get("shot_number"),
+            len(active_rows),
+            active_versions,
+            max_version,
+        )
+        return
+    if max_version is None:
+        return
     if any(v is not None and v < max_version for v in active_versions):
         sample = active_rows[0]
         logger.warning(

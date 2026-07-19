@@ -929,6 +929,40 @@ def test_active_keyed_supersede_warns_when_active_row_not_latest(
     assert any("non-latest row active" in record.message for record in caplog.records)
 
 
+def test_multiple_active_rows_warn_and_remain_current(tmp_path: Path, caplog):
+    """Duplicate active rows remain current but always require source review."""
+    sqlite_path = tmp_path / "campaign.sqlite"
+    with sqlite3.connect(sqlite_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE shots (
+                mongo_id TEXT PRIMARY KEY,
+                shot_number INTEGER,
+                date_time TEXT,
+                campaign TEXT,
+                status TEXT,
+                version INTEGER
+            )
+            """
+        )
+        connection.executemany(
+            "INSERT INTO shots VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                ("mongo-a", 17, "2026-06-10T12:00:20", "HELPMI", "active", 2),
+                ("mongo-b", 17, "2026-06-10T12:00:21", "HELPMI", "active", 2),
+            ],
+        )
+
+    with caplog.at_level("WARNING"):
+        shots = read_labfrog_sqlite_shots(sqlite_path)
+
+    assert [shot["metadata"]["has_newer_version"] for shot in shots] == [False, False]
+    assert any("multiple rows active" in record.message for record in caplog.records)
+    assert any(
+        "source-owner review is required" in record.message for record in caplog.records
+    )
+
+
 def test_first_shot_target_warns_once_when_a_later_shot_differs(caplog):
     """The first target remains the campaign snapshot while differences warn.
 
