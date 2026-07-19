@@ -456,6 +456,11 @@ def read_labfrog_nexus_shots(path: Path) -> list[dict[str, Any]]:
 # "other" and the original wiki text is kept in properties.wiki_type.
 _WIKI_TARGET_TYPE_MAP = {
     "foil": "foil",
+    "gas_jet": "gas_jet",
+    "cluster": "cluster",
+    "liquid": "liquid",
+    "structured": "structured",
+    "other": "other",
     "wafer": "foil",
     "solution": "liquid",
 }
@@ -476,7 +481,7 @@ def _apply_labfrog_target_provenance(
 ) -> bool:
     """Set ``target["provenance"]``/``["type"]``; return True for wiki targets."""
     if _is_manual_labfrog_target(record):
-        target["type"] = "other"
+        target["type"] = _map_wiki_target_type(wiki_type) if wiki_type else "other"
         target["provenance"] = "manual"
         return False
 
@@ -508,6 +513,11 @@ def _labfrog_target_metadata(record: dict[str, Any]) -> dict[str, Any]:
     wiki_page = _as_optional_string(record.get("target_wiki_page"))
     wiki_ref = _as_optional_string(record.get("target_wiki_ref"))
     wiki_type = _as_optional_string(record.get("target_type"))
+    gas_species = _as_optional_string(record.get("target_gas_species"))
+    gas_pressure = _canonical_target_gas_pressure_bar(
+        record.get("target_gas_pressure_value"),
+        record.get("target_gas_pressure_unit"),
+    )
     thickness = _canonical_target_thickness_nm(
         record.get("target_thickness_value"), record.get("target_thickness_unit")
     )
@@ -529,6 +539,10 @@ def _labfrog_target_metadata(record: dict[str, Any]) -> dict[str, Any]:
         target["thickness"] = thickness
     if notes:
         target["notes"] = notes
+    if gas_species:
+        target["gas_species"] = gas_species
+    if gas_pressure is not None:
+        target["gas_pressure"] = gas_pressure
     if wiki_page:
         target["wiki_page"] = wiki_page
     if wiki_ref:
@@ -604,6 +618,16 @@ def _canonical_target_thickness_nm(value: Any, unit: Any) -> float | None:
     return None
 
 
+def _canonical_target_gas_pressure_bar(value: Any, unit: Any) -> float | None:
+    parsed = _as_optional_float(value)
+    if parsed is None:
+        return None
+    unit_text = (_as_optional_string(unit) or "bar").strip().casefold()
+    if unit_text != "bar":
+        return None
+    return parsed
+
+
 def _normalised_length_unit(unit: Any) -> str | None:
     unit_text = _as_optional_string(unit)
     if unit_text is None:
@@ -672,6 +696,9 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
                 "target_type",
                 "target_production_date",
                 "target_origin",
+                "target_gas_species",
+                "target_gas_pressure_value",
+                "target_gas_pressure_unit",
                 "target_series",
                 "target_series_id",
                 "target_series_label",
@@ -738,6 +765,9 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
                 "target_type",
                 "target_production_date",
                 "target_origin",
+                "target_gas_species",
+                "target_gas_pressure_value",
+                "target_gas_pressure_unit",
             }
             and value is not None
             and value != ""

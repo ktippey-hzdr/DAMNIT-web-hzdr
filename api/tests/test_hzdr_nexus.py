@@ -563,6 +563,57 @@ def test_reads_labfrog_sqlite_target_columns_as_metadata_target(tmp_path: Path):
     ]
 
 
+def test_reads_labfrog_sqlite_gas_jet_into_metadata_target(tmp_path: Path):
+    sqlite_path = tmp_path / "campaign.sqlite"
+    with sqlite3.connect(sqlite_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE shots (
+                mongo_id TEXT PRIMARY KEY,
+                shot_number INTEGER,
+                date_time TEXT,
+                campaign TEXT,
+                target TEXT,
+                target_name TEXT,
+                target_notes TEXT,
+                target_source TEXT,
+                target_type TEXT,
+                target_gas_species TEXT,
+                target_gas_pressure_value REAL,
+                target_gas_pressure_unit TEXT
+            )
+            """
+        )
+        connection.execute(
+            "INSERT INTO shots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                "mongo-gas-jet",
+                23,
+                "2026-07-19T12:00:00Z",
+                "Solenoid",
+                "OTHER",
+                "OTHER",
+                "electron-team nozzle",
+                "manual",
+                "gas_jet",
+                "N2",
+                12.5,
+                "bar",
+            ),
+        )
+
+    shots = read_labfrog_sqlite_shots(sqlite_path)
+
+    assert shots[0]["metadata"]["target"] == {
+        "name": "OTHER",
+        "type": "gas_jet",
+        "provenance": "manual",
+        "notes": "electron-team nozzle",
+        "gas_species": "N2",
+        "gas_pressure": 12.5,
+    }
+
+
 def test_reads_labfrog_sqlite_wiki_target_extras_into_metadata_target(tmp_path: Path):
     """Wiki-catalog extras (schema v9/v10 columns) map onto metadata.target.
 
