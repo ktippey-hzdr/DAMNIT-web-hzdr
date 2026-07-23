@@ -278,7 +278,7 @@ if ($InitConfig) {
         Write-Host "Created config: $selectedConfigPath" -ForegroundColor Green
     }
     Write-Host "Edit repository paths, then run:"
-    Write-Host "powershell -NoProfile -ExecutionPolicy Bypass -File .\hzdr\scripts\hzdr-launch.ps1"
+    Write-Host ".\hzdr\scripts\hzdr-launch.ps1"
     exit 0
 }
 
