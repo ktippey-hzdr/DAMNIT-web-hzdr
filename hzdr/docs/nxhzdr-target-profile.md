@@ -1,6 +1,6 @@
-# `NXhzdr_target` Profile — v0.8
+# `NXhzdr_target` Profile — v0.9
 
-Updated: 2026-07-19
+Updated: 2026-07-23
 
 The versioned definition of the HZDR-local `NXhzdr_target` profile: the
 semantic map from `metadata.target.*` to the `/entry/sample` NeXus group, and
