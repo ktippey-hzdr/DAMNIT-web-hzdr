@@ -12,9 +12,33 @@ GitLab/planet-watchdog
 GitLab/shotcounter
 ```
 
-Launchers discover sibling checkouts or use `hzdr/scripts/hzdr-launch.config.json`
-(both `.ps1` and `.sh` honor its `auth.mode`; the launcher-config section of
-[api/docs/hzdr.md](../../../api/docs/hzdr.md) has the full key list).
+## Choose the launch mode
+
+### Standard configured API (spool mode)
+
+The regular API command reads `api/.env` and owns the enabled Kafka/ASAPO spool
+consumers and optional builder for its full process lifetime:
+
+```powershell
+Set-Location api
+uv run -m damnit_api.main
+```
+
+Use `api/.env.production.example` as the annotated starting point for spool and
+builder settings. This is the launch mode for consuming real or local broker
+events into the durable spool. Run the frontend separately as described in the
+root README.
+
+### HZDR package emulator
+
+The HZDR launcher is a separate orientation/UI mode. It discovers sibling
+checkouts or uses `hzdr/scripts/hzdr-launch.config.json`, generates a local
+`hzdr_sources.json` from bundled event packages, and serves that emulator
+catalog through the API and frontend. Both `.ps1` and `.sh` honor the launch
+config's `auth.mode`; the launcher-config section of
+[api/docs/hzdr.md](../../../api/docs/hzdr.md) has the full key list.
+
+Do not run both modes on the same API/frontend ports at once.
 
 ### ASAPO standalone image
 
@@ -75,7 +99,8 @@ $env:DW_API_METADATA__LABFROG_CURATED_DIR = "<curated_files>"
 uv run -m damnit_api.main
 ```
 
-Generated emulator files live under `.generated/hzdr-package-emulator`.
+Generated emulator files live under `.generated/hzdr-package-emulator`. They
+are not evidence that an event traversed a configured spool consumer.
 
 To check the local vertical slice (emulator events through Confirm Matches)
 without building a real pilot file, run

@@ -9,7 +9,7 @@ Kafka, and builds canonical per-campaign NeXus files. Everything
 HZDR-specific lives under [hzdr/](hzdr/) or in `hzdr`-prefixed modules; the
 rest of the tree tracks upstream.
 
-## Quick start
+## Standard launch: configured API and frontend
 
 Prerequisites: [uv](https://docs.astral.sh/uv/) and Node >= 24 (via nvm).
 
@@ -17,10 +17,15 @@ Install dependencies and git hooks:
 
     ./scripts/setup-dev.sh
 
-### Run the API
+### Run the configured API (spool mode)
 
-Auth mode is the usual setup. Copy the env template, fill in the
-credentials, then start the server:
+This is the regular service launch. It reads `api/.env` and, for the lifetime
+of the API process, runs any Kafka/ASAPO spool consumers and the builder enabled
+there. Start from `api/.env.production.example` when configuring those HZDR
+services; the smaller `.env.example` is enough for the upstream-style API.
+
+Auth mode is the usual setup. Copy the env template, fill in the credentials,
+then start the server:
 
 Windows PowerShell:
 
@@ -77,10 +82,12 @@ Linux/macOS:
 The app serves at http://localhost:5173/app/. If pnpm is not found, run
 `nvm use 24` first.
 
-## Quick start (HZDR stack)
+## HZDR emulator launch
 
-Starts the local broker harness, the API with the HZDR source provider, and
-the frontend in one go:
+This separate all-in-one development command generates a sample source catalog
+from the bundled event packages, then starts the API with that emulator catalog
+and the frontend. It is an orientation/UI mode, not the configured spool
+ingestion launch above:
 
     # Windows
     .\hzdr\scripts\hzdr-launch.ps1 -InitConfig

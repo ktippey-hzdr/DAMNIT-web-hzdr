@@ -277,7 +277,7 @@ if ($InitConfig) {
         Copy-Item $exampleConfigPath $selectedConfigPath
         Write-Host "Created config: $selectedConfigPath" -ForegroundColor Green
     }
-    Write-Host "Edit repository paths, then run:"
+    Write-Host "Edit emulator repository paths/settings, then run the HZDR emulator launcher:"
     Write-Host ".\hzdr\scripts\hzdr-launch.ps1"
     exit 0
 }
@@ -355,6 +355,8 @@ else {
 }
 
 Write-Step "Configuration"
+Write-Host "Launch mode: HZDR package emulator" -ForegroundColor Cyan
+Write-Host "Serves generated emulator sources; use the regular API CLI for configured spool ingestion."
 Write-Host "DAMNIT-web: $damnitRoot"
 Write-Host "ASAPO harness: $asapoRoot"
 Write-Host "Kafka broker: $kafkaRoot"
@@ -464,7 +466,7 @@ if ($producers.mongo) {
     $env:DW_API_FLOW_MONITOR__PRODUCERS__MONGO = ($producers.mongo | ConvertTo-Json -Depth 10 -Compress)
 }
 
-Write-Step "Starting DAMNIT-web"
+Write-Step "Starting DAMNIT-web emulator API/frontend"
 $devScript = Join-Path $apiRoot "scripts\hzdr-dev.ps1"
 $devArguments = @(
     "-NoProfile",
