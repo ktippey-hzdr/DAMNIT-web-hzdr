@@ -119,12 +119,12 @@ can be claimed.
 | HELPMI DDC term | HELPMI LaserClasses field | Current emulator key | Recommended key | Unit | NeXus equivalent | Gap / note |
 | --- | --- | --- | --- | --- | --- | --- |
 | Pulse energy | `pulse_energy` | `laser_energy_j` | `metadata.laser.pulse_energy_j` | J | `NXsource.pulse_energy` / `NXbeam.incident_energy` | Unit encoding differs: NeXus uses `NX_ENERGY` with separate `@units` attribute |
-| Pulse duration | `pulse_duration` | `pulse_width_fs` | `metadata.laser.pulse_duration_fs` | fs | `NXbeam.pulse_duration` (`NX_TIME`) | NeXus expects SI seconds; write value in fs, set `@units="fs"` |
+| Pulse duration | `pulse_duration` | `pulse_width_fs` | `metadata.laser.pulse_duration_fs` | fs | `NXbeam.pulse_duration` (`NX_TIME`) | Signed DRACO meaning is intensity FWHM; a typical pulse is about 30 fs. Write the value in fs and set `@units="fs"`. |
 | Central wavelength | `central_wavelength` | — | `metadata.laser.wavelength_nm` | nm | `NXbeam.incident_wavelength` (`NX_WAVELENGTH`) | **Missing** — not in emulator or any current producer |
 | Repetition rate | `repetition_rate` | — | `metadata.laser.repetition_rate_hz` | Hz | `NXsource.frequency` | **Missing** — DRACO typically single-shot; HELPMI still requires it |
 | Beam position X / Y | `beam_position_x`, `beam_position_y` | `beam_position_x_mm`, `beam_position_y_mm` | `metadata.laser.beam_pos_x_mm`, `metadata.laser.beam_pos_y_mm` | mm | `NXbeam.incident_beam_divergence` (partial) | Names OK; recommend de-duplicating `_mm` suffix to `@units="mm"` attribute |
-| Beam waist / size | `beam_waist_x`, `beam_waist_y` | — | `metadata.laser.beam_waist_x_um`, `metadata.laser.beam_waist_y_um` | µm | `NXbeam.extent` | **Missing** — beam size at focus not captured |
-| Polarization | `polarization` | — | `metadata.laser.polarization` | string enum | `NXbeam.incident_polarization` | **Missing** — `horizontal`, `vertical`, `circular`, `random` |
+| Beam waist / size | `beam_waist_x`, `beam_waist_y` | — | `metadata.laser.beam_waist_x_um`, `metadata.laser.beam_waist_y_um` | µm | HZDR explicit profile extension | Signed meaning is focal-spot radius at 1/e² intensity, normally symmetric for DRACO: about 1.5–2.25 µm radius (3–4.5 µm diameter). Writer and NXDL profile v0.9 use explicit `beam_waist_*_1e2_radius` paths rather than generic `extent_x`/`extent_y`. |
+| Polarization | `polarization` | — | `metadata.laser.polarization` | string enum | `NXbeam.incident_polarization` | Signed DRACO value is `p`: electric field in the plane of incidence, commonly at oblique incidence around 45 degrees for TNSA. |
 | Pulse contrast | `pulse_contrast` | — | `metadata.laser.contrast_ratio` | dimensionless | — | **Missing** — critical for laser-plasma experiments; not in standard NeXus |
 | Peak intensity | `peak_intensity` | — | `metadata.laser.peak_intensity_wcm2` | W/cm² | — | **Missing** — derivable from energy, duration, waist but not stored |
 | Laser system | `laser_system` | `source` field (`"LaserData"`) | `metadata.laser.system` | string | `NXsource.name` | `source` is producer label, not laser name; add `"DRACO"`, `"DRACO II"` |
@@ -136,6 +136,12 @@ can be claimed.
 > `beam_waist_x_um`/`beam_waist_y_um`) are the HELPMI cross-walk labels only.
 > Canonical units live in the metadata key registry; SQLite carries them in
 > the `units` table.
+>
+> **Facility sign-off 2026-07-23:** the pulse-duration, polarization, and
+> beam-waist meanings above are approved for the Semantic Test Baseline.
+> This is semantic approval, not proof that LaserData emits the fields. DAMNIT
+> writer/NXDL profile v0.9 implements the explicit waist-radius paths.
+> LaserData remains a future, non-blocking boundary for the test tier.
 
 ### 3.4 Target / sample
 

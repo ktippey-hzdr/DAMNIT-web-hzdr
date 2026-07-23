@@ -30,8 +30,10 @@ web UI reads.
 | **scicat_plugin** | Registers file/path references + metadata in SciCat (reuses `scicat-ingestor` worker codepaths; no binary upload) | Flask + `scicat-ingestor` | Sink; SciCat catalog registration (producer-side per file, or DAMNIT-side per campaign NeXus file) — see [integration-roadmap.md §SciCat Registration](status/integration-roadmap.md#scicat-registration) |
 
 A third producer, **LaserData** (`source = LaserData`, transported over ASAPO),
-exists in the wider HZDR setup but is not one of these repositories; it produces
-events of the same shape described below.
+exists in the wider HZDR setup but is not one of these repositories. It is a
+future Deployed Semantic Baseline boundary, not a Kafka-pilot or Semantic Test
+Baseline blocker. When activated, it will produce events of the same shape
+described below.
 
 ## End-to-End Data Flow
 

@@ -170,16 +170,18 @@
                 metadata.laser.beam_pos_y.
               </doc>
             </field>
-            <field name="extent_x" type="NX_FLOAT" units="NX_LENGTH" optional="true">
+            <field name="beam_waist_x_1e2_radius" type="NX_FLOAT" units="NX_LENGTH" optional="true">
               <doc>
-                Beam waist x; canonical unit um; source key
-                metadata.laser.beam_waist_x.
+                Focal-spot radius along x at 1/e^2 intensity; canonical unit
+                um; source key metadata.laser.beam_waist_x. This explicit HZDR
+                extension is not interchangeable with generic NXbeam.extent.
               </doc>
             </field>
-            <field name="extent_y" type="NX_FLOAT" units="NX_LENGTH" optional="true">
+            <field name="beam_waist_y_1e2_radius" type="NX_FLOAT" units="NX_LENGTH" optional="true">
               <doc>
-                Beam waist y; canonical unit um; source key
-                metadata.laser.beam_waist_y.
+                Focal-spot radius along y at 1/e^2 intensity; canonical unit
+                um; source key metadata.laser.beam_waist_y. This explicit HZDR
+                extension is not interchangeable with generic NXbeam.extent.
               </doc>
             </field>
             <field name="contrast_ratio" type="NX_FLOAT" units="NX_DIMENSIONLESS" optional="true">
@@ -250,7 +252,7 @@
             HZDR_TARGET_PROFILE_VERSION and the profile document version.
           </doc>
           <enumeration>
-            <item value="0.8"></item>
+            <item value="0.9"></item>
           </enumeration>
         </attribute>
         <attribute name="damnit_provenance" optional="true">

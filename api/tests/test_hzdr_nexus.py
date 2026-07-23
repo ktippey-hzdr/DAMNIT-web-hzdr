@@ -101,9 +101,11 @@ def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
                         "pulse_duration": 30.0,
                         "wavelength": 800.0,
                         "repetition_rate": 10.0,
-                        "polarization": "horizontal",
+                        "polarization": "p",
                         "beam_pos_x": 0.12,
                         "beam_pos_y": -0.08,
+                        "beam_waist_x": 1.8,
+                        "beam_waist_y": 1.9,
                     },
                     "vacuum": {
                         "chamber_pressure": 2.4e-6,
@@ -162,6 +164,8 @@ def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
         incident_wavelength = cast("h5py.Dataset", beam["incident_wavelength"])
         pulse_duration = cast("h5py.Dataset", beam["pulse_duration"])
         incident_polarization = cast("h5py.Dataset", beam["incident_polarization"])
+        beam_waist_x = cast("h5py.Dataset", beam["beam_waist_x_1e2_radius"])
+        beam_waist_y = cast("h5py.Dataset", beam["beam_waist_y_1e2_radius"])
         environment = cast("h5py.Group", handle["entry/sample/environment"])
         chamber_pressure = cast("h5py.Dataset", environment["chamber_pressure"])
         pre_shot_pressure = cast("h5py.Dataset", environment["pre_shot_pressure"])
@@ -185,7 +189,13 @@ def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
         assert incident_wavelength[()] == pytest.approx(800.0)
         assert pulse_duration.attrs["units"] == "fs"
         assert pulse_duration[()] == pytest.approx(30.0)
-        assert incident_polarization.asstr()[()] == "horizontal"
+        assert incident_polarization.asstr()[()] == "p"
+        assert beam_waist_x.attrs["units"] == "um"
+        assert beam_waist_x[()] == pytest.approx(1.8)
+        assert beam_waist_y.attrs["units"] == "um"
+        assert beam_waist_y[()] == pytest.approx(1.9)
+        assert "extent_x" not in beam
+        assert "extent_y" not in beam
         assert environment.attrs["NX_class"] == "NXenvironment"
         assert chamber_pressure.attrs["units"] == "mbar"
         assert chamber_pressure[()] == pytest.approx(2.4e-6)

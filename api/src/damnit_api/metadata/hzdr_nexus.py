@@ -1485,13 +1485,13 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
     )
     _write_optional_numeric_dataset(
         beam,
-        "extent_x",
+        "beam_waist_x_1e2_radius",
         laser.get("beam_waist_x"),
         unit_key="laser.beam_waist_x",
     )
     _write_optional_numeric_dataset(
         beam,
-        "extent_y",
+        "beam_waist_y_1e2_radius",
         laser.get("beam_waist_y"),
         unit_key="laser.beam_waist_y",
     )
@@ -1511,7 +1511,7 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
 # damnit_nxdl_version enumeration in hzdr/nxdl/NXhzdr_target.nxdl.xml must be
 # bumped to match. See hzdr/docs/nxhzdr-target-profile.md (target map) and
 # hzdr/docs/nexus-semantic-maps.md (laser/vacuum/diagnostic maps).
-HZDR_TARGET_PROFILE_VERSION = "0.8"
+HZDR_TARGET_PROFILE_VERSION = "0.9"
 HZDR_BRIDGE_PROFILE_VERSION = "hzdr-canonical-shot-v2"
 
 # All 118 IUPAC element symbols, for the conservative formula check below.

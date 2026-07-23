@@ -167,12 +167,15 @@ and every registered current-version mention across the docs; its `run --fix`
 mode rewrites the mechanical mirrors after a bump. Non-semantic
 edits to this document (wording, typo fixes) do not require a bump.
 
-Current version: **0.8** (lossless per-shot target preservation in the
-canonical bridge while retaining `/entry/sample` as the campaign snapshot,
-2026-07-19).
+Current version: **0.9** (facility-signed explicit 1/e² focal-spot radius
+paths in the DAMNIT writer and NXDL, 2026-07-23).
 
 History:
 
+- **0.9** (2026-07-23): replaces the semantically ambiguous laser beam-waist
+  datasets `extent_x` and `extent_y` with explicit
+  `beam_waist_x_1e2_radius` and `beam_waist_y_1e2_radius` fields. Values remain
+  in canonical `um` and represent focal-spot radii at 1/e² intensity.
 - **0.8** (2026-07-19): every canonical shot now retains its complete
   `metadata.target` block as JSON in the shot-aligned
   `/entry/shots/target_metadata_json` bridge column. `/entry/sample` remains
@@ -234,7 +237,12 @@ History:
   part of the profile rather than an unmodelled gap. Moving the beam group
   would be a semantic-map change requiring a version bump.
 
-No other deviations are tracked in v0.8.
+The former beam-waist label mismatch is resolved in v0.9. Facility-signed
+`laser.beam_waist_x` and `laser.beam_waist_y` values are written as explicit
+`beam_waist_x_1e2_radius` and `beam_waist_y_1e2_radius` datasets; generic
+`NXbeam.extent` semantics are not used.
+
+No other deviations are tracked in v0.9.
 
 ## 6. Future work
 

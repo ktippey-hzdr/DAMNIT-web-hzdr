@@ -77,12 +77,19 @@ from the more common sibling placement; see
 | Source | NeXus path (under `.../laser/beam`) | Canonical unit | Upstream NeXus field? |
 | --- | --- | --- | --- |
 | `laser.pulse_energy` | `incident_energy`, `@units` | J | Standard `NXbeam.incident_energy` |
-| `laser.pulse_duration` | `pulse_duration`, `@units` | fs | Standard `NXbeam.pulse_duration` |
+| `laser.pulse_duration` | `pulse_duration`, `@units` | fs | Standard `NXbeam.pulse_duration`; DRACO's typical value is about 30 fs, interpreted as intensity FWHM |
 | `laser.wavelength` | `incident_wavelength`, `@units` | nm | Standard `NXbeam.incident_wavelength` |
-| `laser.polarization` | `incident_polarization` | — (string enum) | Standard field name (`NXbeam.incident_polarization` is formally a vector; HZDR writes the registry's string label) |
+| `laser.polarization` | `incident_polarization` | — (string enum) | Standard field name (`NXbeam.incident_polarization` is formally a vector); DRACO's signed label is `p`, meaning the electric field lies in the plane of incidence |
 | `laser.beam_pos_x` / `beam_pos_y` | `beam_position_x` / `beam_position_y`, `@units` | mm | **Profile extension** — no standard `NXbeam` field |
-| `laser.beam_waist_x` / `beam_waist_y` | `extent_x` / `extent_y`, `@units` | um | Standard-adjacent (`NXbeam.extent` is a vector; HZDR writes per-axis scalars) |
+| `laser.beam_waist_x` / `beam_waist_y` | `beam_waist_x_1e2_radius` / `beam_waist_y_1e2_radius`, `@units` | um | Facility meaning is the focal-spot radius at 1/e² intensity, normally symmetric for DRACO (about 1.5–2.25 um radius from a 3–4.5 um diameter). The explicit HZDR profile fields are not interchangeable with generic `NXbeam.extent`; writer and NXDL implement them since profile v0.9. |
 | `laser.contrast_ratio` | `contrast_ratio`, `@units` | — (dimensionless) | **Profile extension** — no standard `NXbeam` field |
+
+These meanings were signed for the Semantic Test Baseline on 2026-07-23.
+DRACO commonly operates with p-polarization at oblique incidence (often about
+45 degrees) for TNSA experiments. The signed NDS v0.2 profile is the intent
+authority. Since profile v0.9, `write_nexus_laser_group()` and
+`NXhzdr_target` use the explicit 1/e²-radius dataset names and do not emit the
+old generic `extent_x`/`extent_y` aliases.
 
 ### 2.3 Per-shot series (`/entry/instrument/laser/shot_series`, `NXdata`)
 

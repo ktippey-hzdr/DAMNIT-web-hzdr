@@ -12,7 +12,7 @@ operators -> shotcounter (DRACO-Trigger)
                   |
                   +-- Kafka draco.trigger (shot_id) --> LabFrog -> Mongo/SQLite/NeXus --+
                   +-- Kafka draco.trigger (shot_id) --> planet-watchdog -> Kafka -------+
-                  +-- Kafka draco.trigger (shot_id) --> LaserData -> ASAPO ------------+
+                  +-- Kafka draco.trigger (shot_id) --> LaserData -> ASAPO ------------+  future/deferred
                                                                                        |
                                                           durable event spool <--------+
                                                                   |
