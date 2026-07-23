@@ -148,6 +148,7 @@ def test_from_json_registration_success(tmp_path, monkeypatch):
 def test_push_registration_returns_version_hash(tmp_path, monkeypatch):
     post = _FakePost({"ok": True, "pid": "pid-1", "version_hash": "deadbeef"})
     result = _register(tmp_path, _settings(endpoint="push"), monkeypatch, post)
+    assert result is not None
     assert result["scicat_version_hash"] == "deadbeef"
     assert post.calls[0]["url"] == f"{PLUGIN_URL}/scicat/push"
     body = post.calls[0]["json"]
@@ -226,6 +227,7 @@ def test_changed_rebuild_reposts(tmp_path, monkeypatch):
     second = _register(
         tmp_path, _settings(), monkeypatch, post2, nexus=nexus, previous=first
     )
+    assert second is not None
     assert second["scicat_pid"] == "pid-second"
     assert len(post2.calls) == 1
 
@@ -250,6 +252,7 @@ def test_read_previous_registration_roundtrip(tmp_path):
         },
     )
     previous = read_previous_registration(sources_file, SOURCE_KEY)
+    assert previous is not None
     assert previous["scicat_pid"] == "pid-9"
     assert previous["scicat_source_sha256"] == "abc123"
 

@@ -1,5 +1,6 @@
 import io
 import json
+from typing import Any, cast
 
 import numpy as np
 import pytest
@@ -177,7 +178,7 @@ def test_resolve_includes_error_for_failed_variable():
         "run": {"value": 1},
         "broken": {"value": None, "attributes": json.dumps(ERROR_ATTRS)},
     }
-    resolved = DamnitRun.resolve(record)
+    resolved = cast("dict[str, dict[str, Any]]", DamnitRun.resolve(record))
 
     assert "error" not in resolved["run"]
     assert resolved["broken"]["value"] is None

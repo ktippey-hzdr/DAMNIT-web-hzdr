@@ -17,7 +17,7 @@ import hashlib
 import json
 import logging
 from datetime import UTC, datetime
-from pathlib import Path  # noqa: TC003
+from pathlib import Path, PurePath  # noqa: TC003
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
@@ -86,7 +86,7 @@ def read_previous_registration(
 
 def _build_body(
     settings: HZDRScicatSettings,
-    nexus_path: Path,
+    nexus_path: PurePath,
     experiment_id: str,
     scientific_metadata: dict[str, Any],
     source_folder: str,

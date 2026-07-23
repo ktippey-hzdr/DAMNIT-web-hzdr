@@ -17,7 +17,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
-from typing import ClassVar
+from typing import Any, ClassVar
 
 import pytest
 
@@ -105,7 +105,7 @@ def wired(monkeypatch):
     )
 
 
-def _settings(tmp_path, *, asapo=False, kafka=False, builder=False):
+def _settings(tmp_path, *, asapo=False, kafka=False, builder=False) -> Any:
     return SimpleNamespace(
         damnit_path=tmp_path,
         hzdr_spool=SimpleNamespace(

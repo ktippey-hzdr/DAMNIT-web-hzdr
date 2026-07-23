@@ -34,7 +34,7 @@ import sys
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT / "api" / "src"))
@@ -260,54 +260,80 @@ def verify_semantic_nexus(path: Path) -> None:
     """Assert that every synthetic domain block survives into its NeXus home."""
     import h5py
 
+    def group(parent: h5py.Group, name: str) -> h5py.Group:
+        value = parent[name]
+        assert isinstance(value, h5py.Group)
+        return value
+
+    def dataset(parent: h5py.Group, name: str) -> h5py.Dataset:
+        value = parent[name]
+        assert isinstance(value, h5py.Dataset)
+        return value
+
     fixture = json.loads(SEMANTIC_FIXTURE.read_text(encoding="utf-8"))
     with h5py.File(path, "r") as handle:
-        entry = handle["entry"]
-        assert entry["definition"].asstr()[()] == "NXhzdr_target"
+        entry = group(handle, "entry")
+        assert dataset(entry, "definition").asstr()[()] == "NXhzdr_target"
 
-        sample = entry["sample"]
+        sample = group(entry, "sample")
         assert sample.attrs["NX_class"] == "NXsample"
-        assert sample["name"].asstr()[()] == "Synthetic Kapton witness"
-        assert sample["material"].asstr()[()] == "Kapton"
-        assert math.isclose(sample["thickness"][()], 500.0)
-        assert sample["thickness"].attrs["units"] == "nm"
+        assert dataset(sample, "name").asstr()[()] == "Synthetic Kapton witness"
+        assert dataset(sample, "material").asstr()[()] == "Kapton"
+        thickness = dataset(sample, "thickness")
+        assert math.isclose(thickness[()], 500.0)
+        assert thickness.attrs["units"] == "nm"
         assert sample.attrs["damnit_provenance"] == "manual"
 
-        laser = entry["instrument/laser"]
-        assert laser["name"].asstr()[()] == "DRACO synthetic"
-        assert laser["probe"].asstr()[()] == "visible light"
-        assert math.isclose(laser["frequency"][()], 10.0)
-        assert laser["frequency"].attrs["units"] == "Hz"
-        assert math.isclose(laser["pulse_energy"][()], 8.2)
-        assert laser["pulse_energy"].attrs["units"] == "J"
-        assert laser["beam/pulse_duration"].attrs["units"] == "fs"
-        assert laser["beam/incident_wavelength"].attrs["units"] == "nm"
+        instrument = group(entry, "instrument")
+        laser = group(instrument, "laser")
+        assert dataset(laser, "name").asstr()[()] == "DRACO synthetic"
+        assert dataset(laser, "probe").asstr()[()] == "visible light"
+        frequency = dataset(laser, "frequency")
+        assert math.isclose(frequency[()], 10.0)
+        assert frequency.attrs["units"] == "Hz"
+        pulse_energy = dataset(laser, "pulse_energy")
+        assert math.isclose(pulse_energy[()], 8.2)
+        assert pulse_energy.attrs["units"] == "J"
+        beam = group(laser, "beam")
+        assert dataset(beam, "pulse_duration").attrs["units"] == "fs"
+        assert dataset(beam, "incident_wavelength").attrs["units"] == "nm"
 
-        shot_keys = entry["shots/shot_key"].asstr()[...].tolist()
+        shots = group(entry, "shots")
+        shot_keys = list(dataset(shots, "shot_key").asstr()[...])
         shot_index = shot_keys.index(f"{EXPERIMENT_ID}:20260101:000002")
-        assert math.isclose(laser["shot_series/pulse_energy"][shot_index], 8.2)
-        assert laser["shot_series/pulse_energy"].attrs["units"] == "J"
+        shot_series = group(laser, "shot_series")
+        shot_pulse_energy = dataset(shot_series, "pulse_energy")
+        assert math.isclose(shot_pulse_energy[shot_index], 8.2)
+        assert shot_pulse_energy.attrs["units"] == "J"
 
-        environment = entry["sample/environment"]
-        assert math.isclose(environment["chamber_pressure"][()], 2.4e-6)
-        assert environment["chamber_pressure"].attrs["units"] == "mbar"
-        assert math.isclose(environment["pre_shot_pressure"][()], 1.1e-6)
-        assert environment["rga_dominant_species"].asstr()[()] == "H2O"
+        environment = group(sample, "environment")
+        chamber_pressure = dataset(environment, "chamber_pressure")
+        assert math.isclose(chamber_pressure[()], 2.4e-6)
+        assert chamber_pressure.attrs["units"] == "mbar"
+        assert math.isclose(dataset(environment, "pre_shot_pressure")[()], 1.1e-6)
+        assert dataset(environment, "rga_dominant_species").asstr()[()] == "H2O"
 
-        xray = entry["instrument/xray_counts/data"]
+        xray = dataset(group(instrument, "xray_counts"), "data")
         assert math.isclose(xray[shot_index], 1450.0)
         assert xray.attrs["units"] == "counts"
         assert math.isclose(
-            entry["instrument/detector_signal_mean/data"][shot_index], 2.25
+            dataset(group(instrument, "detector_signal_mean"), "data")[shot_index],
+            2.25,
         )
-        assert math.isclose(entry["instrument/alignment_score/data"][shot_index], 0.98)
+        assert math.isclose(
+            dataset(group(instrument, "alignment_score"), "data")[shot_index],
+            0.98,
+        )
 
-        event_ids = entry["source_events/event_id"].asstr()[...].tolist()
+        source_events = group(entry, "source_events")
+        event_ids = list(dataset(source_events, "event_id").asstr()[...])
         event_index = event_ids.index(SEMANTIC_EVENT_ID)
-        metadata = json.loads(entry["source_events/metadata_json"].asstr()[event_index])
+        metadata = json.loads(
+            str(dataset(source_events, "metadata_json").asstr()[event_index])
+        )
         assert metadata == fixture["metadata"]
         payload_ref = json.loads(
-            entry["source_events/payload_ref_json"].asstr()[event_index]
+            str(dataset(source_events, "payload_ref_json").asstr()[event_index])
         )
         assert payload_ref == fixture["payload_ref"]
 
@@ -491,7 +517,7 @@ class Step:
         print(f"\n== {self.label} ==")
         return self
 
-    def __exit__(self, exc_type, exc, _tb) -> bool:
+    def __exit__(self, exc_type, exc, _tb) -> Literal[False]:
         if exc_type is None:
             print(f"OK: {self.label}")
             return False

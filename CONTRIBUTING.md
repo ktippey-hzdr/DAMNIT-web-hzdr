@@ -11,7 +11,7 @@ The git hooks give you fast feedback locally and run in stages:
 
 - On commit: ruff (backend), eslint and prettier (frontend). These lint
   and auto-format the files you changed.
-- On push: type checks (frontend tsc; pyright once re-enabled).
+- On push: type checks (frontend tsc and Python pyright).
 - In CI: every check runs again and gates the merge.
 
 CI is the real gate. The local hooks just let you catch issues before you

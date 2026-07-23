@@ -224,7 +224,9 @@ def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
         assert product_detector.attrs["detector_type"] == "STREAK"
         detector_shot_keys = cast("h5py.Dataset", product_detector["shot_keys"])
         assert detector_shot_keys.asstr()[0] == "HELPMI:20260610:000017"
-        assert "detector_hdf5_dataset" not in handle["entry/instrument"]
+        assert "detector_hdf5_dataset" not in cast(
+            "h5py.Group", handle["entry/instrument"]
+        )
         assert "entry/data_products/dataset_path" in handle
         assert (f"entry/laserdata/camera_raw/{events[0]['event_id']}/values") in handle
 
@@ -1264,7 +1266,9 @@ def test_detector_groups_map_known_kinds_and_skip_transport_kinds(tmp_path: Path
         assert streak.attrs["detector_type"] == "STREAK"
         product_ids = cast("h5py.Dataset", streak["product_ids"])
         assert product_ids.asstr()[0] == "p1"
-        assert "detector_hdf5_dataset" not in handle["entry/instrument"]
+        assert "detector_hdf5_dataset" not in cast(
+            "h5py.Group", handle["entry/instrument"]
+        )
 
 
 def test_vacuum_group_without_target_keeps_sample_certifiable(tmp_path: Path):

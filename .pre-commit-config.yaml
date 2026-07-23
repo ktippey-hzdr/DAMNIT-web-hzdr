@@ -43,12 +43,12 @@ repos:
 
           # Upstream (#214) paused pyright; the fork keeps it active but
           # adopts upstream's pre-push staging for type-checks.
+          # Keep this hook unfiltered: it checks the full API tree and must run
+          # even when a push contains only non-Python changes.
           - id: pyright
             name: pyright
             entry: uv --directory api run --group lint pyright
             language: system
-            files: ^api/
-            types: [python]
             pass_filenames: false
             stages: [pre-push]
 

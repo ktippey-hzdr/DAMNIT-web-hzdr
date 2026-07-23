@@ -249,6 +249,7 @@ async def test_events_during_a_running_build_rearm_exactly_one_followup(tmp_path
         if idx == 0:
             first_started.set()
             await release.wait()  # hold the first build open
+        return 0, ""
 
     trigger = BuilderTrigger(_settings(tmp_path), runner=runner)
     stop = asyncio.Event()
@@ -312,6 +313,7 @@ async def test_cancel_during_inflight_build_stops_promptly(tmp_path):
     async def runner(cmd):
         started.set()
         await release.wait()  # never released; cancel must unwind this
+        return 0, ""
 
     trigger = BuilderTrigger(_settings(tmp_path), runner=runner)
     stop = asyncio.Event()

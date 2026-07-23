@@ -1261,7 +1261,10 @@ def _write_campaign_time_bounds(entry: h5py.Group, shots: list[dict[str, Any]]) 
     for name, value in bounds.items():
         existing = entry.get(name)
         if existing is not None:
-            if existing.attrs.get("damnit_source") != "shots":
+            if (
+                not isinstance(existing, h5py.Dataset)
+                or existing.attrs.get("damnit_source") != "shots"
+            ):
                 continue
             del entry[name]
         dataset = entry.create_dataset(name, data=value.isoformat())
