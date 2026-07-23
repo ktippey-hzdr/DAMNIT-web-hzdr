@@ -8,16 +8,14 @@ live status and process docs, and **guides/** the how-to material.
 ## Current status
 
 Data model, offline integration path, local acceptance test, operator review UI,
-and the read-only operational views (curated LabFrog campaign picker, producer
-status, flow-monitor Live mode) are implemented and committed. **Production
-deployment is live** at
-[https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/).
-The builder auto-trigger and SciCat registration landed 2026-07-04 (see the
-plans below). The real ASAPO SDK spool consumer is implemented
-(`RealAsapoSpoolConsumer`) but the deployment isn't yet pointed at live broker
-credentials; the `shotcounter` branch is verified but not yet merged to `main`.
-Real-broker ingestion end-to-end and the pilot replay remain — see the
-[roadmap](status/integration-roadmap.md).
+and the read-only operational views are implemented and committed. Historical
+deployment evidence records
+[https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/),
+but the endpoint was not re-probed during the 2026-07-23 local review. Builder
+auto-trigger and SciCat registration are implemented; deployed replay/PID proof,
+real-broker ingestion, the pilot replay, and the shotcounter branch merge remain.
+See the [roadmap](status/integration-roadmap.md) and short
+[handoff](status/handoff.md).
 
 ## Start here
 
@@ -40,6 +38,9 @@ Real-broker ingestion end-to-end and the pilot replay remain — see the
 | [MediaWiki integration](mediawiki-integration.md) | Read-only campaign-to-wiki link, configuration, and API endpoint |
 
 ## Plans — active
+
+All four plans were reviewed on 2026-07-23 and remain active because each has
+open human, deployment, producer, or upstreaming gates.
 
 | Document | Purpose |
 | --- | --- |

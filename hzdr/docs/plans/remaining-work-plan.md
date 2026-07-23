@@ -4,12 +4,15 @@ A focused plan for the items still open after the 2026-06-25 session. Companion 
 `integration-roadmap.md` (the full assessment); this file is just the next-steps
 playbook for the six remaining items, in recommended order.
 
+**Status (reviewed 2026-07-23):** Active. The shotcounter merge, deployment
+configuration, live-broker replay, and pilot-capture gates remain open.
+
 Status legend: 🟢 ready now (no external dependency) · 🟡 needs a human decision or
 config · 🔴 needs a real broker / live deployment.
 
 **2026-07-01 update:** production deployment is live at
 [https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/)
-(see `hzdr/docs/status/handoff.md` §Built 2026-07-01). Item 3 (ASAPO SDK swap) is now
+(historical deployment record; not re-probed on 2026-07-23). Item 3 (ASAPO SDK swap) is now
 code-complete — `RealAsapoSpoolConsumer` is implemented and selected via
 `DW_API_HZDR_SPOOL__BROKER_KIND=asapo`; only pointing it at the real broker's
 endpoint/beamtime/token and the gated integration test remain, so it moves

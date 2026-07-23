@@ -1,10 +1,17 @@
 # Integration Roadmap
 
-Updated: 2026-07-03
+Updated: 2026-07-23
+
+**2026-07-23 review:** local code and documentation were reconciled without
+restructuring this historical roadmap. The DAMNIT API suite passed with
+`346 passed, 5 skipped`; the HZDR-focused subset passed with
+`245 passed, 4 skipped, 102 deselected`. The documented production endpoint was
+not probed. The shotcounter merge, deployment Kafka restart/replay, real pilot
+capture, and deployed builder/SciCat replay evidence remain open.
 
 **2026-07-01:** production deployment is live at
 [https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/);
-see `hzdr/docs/status/handoff.md` §Built 2026-07-01. The ASAPO SDK swap (Work Order step 3
+this is retained as historical deployment evidence and was not re-probed on 2026-07-23. The ASAPO SDK swap (Work Order step 3
 below / `asapo-for-hzdr-damnit` §"Carry claim/flush/ack/replay-dedup pattern
 into real ASAPO SDK consumer") is now code-complete via
 `RealAsapoSpoolConsumer`; wiring the deployment's real broker credentials and
@@ -67,8 +74,9 @@ concrete gaps found, two fixed on the spot:
 The data model, offline integration path, local acceptance test, operator
 review UI, durable spool consumer, and flow-monitor health endpoint are all
 implemented and committed. Every repo's integration branch has been tested.
-Production deployment is live at
-[https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/).
+The documented production deployment is
+[https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/);
+its availability was not re-probed on 2026-07-23.
 The remaining work is (a) merging the shotcounter branch, (b) pointing the
 deployment's real ASAPO/Kafka spool consumers at live broker credentials and
 running restart/replay roundtrips, and (c) running the pilot capture.
@@ -263,7 +271,7 @@ Branch: `main`
 | Durable per-campaign spool with transport positions and dedup state | ✅ committed — `consumer/spool.py` + `consumer/asapo.py` (ASAPO) + `consumer/kafka.py` (Kafka trigger events); `DW_API_HZDR_SPOOL__ENABLED` / `DW_API_HZDR_KAFKA_SPOOL__ENABLED` activate background tasks in lifespan |
 | Real flow-monitor backend health (Kafka/ASAPO/Mongo) | ✅ committed — `GET /config/health`; async probes with 2 s timeout, `reachable+latency_ms` per service |
 | Production auth, storage, backup, logging, restart configuration | ✅ committed — `api/.env.production.example`, `hzdr/scripts/damnit-api.service` systemd unit; JSON logging already active when `DW_API_DEBUG=false` |
-| Live production deployment reachable | ✅ **[https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/)** — `api/scripts/damnit-api-deploy.sh`/`.ps1`, `frontend/nginx` proxy templates, LDAP against `ldap.fz-rossendorf.de` |
+| Production deployment recorded | ✅ Historical deployment evidence at **[https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/)** — `api/scripts/damnit-api-deploy.sh`/`.ps1`, `frontend/nginx` proxy templates, LDAP against `ldap.fz-rossendorf.de`; endpoint not re-probed on 2026-07-23 |
 | ASAPO SDK spool consumer wired to real broker | 🟡 `RealAsapoSpoolConsumer` implemented and selectable (`DW_API_HZDR_SPOOL__BROKER_KIND=asapo`); `.env.production.example` documents the setting. Still open: point the deployment at real broker credentials, and there is no real-broker roundtrip test for ASAPO yet (only Kafka has one) |
 | Builder auto-triggered after new spool events | ✅ committed — `consumer/builder_trigger.py` (`BuilderTrigger`): each spool consumer's `on_new_events_hook` signals a shared, debounced trigger that reruns `hzdr-hdf5-builder.py` as a subprocess (preserving its single-writer PID lock). Activated by `DW_API_HZDR_BUILDER__ENABLED=true`; starts as a lifespan background task. Events/trigger JSONL inputs derived from the running consumers' spool paths. Plan + tests in `hzdr/docs/plans/done/auto-builder-trigger-plan.md` / `tests/test_hzdr_builder_trigger.py`. A standalone systemd timer remains an optional alternative |
 | `runs.sqlite` projection for legacy table workflows | ⬜ optional; deferred |
@@ -533,21 +541,16 @@ complementary, not competing:
    built — the FAIR "one citable dataset per campaign" record. This is the path
    that back-populates `scicat_pid` into `hzdr_sources.json`.
 
-### Recommended DAMNIT-side wiring (when this is picked up)
+### Implemented DAMNIT-side wiring
 
-1. Add a builder post-step (in `hzdr-hdf5-builder.py` or a small registration
-   module) that assembles the §3.9 `RawDataset` fields
-   (`proposalId`=`experiment_id`, `instrumentId`, `scientificMetadata`=the shot
-   metadata dict, `sourceFolder`=`damnit_path`) and `POST`s the NeXus file path
-   to the configured plugin URL.
-2. Persist the returned `pid` as `payload_ref.scicat_pid` / a source-catalog
-   field; store `version_hash` (if using `/scicat/push`) to skip re-registration
-   when a rebuild is byte-identical.
-3. Surface a SciCat dataset link in the API alongside the wiki link (mirror the
-   MediaWiki endpoint pattern).
-4. Tests: a unit test with the plugin HTTP call mocked runs always; a gated
-   integration test (like the broker tests) runs only when a SciCat URL + token
-   are configured.
+1. The builder post-step in `hzdr-hdf5-builder.py` assembles the §3.9
+   `RawDataset` fields and `POST`s the NeXus path to the configured plugin.
+2. The returned `pid` and `version_hash` are persisted in the source catalog;
+   byte-identical rebuilds skip re-registration.
+3. The API and Link Records UI surface the SciCat dataset link alongside the
+   wiki link.
+4. Mocked HTTP tests run locally. Deployed PID back-population and unchanged-file
+   replay suppression remain external verification gates.
 
 Config lives in DAMNIT settings (`DW_API_*`) pointing at the plugin URL; the
 SciCat URL/token stay in the plugin's own env, never in DAMNIT API code (per the

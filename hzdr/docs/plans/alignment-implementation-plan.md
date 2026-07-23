@@ -1,6 +1,9 @@
 # Standards Alignment — Implementation Plan
 
-Updated: 2026-07-02
+Reviewed: 2026-07-23
+
+**Status:** Active. Local implementation phases have landed, but producer-side,
+live-service, and deferred ontology items remain open.
 
 The execution plan for enacting the alignment described in
 [standards-alignment.md](../standards-alignment.md). That document is the *what* (the
@@ -67,7 +70,7 @@ namespace.
 **Do:**
 1. ✅ **Done 2026-07-02:** updated the flow-monitor emulator
    (`_build_flow_monitor_metadata` and `enrich_latest_emulated_shot` in
-   `api/src/damnit_api/metadata/routers.py`) and the standalone
+   `api/src/damnit_api/metadata/hzdr_routers.py`) and the standalone
    `api/scripts/hzdr-package-emulator.py` / `api/scripts/generate-hzdr-example.py`
    generators to emit `metadata.laser.*` / `metadata.vacuum.*` namespaced bare keys
    (`pulse_energy`, `pulse_duration`, `beam_pos_x`/`beam_pos_y`, `chamber_pressure`) and
@@ -84,7 +87,7 @@ namespace.
    `hzdr_sources.json` round-trips them, and that `lint_metadata_keys()` is silent on the
    emulator's output.
 
-**Files:** `api/src/damnit_api/metadata/routers.py`, sibling producer configs,
+**Files:** `api/src/damnit_api/metadata/hzdr_routers.py`, sibling producer configs,
 `api/tests/` (new emulator-metadata test).
 
 **Exit:** a freshly emulated campaign shows `metadata.laser.*` and `metadata.vacuum.*`

@@ -1,10 +1,13 @@
 # Data-Transfer Protocol Status
 
-Last updated: 2026-07-03
+Last reviewed: 2026-07-23
 
 Per-source, per-repo implementation status for the HZDR DAMNIT pipeline data-transfer
 protocols. See `integration-roadmap.md` for the full work-order history; see
 `remaining-work-plan.md` for next-steps detail on open items.
+
+This review reflects local code and deterministic test evidence. Deployment-broker,
+production-service, and real ASAPO gates were not rerun on 2026-07-23.
 
 **Status legend**
 - ✅ implemented and committed (code or config in place)
@@ -22,7 +25,7 @@ protocols. See `integration-roadmap.md` for the full work-order history; see
 
 | Repo | What | Status |
 |------|------|--------|
-| **shotcounter** | `hzdr-event-v1` envelope: `schema_version`, stable `event_id`, canonical `experiment_id`, UTC timestamp | ✅ on branch, 24/24 tests pass |
+| **shotcounter** | `hzdr-event-v1` envelope: `schema_version`, stable `event_id`, canonical `experiment_id`, UTC timestamp | ✅ on branch; 24/24 was the previously recorded branch result (not rerun on 2026-07-23) |
 | **shotcounter** | `trigger_role` folded into `metadata.trigger.role` at the producer — wire format is now strictly closed | ✅ on branch |
 | **shotcounter** | Kafka key `<experiment_id>:<channel_id>` for per-stream ordering | ✅ on branch |
 | **shotcounter** | `IsShotCounterXX` per-channel gating (default `False`, opt-in); startup warning when all False + KafkaEnabled | ✅ on branch; decision: keep default False |
@@ -60,7 +63,7 @@ broker, then merge the shotcounter branch.
 | **planet-watchdog** | Production `settings/watchdog.json` pointed at real broker + canonical campaign | 🟡 ops config step; no code change needed |
 | **planet-watchdog** | `IsShotCounterXX`-gated authoritative shot number in event | 🔴 blocked on: shotcounter branch merge + shot-number authority wired end-to-end |
 | **DAMNIT** | `KafkaSpoolConsumer` consumes `planet.watchdog.events` topic (same consumer as Source 1) | ✅ committed |
-| **DAMNIT** | `WATCHDOG_KAFKA_TOPIC` constant in `metadata/routers.py` | ✅ committed |
+| **DAMNIT** | `WATCHDOG_KAFKA_TOPIC` constant in `metadata/hzdr_routers.py` | ✅ committed |
 | **DAMNIT** | Real restart/replay pass with watchdog events on deployment broker | 🟡 test infrastructure ready; pass not yet run |
 | **kafka-broker-docker** | `topics.env` registry entry for `planet.watchdog.events` | ✅ committed |
 
@@ -77,7 +80,7 @@ broker, then merge the shotcounter branch.
 
 | Repo | What | Status |
 |------|------|--------|
-| **labfrog-sqlite-tools** | `experiment_id`, beamtime provenance, schema v10 target catalog columns, migration, transform/export/NeXus plumbing | ✅ committed |
+| **labfrog-sqlite-tools** | `experiment_id`, beamtime provenance, schema v11 target/gas-jet catalog columns, migration, transform/export/NeXus plumbing | ✅ committed |
 | **labfrog-sqlite-tools** | Atomic export: temp-file + fsync + rename for SQLite and NeXus | ✅ was already in `write_sqlite`; confirmed |
 | **labfrog-sqlite-tools** | `bundle-complete.json` completion marker (atomic rename, per-file sha256) signals the pair is ready | ✅ committed |
 | **labfrog-sqlite-tools** | Opt-in immutable `retain_exports` snapshots via `export-campaign` CLI | ✅ committed |
@@ -97,16 +100,16 @@ broker, then merge the shotcounter branch.
 
 ## Source 4: ASAPO → DAMNIT via HTTP harness / real SDK
 
-**Transport:** HTTP (`GET /api/claim`, `POST /api/ack`); harness broker local, real SDK pending
+**Transport:** local HTTP harness or ASAPO SDK sidecar; deployment/live-broker proof pending
 **Protocol:** `hzdr-event-v1` JSON envelope; same claim→write+fsync→ack→dedup loop
-**Branch status:** harness + consumer committed; SDK swap pending
+**Branch status:** harness, SDK sidecar path, and DAMNIT adapters committed; deployment pending
 
 | Repo | What | Status |
 |------|------|--------|
 | **asapo-for-hzdr-damnit** | Local HTTP broker (`tools/local_message_suite.py`) proves claim-before-ack, flush/fsync-before-ack, campaign-scoped group offsets, replay dedup | ✅ committed |
 | **asapo-for-hzdr-damnit** | Example files use canonical `hzdr-event-v1` schema-version string | ✅ committed |
 | **asapo-for-hzdr-damnit** | `drop-in/consumer.env.example` documents both HTTP-harness and real ASAPO modes | ✅ committed |
-| **asapo-for-hzdr-damnit** | Real ASAPO SDK consumer/producer in `tools/local_message_suite.py` (`--transport asapo`): `asapo_consumer.create_consumer()` + `asapo_producer.create_producer()` | committed as an ASAPO-compatible sidecar/harness path |
+| **asapo-for-hzdr-damnit** | Real ASAPO SDK consumer/producer in `tools/local_message_suite.py` (`--transport asapo`): `asapo_consumer.create_consumer()` + `asapo_producer.create_producer()` | ✅ committed as an ASAPO-compatible sidecar path; live broker remains unverified |
 | **asapo-for-hzdr-damnit** | `drop-in/consumer.ps1` supports `DAMNIT_CONSUMER_TRANSPORT=asapo` to drive the SDK consumer | ✅ committed |
 | **DAMNIT** | `AsapoSpoolConsumer` (`consumer/asapo.py`): httpx async client, same base loop as Kafka consumer | ✅ committed |
 | **DAMNIT** | `DW_API_HZDR_SPOOL__BROKER_URL` required when enabled (no default — prevents silent connection to localhost) | ✅ committed |
@@ -133,4 +136,4 @@ broker, then merge the shotcounter branch.
 | Offline four-source integration test (`test_hzdr_integration.py`) | ✅ committed |
 | Versioned JSON Schema publication (public URL for `hzdr-event-vN.schema.json`) | ⬜ deferred until a second schema version is needed |
 | `shot_key` in table row-selection and review actions (UI refactor) | ⬜ post-pilot; tracked separately |
-| SciCat registration from builder post-step + `payload_ref.scicat_pid` | 🟡 `scicat_plugin` exists; DAMNIT builder wiring not yet done |
+| SciCat registration from builder post-step + `payload_ref.scicat_pid` | 🟡 DAMNIT builder wiring is implemented and locally tested; deployed PID back-population and replay suppression remain unverified |

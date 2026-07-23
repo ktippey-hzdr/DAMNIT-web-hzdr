@@ -1,6 +1,10 @@
 # DAMNIT-web-hzdr Deployment Plan
 
-Last updated: 2026-07-03
+Last reviewed: 2026-07-23
+
+**Status:** Active. The documented deployment endpoint was not probed during
+this local cleanup pass. Live Kafka restart/replay and pilot-capture gates remain
+open, so this plan is not ready for `plans/done/`.
 
 ## Status snapshot (2026-07-03)
 

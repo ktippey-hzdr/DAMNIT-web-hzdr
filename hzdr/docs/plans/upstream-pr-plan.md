@@ -1,6 +1,7 @@
 # Upstreaming plan: HZDR components → XFEL DAMNIT-web
 
-Status: in progress — Phase 0 + Phase 1 complete (updated 2026-07-07). Companion to [PR_NOTES.md](done/PR_NOTES.md),
+Status: active — Phase 0 + Phase 1 complete; Phase 2 + Phase 3 remain
+(reviewed 2026-07-23). Companion to [PR_NOTES.md](done/PR_NOTES.md),
 which is an earlier single-PR draft; this plan supersedes it with a split-PR strategy.
 
 ## 1. Baseline and divergence

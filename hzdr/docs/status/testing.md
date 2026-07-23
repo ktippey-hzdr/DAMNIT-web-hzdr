@@ -2,16 +2,20 @@
 
 ## Verified
 
-As of 2026-07-03:
+Evidence current through 2026-07-23:
 
-| Repository | Result | Notes |
+| Repository | Result | Evidence date and scope |
 | --- | --- | --- |
-| DAMNIT API | `239 passed, 5 skipped` | Via `hzdr/scripts/test-pilot-package.ps1 -NoCoverage`; broker tests skipped unless `-DockerTests` is used. |
-| LabFrog UI | `508 passed, 1 skipped, 9 deselected` | Included in the pilot package gate. |
-| LabFrog SQLite tools | `108 passed` | Included in the pilot package gate. |
-| DAQ File Watchdog | `247 passed, 3 skipped` | Included in the pilot package gate with ASAPO excluded by design. |
-| shotcounter | `23 passed` | Included in the pilot package gate; one NTP-tolerance test is deselected. |
-| ASAPO harness | `9 passed` | Deferred follow-up path; not part of the pilot package gate. |
+| DAMNIT API | `346 passed, 5 skipped` | Rerun 2026-07-23; full local API suite, with live integration gates skipped. |
+| LabFrog UI | `524 passed, 1 skipped, 3 deselected` | Latest recorded local suite result, 2026-07-19; not rerun in this cleanup pass. |
+| LabFrog SQLite tools | `115 passed` | Latest recorded local suite result, 2026-07-19; not rerun in this cleanup pass. |
+| DAQ File Watchdog | `247 passed, 3 skipped` | Rerun 2026-07-23; ASAPO excluded by design. |
+| shotcounter | `23 passed, 1 deselected` | Latest recorded local result, 2026-07-19; the `ntp` test was deselected and the suite was not rerun in this cleanup pass. |
+| ASAPO harness | `23 passed` | Latest recorded local result, 2026-07-19; deferred follow-up path and not rerun in this cleanup pass. |
+
+Only DAMNIT and DAQ File Watchdog were rerun on 2026-07-23. The sibling
+results are the latest recorded deterministic evidence from 2026-07-19. No
+live Kafka, ASAPO, SciCat, or production service was exercised for this table.
 
 `api/tests/test_hzdr_integration.py` is the offline system-contract test. It
 combines LabFrog, ASAPO, Watchdog, and DRACO inputs for
@@ -109,7 +113,7 @@ pilot config, then delegates to `test-all.ps1` for the selected suites:
 .\hzdr\scripts\test-pilot-package.ps1 -SkipSuites
 ```
 
-Last local result (2026-07-03): `hzdr/scripts/test-pilot-package.ps1 -NoCoverage`
+Last full pilot-package gate result (2026-07-03; not rerun on 2026-07-23): `hzdr/scripts/test-pilot-package.ps1 -NoCoverage`
 passed across DAMNIT, LabFrog, LabFrog SQLite tools, DAQ File Watchdog, and
 shotcounter. ASAPO is excluded by design for this pilot gate; the live broker
 variant with `-DockerTests` remains a deployment gate.

@@ -22,6 +22,14 @@ Install dependencies and git hooks:
 Auth mode is the usual setup. Copy the env template, fill in the
 credentials, then start the server:
 
+Windows PowerShell:
+
+    Copy-Item api\.env.example api\.env
+    Set-Location api
+    uv run -m damnit_api.main
+
+Linux/macOS:
+
     cp api/.env.example api/.env
     cd api
     uv run -m damnit_api.main
@@ -31,6 +39,13 @@ The API serves at http://localhost:8000.
 Local mode needs no credentials. Point it at a local DAMNIT directory
 (one with runs.sqlite, context.py and extracted_data); auth is disabled:
 
+Windows PowerShell:
+
+    Set-Location api
+    uv run -m damnit_api.main --path C:\path\to\damnit\dir
+
+Linux/macOS:
+
     cd api
     uv run -m damnit_api.main --path /path/to/damnit/dir
 
@@ -39,9 +54,22 @@ Local mode needs no credentials. Point it at a local DAMNIT directory
 Copy the env template and set VITE_API to your API (defaults to
 http://localhost:8000):
 
+Windows PowerShell:
+
+    Copy-Item frontend\apps\app\.env.example frontend\apps\app\.env.local
+
+Linux/macOS:
+
     cp frontend/apps/app/.env.example frontend/apps/app/.env.local
 
 Then start the dev server from the frontend directory:
+
+Windows PowerShell:
+
+    Set-Location frontend
+    pnpm run dev:app
+
+Linux/macOS:
 
     cd frontend
     pnpm run dev:app
