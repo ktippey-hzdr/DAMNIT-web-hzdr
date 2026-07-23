@@ -86,8 +86,8 @@ from the more common sibling placement; see
 
 These meanings were signed for the Semantic Test Baseline on 2026-07-23.
 DRACO commonly operates with p-polarization at oblique incidence (often about
-45 degrees) for TNSA experiments. The signed NDS v0.2 profile is the intent
-authority. Since profile v0.9, `write_nexus_laser_group()` and
+45 degrees) for TNSA experiments. The signed NDS v0.3 profile is the implemented
+transcription authority. Since profile v0.9, `write_nexus_laser_group()` and
 `NXhzdr_target` use the explicit 1/e²-radius dataset names and do not emit the
 old generic `extent_x`/`extent_y` aliases.
 
