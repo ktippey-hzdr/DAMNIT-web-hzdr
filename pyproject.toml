@@ -24,6 +24,10 @@ dev = [
     "ruff>=0.7",
 ]
 
+screenshots = [
+    "playwright>=1.45,<2",
+]
+
 [tool.uv]
 default-groups = ["dev"]
 

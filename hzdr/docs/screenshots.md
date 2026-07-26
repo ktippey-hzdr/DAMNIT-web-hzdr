@@ -1,9 +1,17 @@
 # Screenshots
 
-Captured 2026-07-07 from a local stack (`hzdr/scripts/hzdr-launch.ps1` flow:
-package-emulator data, `local` metadata provider, auth disabled) at
-1600×900. To refresh after a UI change, launch the stack, seed a few shots
-via `POST /metadata/hzdr/emulator/events`, and re-capture these five pages.
+All five images are generated from a disposable local fixture stack at a
+1600×900 viewport:
+
+```powershell
+uv run --group screenshots playwright install chromium  # one-time
+uv run --group screenshots python hzdr/scripts/capture-screenshots.py
+```
+
+The command creates canonical fixture events, runs the real package emulator,
+FastAPI service, and Vite frontend on ephemeral localhost ports, captures every
+page below, writes `screenshots/capture-receipt.json`, and stops the processes.
+It requires no broker, MongoDB, credentials, or production service.
 
 ## Home — source workspace
 

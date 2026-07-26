@@ -37,6 +37,13 @@ pnpm run dev:app          # Vite dev server at http://localhost:5173
 # point it at the API via apps/app/.env or root .env:  VITE_API=http://127.0.0.1:8000
 ```
 
+**Refresh all five HZDR documentation screenshots:**
+```
+uv run --group screenshots playwright install chromium  # one-time
+uv run --group screenshots python hzdr/scripts/capture-screenshots.py
+```
+The capture uses only a disposable local package-emulator stack.
+
 **Whole stack (API + frontend + local broker):**
 ```
 pwsh hzdr/scripts/hzdr-launch.ps1            # or: bash hzdr/scripts/hzdr-launch.sh
