@@ -100,6 +100,37 @@ if [[ ! -f "$SELECTED_CONFIG_PATH" ]]; then
   exit 1
 fi
 
+validate_config() {
+  "$PYTHON_BIN" - "$SELECTED_CONFIG_PATH" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8-sig") as handle:
+        json.load(handle)
+except json.JSONDecodeError as error:
+    print(
+        f"Invalid JSON config: {path}:{error.lineno}:{error.colno}: {error.msg}",
+        file=sys.stderr,
+    )
+    if error.msg == "Extra data":
+        print(
+            "Remove the content after the first complete JSON object; "
+            "the config was likely pasted or appended twice.",
+            file=sys.stderr,
+        )
+    print(
+        "Compare the file with hzdr-launch.config.example.json, then rerun "
+        "with --validate-only.",
+        file=sys.stderr,
+    )
+    raise SystemExit(1)
+PY
+}
+
+validate_config
+
 CONFIG_DIR="$(cd "$(dirname "$SELECTED_CONFIG_PATH")" && pwd)"
 
 config_get() {
@@ -110,7 +141,7 @@ import json
 import sys
 
 path, key, default = sys.argv[1:4]
-with open(path, encoding="utf-8") as handle:
+with open(path, encoding="utf-8-sig") as handle:
     value = json.load(handle)
 for part in key.split("."):
     if isinstance(value, dict):
@@ -139,7 +170,7 @@ import json
 import sys
 
 path, key = sys.argv[1:3]
-with open(path, encoding="utf-8") as handle:
+with open(path, encoding="utf-8-sig") as handle:
     value = json.load(handle)
 for part in key.split("."):
     if isinstance(value, dict):
