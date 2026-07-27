@@ -117,12 +117,32 @@
             <doc>
               Laser system label; source key metadata.laser.system.
             </doc>
+            <attribute name="damnit_source" optional="true">
+              <doc>
+                Present only when the value was filled from the deployment's
+                fixed laser-system configuration instead of a producer event
+                (profile 0.10; nexus-semantic-maps.md section 2.4).
+              </doc>
+              <enumeration>
+                <item value="config"></item>
+              </enumeration>
+            </attribute>
           </field>
           <field name="frequency" type="NX_FLOAT" units="NX_FREQUENCY" optional="true">
             <doc>
               Repetition rate; canonical unit Hz; source key
               metadata.laser.repetition_rate.
             </doc>
+            <attribute name="damnit_source" optional="true">
+              <doc>
+                Present only when the value was filled from the deployment's
+                fixed laser-system configuration instead of a producer event
+                (profile 0.10; nexus-semantic-maps.md section 2.4).
+              </doc>
+              <enumeration>
+                <item value="config"></item>
+              </enumeration>
+            </attribute>
           </field>
           <field name="pulse_energy" type="NX_FLOAT" units="NX_ENERGY" optional="true">
             <doc>
@@ -151,12 +171,38 @@
                 Central wavelength; canonical unit nm; source key
                 metadata.laser.wavelength.
               </doc>
+              <attribute name="damnit_source" optional="true">
+                <doc>
+                  Present only when the value was filled from the deployment's
+                  fixed laser-system configuration instead of a producer event
+                  (profile 0.10; nexus-semantic-maps.md section 2.4).
+                </doc>
+                <enumeration>
+                  <item value="config"></item>
+                </enumeration>
+              </attribute>
             </field>
             <field name="incident_polarization" optional="true">
               <doc>
-                Polarization label (string enum, registry key
-                laser.polarization).
+                Polarization label; source key metadata.laser.polarization.
+                The accepted vocabulary is LASER_POLARIZATION_VALUES in
+                api/src/damnit_api/metadata/hzdr_event.py (p, s, horizontal,
+                vertical, linear, circular, circular_left, circular_right,
+                elliptical, unpolarized; DRACO's facility-signed value is p).
+                Not enumerated here: an off-vocabulary producer label is
+                warned about by the metadata linter and still written, so a
+                file must not fail certification over it.
               </doc>
+              <attribute name="damnit_source" optional="true">
+                <doc>
+                  Present only when the value was filled from the deployment's
+                  fixed laser-system configuration instead of a producer event
+                  (profile 0.10; nexus-semantic-maps.md section 2.4).
+                </doc>
+                <enumeration>
+                  <item value="config"></item>
+                </enumeration>
+              </attribute>
             </field>
             <field name="beam_position_x" type="NX_FLOAT" units="NX_LENGTH" optional="true">
               <doc>
@@ -252,7 +298,7 @@
             HZDR_TARGET_PROFILE_VERSION and the profile document version.
           </doc>
           <enumeration>
-            <item value="0.9"></item>
+            <item value="0.10"></item>
           </enumeration>
         </attribute>
         <attribute name="damnit_provenance" optional="true">

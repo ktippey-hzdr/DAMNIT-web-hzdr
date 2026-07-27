@@ -182,6 +182,7 @@ def build(args: argparse.Namespace) -> tuple[Path, Path]:
             shots=shots,
             events=normalized_events,
             source_nexus=args.labfrog_nexus,
+            laser_config=_laser_config(),
         )
         scicat = _register_scicat(
             output_nexus, sources_file, experiment_id, args.source_key, shots
@@ -196,6 +197,21 @@ def build(args: argparse.Namespace) -> tuple[Path, Path]:
             scicat=scicat,
         )
     return output_nexus, sources_file
+
+
+def _laser_config() -> dict[str, Any]:
+    """Fixed laser-system constants for this deployment (empty unless set).
+
+    The fields no per-shot producer supplies — central wavelength, repetition
+    rate, polarization, system name — are stated once as DW_API_HZDR_LASER__*
+    settings and filled into /entry/instrument/laser here; see
+    hzdr/docs/standards-alignment.md §3.10 and the HZDRLaserSettings docstring.
+    Read the same lazy way as the SciCat block below, so the builder keeps
+    working as a standalone script in an unconfigured checkout.
+    """
+    from damnit_api.shared.settings import settings
+
+    return settings.hzdr_laser.as_metadata()
 
 
 def _register_scicat(

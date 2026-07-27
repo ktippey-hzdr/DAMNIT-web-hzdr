@@ -411,6 +411,11 @@ def test_flow_monitor_emulator_emits_namespaced_bare_keys(tmp_path: Path):
 
     assert isinstance(metadata["laser"], dict)
     assert isinstance(metadata["laser"]["pulse_energy"], float)
+    # The fixed laser-system constants a real LaserData producer repeats on
+    # every shot (standards-alignment.md §3.3/§3.10).
+    assert metadata["laser"]["wavelength"] == pytest.approx(800.0)
+    assert metadata["laser"]["repetition_rate"] == pytest.approx(1.0)
+    assert metadata["laser"]["polarization"] == "p"
     assert isinstance(metadata["vacuum"], dict)
     assert isinstance(metadata["vacuum"]["chamber_pressure"], float)
     assert isinstance(metadata["target"], dict)

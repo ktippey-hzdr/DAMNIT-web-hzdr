@@ -330,6 +330,74 @@ class HZDRScicatSettings(BaseModel):
         return self
 
 
+class HZDRLaserSettings(BaseModel):
+    """Fixed laser-system constants for the campaign NeXus file.
+
+    Closes the "add to source catalog" half of the standards-alignment gap
+    summary (hzdr/docs/standards-alignment.md §3.10): central wavelength,
+    repetition rate, polarization, and laser system name are properties of the
+    *system*, not of a shot, so no producer event naturally carries them.  A
+    deployment states them once here and the builder fills them into
+    ``/entry/instrument/laser`` for every campaign it writes.
+
+    Keys are the registry's bare ``metadata.laser.*`` names with the canonical
+    units of the registry (CLAUDE.md "Metadata key registry"): ``wavelength``
+    in nm, ``repetition_rate`` in Hz.  Producer-supplied values always win —
+    this block only fills what no event carried — and every value it does fill
+    is stamped ``damnit_source="config"`` in the NeXus file so a configured
+    constant is never mistaken for a measured one (nexus-semantic-maps.md §2).
+
+    Unset fields (the default) are simply not written: an unconfigured
+    deployment builds exactly the file it built before.  For DRACO the values
+    are ``SYSTEM=DRACO``, ``WAVELENGTH=800``, ``POLARIZATION=p``.
+    """
+
+    system: str = ""
+    wavelength: float | None = Field(default=None, gt=0)
+    repetition_rate: float | None = Field(default=None, ge=0)
+    polarization: str = ""
+
+    def as_metadata(self) -> dict[str, object]:
+        """Configured constants as a ``metadata.laser.*`` block (bare keys).
+
+        Raises ``ValueError`` for a polarization label outside the registry's
+        string enum.  Deployment config is under local control, so a typo is
+        rejected rather than written into a certified file — unlike producer
+        metadata, which the envelope keeps open and ``lint_metadata_keys()``
+        only warns about.  The check lives here rather than in a validator
+        because ``metadata.hzdr_event`` cannot be imported while ``Settings()``
+        is still being constructed (``metadata/__init__`` imports back into
+        this package); by the time a builder asks for the block, it can.
+        """
+        self._check_polarization()
+        configured: dict[str, object] = {}
+        if self.system:
+            configured["system"] = self.system
+        if self.wavelength is not None:
+            configured["wavelength"] = self.wavelength
+        if self.repetition_rate is not None:
+            configured["repetition_rate"] = self.repetition_rate
+        if self.polarization:
+            configured["polarization"] = self.polarization
+        return configured
+
+    def _check_polarization(self) -> None:
+        from ..metadata.hzdr_event import LASER_POLARIZATION_VALUES
+
+        if not self.polarization:
+            return
+        if self.polarization.strip().lower() in LASER_POLARIZATION_VALUES:
+            return
+        accepted = ", ".join(sorted(LASER_POLARIZATION_VALUES))
+        msg = (
+            f"DW_API_HZDR_LASER__POLARIZATION={self.polarization!r} is not an "
+            f"accepted polarization label ({accepted}). Extend "
+            "LASER_POLARIZATION_VALUES in metadata/hzdr_event.py if the "
+            "facility really uses a new one."
+        )
+        raise ValueError(msg)
+
+
 class HZDRWikiSettings(BaseModel):
     """MediaWiki link configuration for campaign pages.
 

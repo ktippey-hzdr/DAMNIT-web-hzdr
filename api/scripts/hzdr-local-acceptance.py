@@ -297,6 +297,10 @@ def verify_semantic_nexus(path: Path) -> None:
         beam = group(laser, "beam")
         assert dataset(beam, "pulse_duration").attrs["units"] == "fs"
         assert dataset(beam, "incident_wavelength").attrs["units"] == "nm"
+        assert dataset(beam, "incident_polarization").asstr()[()] == "horizontal"
+        # Producer-supplied, so unmarked: only laser_config fills carry
+        # damnit_source="config" (nexus-semantic-maps.md §2.4).
+        assert "damnit_source" not in dataset(beam, "incident_wavelength").attrs
 
         shots = group(entry, "shots")
         shot_keys = list(dataset(shots, "shot_key").asstr()[...])

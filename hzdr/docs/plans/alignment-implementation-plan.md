@@ -75,11 +75,20 @@ namespace.
    generators to emit `metadata.laser.*` / `metadata.vacuum.*` namespaced bare keys
    (`pulse_energy`, `pulse_duration`, `beam_pos_x`/`beam_pos_y`, `chamber_pressure`) and
    a `metadata.target` object (bare `temperature` nested under it) instead of the legacy
-   flat/suffixed keys. Newly-added constant fields (wavelength, rep rate, polarization,
-   laser system) are still open — not part of this pass.
-2. ⬜ Update the LaserData / shotcounter producers (sibling repos) to emit the same
+   flat/suffixed keys. ✅ **Extended 2026-07-27:** both emulators
+   (`_build_flow_monitor_metadata` and `api/scripts/hzdr-package-emulator.py`) now also
+   emit the constant fields `wavelength`, `repetition_rate`, and `polarization`, the way a
+   real LaserData producer repeats its own configuration.
+2. 🟡 Update the LaserData / shotcounter producers (sibling repos) to emit the same
    namespaced keys. Fixed-per-system values (wavelength, rep rate, polarization) can come
    from producer config rather than per-shot data.
+   ✅ **DAMNIT side done 2026-07-27 — the fields no longer wait on the producers:** a
+   deployment states the constants once as `DW_API_HZDR_LASER__{SYSTEM,WAVELENGTH,
+   REPETITION_RATE,POLARIZATION}` (`HZDRLaserSettings`) and the builder fills them into
+   `/entry/instrument/laser`, marked `damnit_source="config"` (profile v0.10,
+   [nexus-semantic-maps.md §2.4](../nexus-semantic-maps.md#24-fixed-laser-system-constants-damnit_sourceconfig-since-v010)).
+   A producer value always wins, so a producer repo can start emitting the keys at any
+   time without a config change. ⬜ The producer-side capture itself is still open.
 3. ✅ **Done 2026-07-02:** characterization tests
    (`test_flow_monitor_emulator_emits_namespaced_bare_keys`,
    `test_flow_monitor_emulator_enrich_action_keeps_namespaced_keys` in
@@ -87,8 +96,9 @@ namespace.
    `hzdr_sources.json` round-trips them, and that `lint_metadata_keys()` is silent on the
    emulator's output.
 
-**Files:** `api/src/damnit_api/metadata/hzdr_routers.py`, sibling producer configs,
-`api/tests/` (new emulator-metadata test).
+**Files:** `api/src/damnit_api/metadata/hzdr_routers.py`,
+`api/src/damnit_api/shared/hzdr_settings.py`, `api/scripts/hzdr-hdf5-builder.py`,
+sibling producer configs, `api/tests/` (emulator-metadata, config, and writer tests).
 
 **Exit:** a freshly emulated campaign shows `metadata.laser.*` and `metadata.vacuum.*`
 populated; legacy-key linter from Phase 0 is silent on emulator output.

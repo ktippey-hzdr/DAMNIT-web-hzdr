@@ -1170,6 +1170,108 @@ def test_bridge_writes_campaign_time_bounds(tmp_path: Path):
         assert end.attrs["damnit_source"] == "shots"
 
 
+def test_fixed_laser_config_fills_the_campaign_group(tmp_path: Path):
+    """The fields no producer sends — wavelength, repetition rate,
+    polarization, system name — come from the deployment's fixed laser config
+    (standards-alignment.md §3.10) and are marked as configured, not measured.
+
+    The laser group is written even though no shot carries a laser block: the
+    constants describe the laser, not the shot.
+    """
+    output_nexus = tmp_path / "canonical.nxs"
+    shots, events = reconcile_canonical_shots(
+        [normalized_event()],
+        experiment_id="HELPMI",
+        source_key="hzdr-labfrog",
+        labfrog_shots=[],
+    )
+
+    write_nexus_bridge(
+        output_path=output_nexus,
+        experiment_id="HELPMI",
+        shots=shots,
+        events=events,
+        laser_config={
+            "system": "DRACO",
+            "wavelength": 800.0,
+            "repetition_rate": 1.0,
+            "polarization": "p",
+        },
+    )
+
+    with h5py.File(output_nexus, "r") as handle:
+        laser = cast("h5py.Group", handle["entry/instrument/laser"])
+        beam = cast("h5py.Group", laser["beam"])
+        name = cast("h5py.Dataset", laser["name"])
+        frequency = cast("h5py.Dataset", laser["frequency"])
+        wavelength = cast("h5py.Dataset", beam["incident_wavelength"])
+        polarization = cast("h5py.Dataset", beam["incident_polarization"])
+
+        assert laser.attrs["NX_class"] == "NXsource"
+        assert name.asstr()[()] == "DRACO"
+        assert frequency[()] == pytest.approx(1.0)
+        assert frequency.attrs["units"] == "Hz"
+        assert wavelength[()] == pytest.approx(800.0)
+        assert wavelength.attrs["units"] == "nm"
+        assert polarization.asstr()[()] == "p"
+        for dataset in (name, frequency, wavelength, polarization):
+            assert dataset.attrs["damnit_source"] == "config"
+
+
+def test_producer_laser_values_win_over_fixed_config(tmp_path: Path):
+    """Config states what the laser *is*; a producer value is a measurement
+    and must never be overwritten by it — nor carry the config marker."""
+    output_nexus = tmp_path / "canonical.nxs"
+    shots, events = reconcile_canonical_shots(
+        [normalized_event(metadata={"laser": {"wavelength": 1053.0}})],
+        experiment_id="HELPMI",
+        source_key="hzdr-labfrog",
+        labfrog_shots=[],
+    )
+
+    write_nexus_bridge(
+        output_path=output_nexus,
+        experiment_id="HELPMI",
+        shots=shots,
+        events=events,
+        laser_config={"wavelength": 800.0, "polarization": "p"},
+    )
+
+    with h5py.File(output_nexus, "r") as handle:
+        beam = cast("h5py.Group", handle["entry/instrument/laser/beam"])
+        wavelength = cast("h5py.Dataset", beam["incident_wavelength"])
+        polarization = cast("h5py.Dataset", beam["incident_polarization"])
+
+        assert wavelength[()] == pytest.approx(1053.0)
+        assert "damnit_source" not in wavelength.attrs
+        # The gap the producer left is still filled, and still marked.
+        assert polarization.asstr()[()] == "p"
+        assert polarization.attrs["damnit_source"] == "config"
+
+
+def test_bridge_without_laser_config_is_unchanged(tmp_path: Path):
+    """An unconfigured deployment builds the file it built before: no laser
+    group appears out of nowhere when nothing supplies laser metadata."""
+    output_nexus = tmp_path / "canonical.nxs"
+    shots, events = reconcile_canonical_shots(
+        [normalized_event()],
+        experiment_id="HELPMI",
+        source_key="hzdr-labfrog",
+        labfrog_shots=[],
+    )
+
+    write_nexus_bridge(
+        output_path=output_nexus,
+        experiment_id="HELPMI",
+        shots=shots,
+        events=events,
+    )
+
+    with h5py.File(output_nexus, "r") as handle:
+        assert "entry/instrument/laser/name" not in handle
+        assert "entry/instrument/laser/beam" not in handle
+
+
 def test_time_bounds_refresh_damnit_written_datasets(tmp_path: Path):
     """Bounds written by DAMNIT (damnit_source marker) are rewritten on a
     later build so end_time tracks a growing campaign."""

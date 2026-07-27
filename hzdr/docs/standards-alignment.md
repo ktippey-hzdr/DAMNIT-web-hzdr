@@ -1,6 +1,6 @@
 # Standards Alignment: DAPHNE4NFDI, HELPMI, NeXus, SciCat
 
-Updated: 2026-07-02
+Updated: 2026-07-27
 
 How the HZDR/DAMNIT schema relates to broader photon/neutron/laser-plasma data
 standards (DAPHNE4NFDI, HELPMI, NeXus, SciCat, Plasma-MDS, openPMD), a detailed
@@ -120,14 +120,35 @@ can be claimed.
 | --- | --- | --- | --- | --- | --- | --- |
 | Pulse energy | `pulse_energy` | `laser_energy_j` | `metadata.laser.pulse_energy_j` | J | `NXsource.pulse_energy` / `NXbeam.incident_energy` | Unit encoding differs: NeXus uses `NX_ENERGY` with separate `@units` attribute |
 | Pulse duration | `pulse_duration` | `pulse_width_fs` | `metadata.laser.pulse_duration_fs` | fs | `NXbeam.pulse_duration` (`NX_TIME`) | Signed DRACO meaning is intensity FWHM; a typical pulse is about 30 fs. Write the value in fs and set `@units="fs"`. |
-| Central wavelength | `central_wavelength` | — | `metadata.laser.wavelength_nm` | nm | `NXbeam.incident_wavelength` (`NX_WAVELENGTH`) | **Missing** — not in emulator or any current producer |
-| Repetition rate | `repetition_rate` | — | `metadata.laser.repetition_rate_hz` | Hz | `NXsource.frequency` | **Missing** — DRACO typically single-shot; HELPMI still requires it |
+| Central wavelength | `central_wavelength` | `wavelength` (emulators) | `metadata.laser.wavelength_nm` | nm | `NXbeam.incident_wavelength` (`NX_WAVELENGTH`) | ✅ captured 2026-07-27 — emulators emit it and `DW_API_HZDR_LASER__WAVELENGTH` fills it when a producer does not (§3.3.1); real LaserData capture still open |
+| Repetition rate | `repetition_rate` | `repetition_rate` (emulators) | `metadata.laser.repetition_rate_hz` | Hz | `NXsource.frequency` | ✅ captured 2026-07-27 via `DW_API_HZDR_LASER__REPETITION_RATE` (§3.3.1); DRACO typically single-shot, but HELPMI requires the field |
 | Beam position X / Y | `beam_position_x`, `beam_position_y` | `beam_position_x_mm`, `beam_position_y_mm` | `metadata.laser.beam_pos_x_mm`, `metadata.laser.beam_pos_y_mm` | mm | `NXbeam.incident_beam_divergence` (partial) | Names OK; recommend de-duplicating `_mm` suffix to `@units="mm"` attribute |
 | Beam waist / size | `beam_waist_x`, `beam_waist_y` | — | `metadata.laser.beam_waist_x_um`, `metadata.laser.beam_waist_y_um` | µm | HZDR explicit profile extension | Signed meaning is focal-spot radius at 1/e² intensity, normally symmetric for DRACO: about 1.5–2.25 µm radius (3–4.5 µm diameter). Writer and NXDL profile v0.9 use explicit `beam_waist_*_1e2_radius` paths rather than generic `extent_x`/`extent_y`. |
-| Polarization | `polarization` | — | `metadata.laser.polarization` | string enum | `NXbeam.incident_polarization` | Signed DRACO value is `p`: electric field in the plane of incidence, commonly at oblique incidence around 45 degrees for TNSA. |
+| Polarization | `polarization` | `polarization` (emulators) | `metadata.laser.polarization` | string enum | `NXbeam.incident_polarization` | ✅ captured 2026-07-27 via `DW_API_HZDR_LASER__POLARIZATION` (§3.3.1); the enum is written down as `LASER_POLARIZATION_VALUES`. Signed DRACO value is `p`: electric field in the plane of incidence, commonly at oblique incidence around 45 degrees for TNSA. |
 | Pulse contrast | `pulse_contrast` | — | `metadata.laser.contrast_ratio` | dimensionless | — | **Missing** — critical for laser-plasma experiments; not in standard NeXus |
 | Peak intensity | `peak_intensity` | — | `metadata.laser.peak_intensity_wcm2` | W/cm² | — | **Missing** — derivable from energy, duration, waist but not stored |
-| Laser system | `laser_system` | `source` field (`"LaserData"`) | `metadata.laser.system` | string | `NXsource.name` | `source` is producer label, not laser name; add `"DRACO"`, `"DRACO II"` |
+| Laser system | `laser_system` | `source` field (`"LaserData"`) | `metadata.laser.system` | string | `NXsource.name` | `source` is producer label, not laser name; set `DW_API_HZDR_LASER__SYSTEM` to `"DRACO"` / `"DRACO II"` per deployment (§3.3.1) |
+
+#### 3.3.1 Fixed laser-system constants
+
+Four of the rows above — central wavelength, repetition rate, polarization,
+and the laser system name — describe the *laser*, not the shot, so no producer
+event naturally carries them. Since **2026-07-27** a deployment states them
+once as `DW_API_HZDR_LASER__{SYSTEM,WAVELENGTH,REPETITION_RATE,POLARIZATION}`
+(bare registry keys, registry units) and the builder fills them into
+`/entry/instrument/laser`. This is the "add to source catalog" route of the
+§3.10 gap summary, implemented DAMNIT-side so it does not wait on the producer
+repos.
+
+A producer value always wins over the configured one; only gaps are filled,
+and every filled dataset carries `damnit_source="config"` so a campaign
+constant is never read as a measured value (NXhzdr_target profile v0.10,
+[nexus-semantic-maps.md §2.4](nexus-semantic-maps.md#24-fixed-laser-system-constants-damnit_sourceconfig-since-v010)).
+Both emulators emit the three shot-carried keys as a real LaserData producer
+would, so the local end-to-end path is populated without any configuration.
+The remaining open item is the real LaserData/shotcounter producers
+([alignment plan Phase 1](plans/alignment-implementation-plan.md#phase-1--namespaced-laser-metadata--low-effort-missing-fields-),
+step 2).
 
 > **Decided 2026-07-02:** stored keys are bare (see
 > [target-ontology.md §5](target-ontology.md#5-units-convention)); the suffixed
@@ -277,10 +298,10 @@ archived files, keyed to the shot context the archiver broadcasts — see
 
 | Missing field | Standard | Category | Effort to add |
 | --- | --- | --- | --- |
-| Central wavelength (`wavelength_nm`) | HELPMI LaserClasses, NeXus `NXbeam` | Laser | Low — LaserData producer knows this; add to `metadata.laser` |
-| Repetition rate | HELPMI LaserClasses, NeXus `NXsource.frequency` | Laser | Low — fixed per system; add to source catalog |
+| Central wavelength (`wavelength_nm`) | HELPMI LaserClasses, NeXus `NXbeam` | Laser | ✅ done 2026-07-27 — emulators emit `metadata.laser.wavelength`; `DW_API_HZDR_LASER__WAVELENGTH` fills it otherwise (§3.3.1). Real LaserData capture still open |
+| Repetition rate | HELPMI LaserClasses, NeXus `NXsource.frequency` | Laser | ✅ done 2026-07-27 — fixed per system, stated as `DW_API_HZDR_LASER__REPETITION_RATE` (§3.3.1) |
 | Beam waist / focus spot size | HELPMI LaserClasses | Laser | Medium — measured per campaign; add to LabFrog export |
-| Polarization | HELPMI LaserClasses, NeXus `NXbeam` | Laser | Low — usually fixed; add to source catalog |
+| Polarization | HELPMI LaserClasses, NeXus `NXbeam` | Laser | ✅ done 2026-07-27 — fixed per configuration, stated as `DW_API_HZDR_LASER__POLARIZATION` against a written-down vocabulary (§3.3.1) |
 | Pulse contrast | HELPMI LaserClasses | Laser | Medium — measured separately; add to LaserData producer |
 | Target material | HELPMI TargetClasses, NeXus `NXsample` | Target | Base path done for LabFrog manual `OTHER`; extend capture for wiki/gas targets |
 | Target thickness | HELPMI TargetClasses | Target | Base path done for LabFrog manual `OTHER`; extend capture for wiki/gas targets |
@@ -339,7 +360,7 @@ only (§3.3, §3.4). This requires:
    ([hzdr/docs/nxhzdr-target-profile.md](nxhzdr-target-profile.md)) and `write_nexus_sample()`
    now stamps the compatibility attrs (`damnit_nx_class="NXhzdr_target"`,
    `damnit_nxdl_version`) on `/entry/sample` while keeping `NX_class="NXsample"`.
-   ✅ **Done 2026-07-13 (profile v0.2; current v0.9 — explicit 1/e² laser waist radii):**
+   ✅ **Done 2026-07-13 (profile v0.2; current v0.10 — explicit 1/e² laser waist radii):**
    NXDL formalization — the application definition
    `hzdr/nxdl/NXhzdr_target.nxdl.xml` encodes the profile, `write_nexus_bridge()` declares
    it via `/entry/definition`, and files are certified with
@@ -417,15 +438,15 @@ round-trip the event normalizer losslessly
 | Detailed HELPMI / DAPHNE4NFDI / SciCat / Plasma-MDS alignment mapping | ✅ committed | §3 |
 | Gap analysis: 16 missing fields with effort estimates | ✅ committed | §3.10 |
 | Rename `metadata` keys to HELPMI-aligned namespace (`metadata.laser.*` etc.) | ⬜ post-pilot | §3.3, Route 1 |
-| Add `metadata.laser.wavelength_nm`, `polarization`, `repetition_rate_hz` | ⬜ low effort | §3.3, §3.10 |
+| Add `metadata.laser.wavelength_nm`, `polarization`, `repetition_rate_hz` | ✅ done 2026-07-27: bare registry keys end to end — both emulators emit them, the `DW_API_HZDR_LASER__*` block fills them (plus `system`) when no producer does, filled datasets carry `damnit_source="config"` (profile v0.10), and the polarization enum is written down as `LASER_POLARIZATION_VALUES`; ⬜ real LaserData/shotcounter capture still open | §3.3, §3.3.1, §3.10 |
 | Add `metadata.target.*` fields from LabFrog shot record | ✅ base path done; ✅ wiki extras (`wiki_page`/`wiki_ref`/`status`/`provider`/`amount`/`type`/`production_date`/`origin`) persisted, exported, and mapped end-to-end 2026-07-03; ✅ gas species/pressure captured, normalized to bar, and mapped end-to-end 2026-07-19 | §3.4, §3.10 |
 | Add `/entry/instrument/laser` (`NXsource`/`NXbeam`) to NeXus bridge | ✅ done for available `metadata.laser.*`; producer enrichment still open | §3.7, Route 2 |
 | Add `/entry/sample` (`NXsample`) to NeXus bridge | ✅ done for available target metadata | §3.7, Route 2 |
 | Add `/entry/sample/environment` (`NXenvironment`) vacuum group to NeXus bridge | ✅ done 2026-07-17 for available `metadata.vacuum.*`; producer capture of `pre_shot_pressure`/`rga_dominant_species` still open | §3.5, §3.7 |
 | Per-kind `NXdetector` groups in NeXus bridge (`detector_<kind>` + `detector_type` + row references) | ✅ done 2026-07-17 | §3.6, §3.7 |
 | Per-shot `metadata.diagnostic.*` → `NXdetector` series + `laser/shot_series` `NXdata` | ✅ done 2026-07-17 (emulator emits `diagnostic.*` namespace; real producers still open) | §3.5, §3.6, §3.7 |
-| Official `NXlaser` / `NXtarget` groups from HELPMI | ❌ cancelled 2026-07-02 — HELPMI finished | Route 2 |
-| HZDR-local `NXhzdr_target` profile / NXDL | ✅ done 2026-07-13 (v0.2, current v0.9): NXDL application definition (`hzdr/nxdl/NXhzdr_target.nxdl.xml`) + `/entry/definition` stamped by the bridge + pynxtools certification via `nds validate --pynxtools --definitions`; v0.3 fixes the canonical temperature unit string to `degC`, v0.4 routes `target.material` to the free-text `material` dataset with `chemical_formula` derived only when the value parses as a formula, v0.5 writes the ontology-required `type` dataset with the §3 enum fixed in the NXDL, v0.6 grows the NXDL to the whole canonical entry (laser/vacuum/diagnostic groups, `start_time`/`end_time`) and closes the `NX_class` swap decision as keep-`NXsample`; v0.9 replaces generic laser-waist extent aliases with explicit 1/e²-radius fields ([nxhzdr-target-profile.md](nxhzdr-target-profile.md), [nexus-semantic-maps.md](nexus-semantic-maps.md)) | Route 2, Route 4 |
+| Official `NXlaser` / `NXtarget` groups from HELPMI | ❌ cancelled — HELPMI finished | Route 2 |
+| HZDR-local `NXhzdr_target` profile / NXDL | ✅ done 2026-07-13 (v0.2, current v0.10): NXDL application definition (`hzdr/nxdl/NXhzdr_target.nxdl.xml`) + `/entry/definition` stamped by the bridge + pynxtools certification via `nds validate --pynxtools --definitions`; v0.3 fixes the canonical temperature unit string to `degC`, v0.4 routes `target.material` to the free-text `material` dataset with `chemical_formula` derived only when the value parses as a formula, v0.5 writes the ontology-required `type` dataset with the §3 enum fixed in the NXDL, v0.6 grows the NXDL to the whole canonical entry (laser/vacuum/diagnostic groups, `start_time`/`end_time`) and closes the `NX_class` swap decision as keep-`NXsample`; v0.9 replaces generic laser-waist extent aliases with explicit 1/e²-radius fields ([nxhzdr-target-profile.md](nxhzdr-target-profile.md), [nexus-semantic-maps.md](nexus-semantic-maps.md)) | Route 2, Route 4 |
 | SciCat registration + `scicat_pid` back-population (via existing HZDR SciCat plugin) | 🟡 plugin built (HTTP `/scicat/from-json` \| `/scicat/push`); DAMNIT builder post-step + API link not yet wired | Route 3, [roadmap §SciCat Registration](status/integration-roadmap.md#scicat-registration) |
 | NeXus Ontology annotation for federated search | ⬜ HZDR-owned design; no HELPMI blocker; deliberately deferred until a federated-search consumer exists (the "Upstream NeXus field?" columns in the profile docs are the prepared input) | Route 4 |
 | openPMD interoperability (simulation links) | ✅ link schema (`metadata.simulation`) specified + normalizer round-trip pinned 2026-07-18 ([openpmd-linking.md](openpmd-linking.md)); ⬜ comparison tooling deferred until a concrete analysis user | Route 5 |

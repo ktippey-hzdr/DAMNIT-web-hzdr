@@ -21,6 +21,7 @@ from .hzdr_settings import (
     HZDRBuilderSettings,
     HZDRHealthSettings,
     HZDRKafkaSpoolSettings,
+    HZDRLaserSettings,
     HZDRScicatSettings,
     HZDRSpoolSettings,
     HZDRWikiSettings,
@@ -191,6 +192,8 @@ class Settings(BaseSettings):
     )
 
     hzdr_scicat: HZDRScicatSettings = Field(default_factory=HZDRScicatSettings)
+
+    hzdr_laser: HZDRLaserSettings = Field(default_factory=HZDRLaserSettings)
 
     hzdr_wiki: HZDRWikiSettings = Field(default_factory=HZDRWikiSettings)
 

@@ -1,6 +1,6 @@
-# `NXhzdr_target` Profile — v0.9
+# `NXhzdr_target` Profile — v0.10
 
-Updated: 2026-07-23
+Updated: 2026-07-27
 
 The versioned definition of the HZDR-local `NXhzdr_target` profile: the
 semantic map from `metadata.target.*` to the `/entry/sample` NeXus group, and
@@ -135,7 +135,7 @@ Stamped on the `/entry/sample` group by `write_nexus_sample()`:
 | --- | --- | --- | --- |
 | `NX_class` | `"NXsample"` | always | Compatibility class — permanent (decision closed 2026-07-18, §6) |
 | `damnit_nx_class` | `"NXhzdr_target"` | always | Marks the group as following this profile |
-| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.8"`) | always | Must match this document's version and the NXDL enumeration (§4) |
+| `damnit_nxdl_version` | `HZDR_TARGET_PROFILE_VERSION` (currently `"0.10"`) | always | Must match this document's version and the NXDL enumeration (§4) |
 | `damnit_provenance` | `"wiki"` \| `"manual"` | if `provenance` present | Curated vs. hand-entered target |
 | `target_ref` | string (URL or stable id) | if `wiki_ref` present | Link back to the MediaWiki target record |
 | `gas_species` | string (e.g. `"Ar"`, `"N2"`, `"He"`) | if `gas_species` present | Gas-jet / cluster species |
@@ -167,11 +167,23 @@ and every registered current-version mention across the docs; its `run --fix`
 mode rewrites the mechanical mirrors after a bump. Non-semantic
 edits to this document (wording, typo fixes) do not require a bump.
 
-Current version: **0.9** (facility-signed explicit 1/e² focal-spot radius
-paths in the DAMNIT writer and NXDL, 2026-07-23).
+Current version: **0.10** (fixed laser-system constants filled from deployment
+config and marked `damnit_source="config"`, 2026-07-27).
 
 History:
 
+- **0.10** (2026-07-27): the four laser fields no producer sends —
+  `laser.system`, `laser.wavelength`, `laser.repetition_rate`,
+  `laser.polarization` — may now be filled from the deployment's fixed
+  laser-system configuration (`DW_API_HZDR_LASER__*`). A filled dataset
+  carries the new marker attribute `damnit_source="config"`, declared in the
+  application definition on `name`, `frequency`, `incident_wavelength`, and
+  `incident_polarization`, so a campaign constant is distinguishable from a
+  measured value. Producer values always win; an unconfigured deployment
+  writes the same file as v0.9. The accepted `incident_polarization`
+  vocabulary is documented (not enumerated — an off-vocabulary producer label
+  is warned about, never a certification failure). See
+  [nexus-semantic-maps.md §2.4](nexus-semantic-maps.md#24-fixed-laser-system-constants-damnit_sourceconfig-since-v010).
 - **0.9** (2026-07-23): replaces the semantically ambiguous laser beam-waist
   datasets `extent_x` and `extent_y` with explicit
   `beam_waist_x_1e2_radius` and `beam_waist_y_1e2_radius` fields. Values remain
@@ -242,7 +254,7 @@ The former beam-waist label mismatch is resolved in v0.9. Facility-signed
 `beam_waist_x_1e2_radius` and `beam_waist_y_1e2_radius` datasets; generic
 `NXbeam.extent` semantics are not used.
 
-No other deviations are tracked in v0.9.
+No other deviations are tracked in v0.10.
 
 ## 6. Future work
 

@@ -154,6 +154,11 @@ def mutate_event_for_shot(
             "pulse_duration": round(42.0 + index * 0.35, 2),
             "beam_pos_x": round(-0.35 + index * 0.015, 4),
             "beam_pos_y": round(0.18 - index * 0.012, 4),
+            # Fixed laser-system constants (same synthetic values as the
+            # flow-monitor emulator); see _build_flow_monitor_metadata.
+            "wavelength": 800.0,
+            "repetition_rate": 1.0,
+            "polarization": "p",
         }
         metadata["vacuum"] = {"chamber_pressure": round(pressure, 8)}
         metadata["xray_counts"] = xray_counts

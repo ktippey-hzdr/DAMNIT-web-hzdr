@@ -1,6 +1,6 @@
 # NeXus Semantic Maps — `laser.*`, `vacuum.*`, `diagnostic.*`
 
-Updated: 2026-07-18
+Updated: 2026-07-27
 
 The versioned definition of the non-target semantic maps the NeXus bridge
 writer implements: how the registry namespaces `metadata.laser.*`,
@@ -79,7 +79,7 @@ from the more common sibling placement; see
 | `laser.pulse_energy` | `incident_energy`, `@units` | J | Standard `NXbeam.incident_energy` |
 | `laser.pulse_duration` | `pulse_duration`, `@units` | fs | Standard `NXbeam.pulse_duration`; DRACO's typical value is about 30 fs, interpreted as intensity FWHM |
 | `laser.wavelength` | `incident_wavelength`, `@units` | nm | Standard `NXbeam.incident_wavelength` |
-| `laser.polarization` | `incident_polarization` | — (string enum) | Standard field name (`NXbeam.incident_polarization` is formally a vector); DRACO's signed label is `p`, meaning the electric field lies in the plane of incidence |
+| `laser.polarization` | `incident_polarization` | — (string enum, §2.4) | Standard field name (`NXbeam.incident_polarization` is formally a vector); DRACO's signed label is `p`, meaning the electric field lies in the plane of incidence |
 | `laser.beam_pos_x` / `beam_pos_y` | `beam_position_x` / `beam_position_y`, `@units` | mm | **Profile extension** — no standard `NXbeam` field |
 | `laser.beam_waist_x` / `beam_waist_y` | `beam_waist_x_1e2_radius` / `beam_waist_y_1e2_radius`, `@units` | um | Facility meaning is the focal-spot radius at 1/e² intensity, normally symmetric for DRACO (about 1.5–2.25 um radius from a 3–4.5 um diameter). The explicit HZDR profile fields are not interchangeable with generic `NXbeam.extent`; writer and NXDL implement them since profile v0.9. |
 | `laser.contrast_ratio` | `contrast_ratio`, `@units` | — (dimensionless) | **Profile extension** — no standard `NXbeam` field |
@@ -100,6 +100,41 @@ where a shot lacks the key, `@units` from the registry. The group carries
 `axes = "shot_index"`, `auxiliary_signals` for the rest, and a `shot_index`
 axis dataset. String-valued keys (`system`, `polarization`) stay
 campaign-level in the parent `NXsource` group.
+
+### 2.4 Fixed laser-system constants (`damnit_source="config"`, since v0.10)
+
+Four of the keys above describe the *laser*, not a shot: `laser.system`,
+`laser.wavelength`, `laser.repetition_rate`, and `laser.polarization`. No
+producer event naturally carries them, which is why
+[standards-alignment.md §3.10](standards-alignment.md#310-gap-summary) routes
+them through the source catalog rather than through LaserData. A deployment
+states them once as `DW_API_HZDR_LASER__{SYSTEM,WAVELENGTH,REPETITION_RATE,
+POLARIZATION}` (bare registry keys, registry units — nm and Hz) and the
+builder passes them to `write_nexus_bridge(laser_config=…)`.
+
+The merge rule (`_merge_laser_config()`) is:
+
+- **A producer value always wins.** Config says what the laser *is*; an event
+  value is a measurement and is never overwritten.
+- **Only gaps are filled**, and each filled dataset is stamped
+  `damnit_source="config"` so a campaign constant is never read as a measured
+  per-shot value. The attribute is declared in the NXDL on `name`,
+  `frequency`, `incident_wavelength`, and `incident_polarization`.
+- **The group is written even when no shot carries a laser block at all** — a
+  campaign whose producers send no laser metadata still records the system's
+  fixed properties.
+- **An unconfigured deployment changes nothing**: an empty block writes no
+  datasets and stamps nothing.
+
+`laser.polarization` is the registry's only string enum. The accepted labels
+are `LASER_POLARIZATION_VALUES` in
+`api/src/damnit_api/metadata/hzdr_event.py` — `p`, `s`, `horizontal`,
+`vertical`, `linear`, `circular`, `circular_left`, `circular_right`,
+`elliptical`, `unpolarized`, matched case-insensitively, with DRACO's
+facility-signed value `p`. Config outside that vocabulary is rejected;
+producer metadata outside it is warned about by `lint_metadata_keys()` and
+still written, so the NXDL deliberately does **not** enumerate the field — a
+file must not fail certification over a producer's label.
 
 ## 3. Vacuum map: `metadata.vacuum.*` → `/entry/sample/environment`
 

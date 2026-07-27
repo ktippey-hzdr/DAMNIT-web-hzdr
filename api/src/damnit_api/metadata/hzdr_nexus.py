@@ -28,7 +28,7 @@ from .hzdr_event import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator
+    from collections.abc import Container, Iterable, Iterator
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -1170,6 +1170,7 @@ def write_nexus_bridge(
     shots: list[dict[str, Any]],
     events: list[dict[str, Any]],
     source_nexus: Path | None = None,
+    laser_config: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     """Preserve a LabFrog NeXus file and add the DAMNIT bridge tables.
 
@@ -1177,6 +1178,10 @@ def write_nexus_bridge(
     output_path on success — the same pattern as write_json_atomic(). A crash
     or exception mid-write leaves the previous output_path intact and a stale
     .tmp.nxs sibling that is cleaned up on the next invocation.
+
+    `laser_config` carries the deployment's fixed laser-system constants
+    (`DW_API_HZDR_LASER__*`, bare `metadata.laser.*` keys) that no per-shot
+    event supplies; see `_merge_laser_config()`.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = output_path.with_name(f"{output_path.name}.{uuid.uuid4().hex}.tmp.nxs")
@@ -1207,7 +1212,7 @@ def write_nexus_bridge(
             entry.attrs["damnit_data_products"] = "data_products"
 
             _write_campaign_time_bounds(entry, shots)
-            _write_semantic_metadata_groups(entry, shots)
+            _write_semantic_metadata_groups(entry, shots, laser_config)
 
             shots_group = entry.require_group("shots")
             if "NX_class" not in shots_group.attrs:
@@ -1272,7 +1277,9 @@ def _write_campaign_time_bounds(entry: h5py.Group, shots: list[dict[str, Any]]) 
 
 
 def _write_semantic_metadata_groups(
-    entry: h5py.Group, shots: list[dict[str, Any]]
+    entry: h5py.Group,
+    shots: list[dict[str, Any]],
+    laser_config: dict[str, Any] | None = None,
 ) -> None:
     """Promote namespaced `metadata.*` blocks into their semantic NeXus homes.
 
@@ -1280,10 +1287,17 @@ def _write_semantic_metadata_groups(
     vacuum -> NXenvironment) come from the first shot carrying the block;
     the inherently per-shot families (laser shot series, diagnostic scalars)
     are written as full series.
+
+    `laser_config` holds the deployment's fixed laser-system constants and
+    only *fills gaps*: any key a producer sent wins, and the group is written
+    even when no shot carried a laser block at all (wavelength, repetition
+    rate, polarization and system name are properties of the laser, so a
+    campaign with no LaserData events still has them).
     """
     laser = _first_shot_laser(shots)
-    if laser is not None:
-        write_nexus_laser_group(entry, laser)
+    merged_laser, config_keys = _merge_laser_config(laser, laser_config)
+    if merged_laser is not None:
+        write_nexus_laser_group(entry, merged_laser, config_keys=config_keys)
     write_nexus_laser_shot_series(entry, shots)
 
     target = _first_shot_target(shots)
@@ -1314,6 +1328,29 @@ def _fill_default_product_paths(
     for product in products:
         if not product.get("path"):
             product["path"] = str(output_path)
+
+
+def _merge_laser_config(
+    laser: dict[str, Any] | None, laser_config: dict[str, Any] | None
+) -> tuple[dict[str, Any] | None, frozenset[str]]:
+    """Fill the campaign laser snapshot from fixed config, producer values first.
+
+    Returns the merged block (None when there is nothing at all to write) and
+    the set of keys the config supplied, which `write_nexus_laser_group()`
+    stamps as `damnit_source="config"`.
+    """
+    configured = {
+        key: value for key, value in (laser_config or {}).items() if value is not None
+    }
+    if not configured:
+        return laser, frozenset()
+    # A producer value always wins - config states what the laser *is*, not
+    # what a shot measured, so it must never overwrite a measurement.
+    sent = laser or {}
+    filled = {key: value for key, value in configured.items() if key not in sent}
+    if not filled:
+        return laser, frozenset()
+    return {**filled, **sent}, frozenset(filled)
 
 
 def _first_shot_laser(shots: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -1424,28 +1461,47 @@ def _first_shot_target(shots: list[dict[str, Any]]) -> Any:
     return chosen
 
 
-def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> None:
-    """Write `/entry/instrument/laser` from canonical `metadata.laser.*` keys."""
+def write_nexus_laser_group(
+    entry_group: h5py.Group,
+    laser: dict[str, Any],
+    *,
+    config_keys: Container[str] = frozenset(),
+) -> None:
+    """Write `/entry/instrument/laser` from canonical `metadata.laser.*` keys.
+
+    `config_keys` names the `laser` keys that came from the deployment's fixed
+    laser-system configuration (`DW_API_HZDR_LASER__*`) rather than from a
+    producer event; those datasets are stamped `damnit_source="config"` so a
+    campaign constant is never read as a measured per-shot value. See
+    hzdr/docs/nexus-semantic-maps.md §2.
+    """
     instrument = entry_group.require_group("instrument")
     if "NX_class" not in instrument.attrs:
         instrument.attrs["NX_class"] = "NXinstrument"
+
+    def source_of(key: str) -> str | None:
+        return "config" if key in config_keys else None
 
     source = instrument.require_group("laser")
     source.attrs["NX_class"] = "NXsource"
     _write_optional_string_dataset(source, "type", "Laser")
     _write_optional_string_dataset(source, "probe", "visible light")
-    _write_optional_string_dataset(source, "name", laser.get("system"))
+    _write_optional_string_dataset(
+        source, "name", laser.get("system"), source=source_of("system")
+    )
     _write_optional_numeric_dataset(
         source,
         "frequency",
         laser.get("repetition_rate"),
         unit_key="laser.repetition_rate",
+        source=source_of("repetition_rate"),
     )
     _write_optional_numeric_dataset(
         source,
         "pulse_energy",
         laser.get("pulse_energy"),
         unit_key="laser.pulse_energy",
+        source=source_of("pulse_energy"),
     )
 
     beam = source.require_group("beam")
@@ -1455,51 +1511,62 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
         "incident_energy",
         laser.get("pulse_energy"),
         unit_key="laser.pulse_energy",
+        source=source_of("pulse_energy"),
     )
     _write_optional_numeric_dataset(
         beam,
         "pulse_duration",
         laser.get("pulse_duration"),
         unit_key="laser.pulse_duration",
+        source=source_of("pulse_duration"),
     )
     _write_optional_numeric_dataset(
         beam,
         "incident_wavelength",
         laser.get("wavelength"),
         unit_key="laser.wavelength",
+        source=source_of("wavelength"),
     )
     _write_optional_string_dataset(
-        beam, "incident_polarization", laser.get("polarization")
+        beam,
+        "incident_polarization",
+        laser.get("polarization"),
+        source=source_of("polarization"),
     )
     _write_optional_numeric_dataset(
         beam,
         "beam_position_x",
         laser.get("beam_pos_x"),
         unit_key="laser.beam_pos_x",
+        source=source_of("beam_pos_x"),
     )
     _write_optional_numeric_dataset(
         beam,
         "beam_position_y",
         laser.get("beam_pos_y"),
         unit_key="laser.beam_pos_y",
+        source=source_of("beam_pos_y"),
     )
     _write_optional_numeric_dataset(
         beam,
         "beam_waist_x_1e2_radius",
         laser.get("beam_waist_x"),
         unit_key="laser.beam_waist_x",
+        source=source_of("beam_waist_x"),
     )
     _write_optional_numeric_dataset(
         beam,
         "beam_waist_y_1e2_radius",
         laser.get("beam_waist_y"),
         unit_key="laser.beam_waist_y",
+        source=source_of("beam_waist_y"),
     )
     _write_optional_numeric_dataset(
         beam,
         "contrast_ratio",
         laser.get("contrast_ratio"),
         unit_key="laser.contrast_ratio",
+        source=source_of("contrast_ratio"),
     )
 
 
@@ -1511,7 +1578,7 @@ def write_nexus_laser_group(entry_group: h5py.Group, laser: dict[str, Any]) -> N
 # damnit_nxdl_version enumeration in hzdr/nxdl/NXhzdr_target.nxdl.xml must be
 # bumped to match. See hzdr/docs/nxhzdr-target-profile.md (target map) and
 # hzdr/docs/nexus-semantic-maps.md (laser/vacuum/diagnostic maps).
-HZDR_TARGET_PROFILE_VERSION = "0.9"
+HZDR_TARGET_PROFILE_VERSION = "0.10"
 HZDR_BRIDGE_PROFILE_VERSION = "hzdr-canonical-shot-v2"
 
 # All 118 IUPAC element symbols, for the conservative formula check below.
@@ -1920,16 +1987,25 @@ def _write_diagnostic_detector(
         data.attrs["units"] = unit
 
 
-def _write_optional_string_dataset(group: h5py.Group, name: str, value: Any) -> None:
+def _write_optional_string_dataset(
+    group: h5py.Group, name: str, value: Any, *, source: str | None = None
+) -> None:
     if value is None:
         return
     if name in group:
         del group[name]
-    group.create_dataset(name, data=str(value))
+    dataset = group.create_dataset(name, data=str(value))
+    if source is not None:
+        dataset.attrs["damnit_source"] = source
 
 
 def _write_optional_numeric_dataset(
-    group: h5py.Group, name: str, value: Any, *, unit_key: str
+    group: h5py.Group,
+    name: str,
+    value: Any,
+    *,
+    unit_key: str,
+    source: str | None = None,
 ) -> None:
     if value is None:
         return
@@ -1939,6 +2015,8 @@ def _write_optional_numeric_dataset(
     unit = METADATA_KEY_REGISTRY.get(unit_key)
     if unit is not None:
         dataset.attrs["units"] = unit
+    if source is not None:
+        dataset.attrs["damnit_source"] = source
 
 
 def write_sources_catalog(

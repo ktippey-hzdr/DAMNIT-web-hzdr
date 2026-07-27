@@ -139,6 +139,11 @@ is one builder per campaign; `OUTPUT_NEXUS` is required when `ENABLED=true`, and
 the event/trigger JSONL inputs are auto-derived from the running consumers' spool
 paths rather than reconfigured here. SciCat registration of the built NeXus file
 is the separate `DW_API_HZDR_SCICAT__*` block (best-effort, off by default).
+`DW_API_HZDR_LASER__*` (`SYSTEM`, `WAVELENGTH`, `REPETITION_RATE`, `POLARIZATION`)
+states the deployment's *fixed* laser-system constants — the `metadata.laser.*`
+keys no producer event carries. The builder fills only the gaps into
+`/entry/instrument/laser` and marks each filled dataset `damnit_source="config"`;
+a producer value always wins, and an unset block writes nothing.
 Structured JSON logging turns on when `DW_API_DEBUG=false`.
 `hzdr/scripts/damnit-api.service` is the systemd unit (`Restart=on-failure`).
 
@@ -268,7 +273,13 @@ warns about a `metadata.diagnostic` key with no registry entry (register the key
 here + in code before producing it; unregistered keys are still written, but
 unitless). The `simulation.*` namespace (openPMD links,
 [hzdr/docs/openpmd-linking.md](hzdr/docs/openpmd-linking.md)) is reserved and
-non-numeric — no registry rows, linter stays silent on it.
+non-numeric — no registry rows, linter stays silent on it. **Since 2026-07-27**
+`laser.polarization` — the registry's only string enum — has its accepted labels
+written down as `LASER_POLARIZATION_VALUES` (`p`, `s`, `horizontal`, `vertical`,
+`linear`, `circular`, `circular_left`, `circular_right`, `elliptical`,
+`unpolarized`; matched case-insensitively, DRACO's signed value is `p`). The
+linter warns about an off-vocabulary producer label and the value is still
+written; the same label in `DW_API_HZDR_LASER__POLARIZATION` is rejected instead.
 
 | Namespace | Key | Canonical unit |
 | --- | --- | --- |
@@ -282,7 +293,7 @@ non-numeric — no registry rows, linter stays silent on it.
 | `laser.*` | `beam_pos_x` / `beam_pos_y` | mm |
 | `laser.*` | `beam_waist_x` / `beam_waist_y` | um |
 | `laser.*` | `repetition_rate` | Hz |
-| `laser.*` | `polarization` | — (string enum) |
+| `laser.*` | `polarization` | — (string enum: `LASER_POLARIZATION_VALUES`) |
 | `laser.*` | `contrast_ratio` | — (dimensionless) |
 | `laser.*` | `system` | — (string) |
 | `vacuum.*` | `chamber_pressure` | mbar |

@@ -1215,6 +1215,16 @@ def _build_flow_monitor_metadata(
             "pulse_duration": round(42.0 + index * 0.35 + rng.uniform(-0.08, 0.08), 2),
             "beam_pos_x": round(-0.35 + index * 0.015 + rng.uniform(-0.003, 0.003), 4),
             "beam_pos_y": round(0.18 - index * 0.012 + rng.uniform(-0.003, 0.003), 4),
+            # Fixed laser-system constants, repeated on every shot the way a
+            # real LaserData producer repeats its own configuration (§3.10 of
+            # hzdr/docs/standards-alignment.md). A deployment whose producers
+            # do not send them yet can fill the same keys from the
+            # DW_API_HZDR_LASER__* block instead. Synthetic values, not a
+            # facility measurement: Ti:Sa fundamental, single-shot operation,
+            # and the facility-signed p-polarization of DRACO TNSA shots.
+            "wavelength": 800.0,
+            "repetition_rate": 1.0,
+            "polarization": "p",
         },
         "vacuum": {
             "chamber_pressure": round(

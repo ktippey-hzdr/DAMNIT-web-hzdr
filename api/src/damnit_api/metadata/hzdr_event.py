@@ -211,6 +211,30 @@ METADATA_KEY_REGISTRY: dict[str, str | None] = {
 }
 
 
+# The registry types `laser.polarization` as a string enum but, until
+# 2026-07-27, never wrote the enum down - so "p", "P-pol" and "p_polarised"
+# were all equally acceptable spellings of the same DRACO configuration.
+# These are the accepted labels: the two plane-of-incidence conventions used
+# at DRACO (`p`/`s`, facility-signed 2026-07-23, standards-alignment.md §3.3),
+# their lab-frame equivalents, and the general polarization states NXbeam
+# consumers expect. Matching is case-insensitive. The vocabulary is enforced
+# up front on deployment config (HZDRLaserSettings) but only *warned* about
+# for producer-supplied metadata, like every other registry check - see
+# lint_metadata_keys().
+LASER_POLARIZATION_VALUES: frozenset[str] = frozenset({
+    "p",
+    "s",
+    "horizontal",
+    "vertical",
+    "linear",
+    "circular",
+    "circular_left",
+    "circular_right",
+    "elliptical",
+    "unpolarized",
+})
+
+
 # Superseded flat/unit-suffixed key name -> new namespaced bare key (a
 # METADATA_KEY_REGISTRY key). Producers must not use these for new events;
 # they are recognized here only so lint_metadata_keys() can warn about them.
@@ -251,7 +275,7 @@ _LINT_EXEMPT_SUBOBJECTS = frozenset({"properties"})
 
 
 def lint_metadata_keys(metadata: dict[str, Any]) -> list[str]:
-    """Warn (never reject) about legacy or unregistered metadata keys.
+    """Warn (never reject) about legacy, unregistered, or off-vocabulary keys.
 
     Pure/read-only: never mutates `metadata`, never raises. Checks top-level
     keys directly against LEGACY_KEY_MAP, and - one level down - each key of
@@ -267,6 +291,12 @@ def lint_metadata_keys(metadata: dict[str, Any]) -> list[str]:
     registry-governed (registered 2026-07-18), so an unregistered scalar is
     written to the NeXus bridge without `@units` — register the key (code
     registry + CLAUDE.md table) before producing it.
+
+    The one *value* this linter looks at is `metadata.laser.polarization`,
+    the registry's only string enum (LASER_POLARIZATION_VALUES, written down
+    2026-07-27): an off-vocabulary label is written to
+    `NXbeam.incident_polarization` verbatim and would otherwise silently
+    fragment the vocabulary across producers.
 
     Returns a list of human-readable warning strings; does not log by itself
     (callers decide whether/how to log - see the call site in
@@ -299,4 +329,21 @@ def lint_metadata_keys(metadata: dict[str, Any]) -> list[str]:
                     "METADATA_KEY_REGISTRY (and the CLAUDE.md registry table) "
                     "so the NeXus writer can stamp @units"
                 )
+            elif path == "laser.polarization":
+                warnings.extend(_lint_polarization_value(value[inner_key]))
     return warnings
+
+
+def _lint_polarization_value(value: Any) -> list[str]:
+    """Warn when a polarization label is outside the registry's string enum."""
+    if value is None or not isinstance(value, str):
+        return []
+    if value.strip().lower() in LASER_POLARIZATION_VALUES:
+        return []
+    accepted = ", ".join(sorted(LASER_POLARIZATION_VALUES))
+    warning = (
+        f"metadata.laser.polarization value {value!r} is outside the accepted "
+        f"vocabulary ({accepted}); it is written to "
+        "NXbeam.incident_polarization verbatim"
+    )
+    return [warning]

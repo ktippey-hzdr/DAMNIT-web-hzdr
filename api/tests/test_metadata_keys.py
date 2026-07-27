@@ -7,6 +7,7 @@ convention this linter must respect.
 """
 
 from damnit_api.metadata.hzdr_event import (
+    LASER_POLARIZATION_VALUES,
     LEGACY_KEY_MAP,
     METADATA_KEY_REGISTRY,
     lint_metadata_keys,
@@ -130,6 +131,27 @@ class TestLintMetadataKeys:
         # laser/target/vacuum linting stays legacy-suffix-only (an extra
         # laser key may be a future typed key, not necessarily a mistake).
         assert lint_metadata_keys({"laser": {"front_end_energy": 0.4}}) == []
+
+    def test_accepts_every_vocabulary_polarization_label(self):
+        for label in LASER_POLARIZATION_VALUES:
+            assert lint_metadata_keys({"laser": {"polarization": label}}) == []
+
+    def test_polarization_vocabulary_is_case_insensitive(self):
+        assert lint_metadata_keys({"laser": {"polarization": "P"}}) == []
+
+    def test_flags_off_vocabulary_polarization_label(self):
+        # The registry types laser.polarization as a string enum; an
+        # unrecognized spelling reaches NXbeam.incident_polarization verbatim
+        # and fragments the vocabulary across producers.
+        warnings = lint_metadata_keys({"laser": {"polarization": "p-pol @45deg"}})
+
+        assert len(warnings) == 1
+        assert "p-pol @45deg" in warnings[0]
+        assert "vocabulary" in warnings[0]
+
+    def test_polarization_lint_tolerates_non_string_values(self):
+        assert lint_metadata_keys({"laser": {"polarization": None}}) == []
+        assert lint_metadata_keys({"laser": {"polarization": 45}}) == []
 
     def test_does_not_mutate_input(self):
         metadata = {"laser_energy_j": 12.4, "laser": {"wavelength_nm": 800.0}}
