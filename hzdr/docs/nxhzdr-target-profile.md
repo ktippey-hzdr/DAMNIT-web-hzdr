@@ -41,6 +41,20 @@ version). Since v0.2 a real `NXhzdr_target` NXDL ships alongside this document
 and the file declares it via `/entry/definition`. **Decision closed
 2026-07-18 (v0.6):** `NX_class` stays `"NXsample"` permanently — see §6.
 
+**Standards status — read this before citing the definition.**
+`NXhzdr_target` is a **local, facility-defined NeXus application definition
+owned by HZDR**. It is *not* part of the NeXus standard: it has not been
+submitted to, reviewed by, or accepted by the NeXus International Advisory
+Committee, and no such submission is scheduled. `category="application"` in
+the NXDL is the NXDL schema's own type keyword; it carries no upstream
+endorsement. Treat it exactly as you would any other site-local definition —
+files certified against it are certified against *this* document at the stated
+version, not against a community standard. Should it ever be accepted
+upstream, that acceptance will be recorded here and the name and versioning
+rule (§4) revisited at that point. The `damnit_*` attribute prefix, the
+`prop_KEY` extras bag, and the HZDR enum values exist precisely so nothing in
+a generated file can be mistaken for standard NeXus vocabulary.
+
 ## 1.1 Literature and standards basis
 
 The profile is intentionally conservative: it uses official NeXus terms where

@@ -18,7 +18,7 @@
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "BSD-3-Clause",
   "packageManager": "pnpm@10.21.0",
   "dependencies": {
     "@eslint/js": "catalog:linting",

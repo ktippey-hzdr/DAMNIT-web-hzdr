@@ -3,6 +3,8 @@ name = "damnit-api"
 version = "0.1.1"
 description = ""
 authors = [{ name = "European XFEL", email = "da@xfel.eu" }]
+# Retains European XFEL's BSD-3-Clause choice (see the repository LICENSE).
+license = "BSD-3-Clause"
 requires-python = "~=3.13.0"
 # if using ASAPO needs 3.12
 # requires-python = ">=3.12"
@@ -44,6 +46,10 @@ dependencies = [
     "sqlmodel>=0.0.31",
     "motor>=3.7.1",
 ]
+
+[project.urls]
+Repository = "https://github.com/ktippey-hzdr/DAMNIT-web-hzdr"
+Issues = "https://github.com/ktippey-hzdr/DAMNIT-web-hzdr/issues"
 
 [project.optional-dependencies]
 # Optional: enables real ASAPO stream activity in the flow monitor's Live mode

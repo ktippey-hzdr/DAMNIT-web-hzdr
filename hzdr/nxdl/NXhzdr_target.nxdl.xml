@@ -25,6 +25,16 @@
     <doc>
       HZDR laser-target campaign profile (NXhzdr_target).
 
+      STANDARDS STATUS: this is a LOCAL, FACILITY-DEFINED application
+      definition owned by HZDR. It is NOT part of the NeXus standard and has
+      not been submitted to, reviewed by, or accepted by the NeXus
+      International Advisory Committee. The category="application" attribute
+      above is the NXDL schema's type keyword and carries no upstream
+      endorsement. The normative reference is
+      hzdr/docs/nxhzdr-target-profile.md at the matching profile version;
+      certification against this file certifies against that document, not
+      against a community standard.
+
       Certifies the canonical entry of a DAMNIT NeXus bridge file against the
       NXhzdr_target profile. Since profile 0.6 the definition covers the whole
       semantic layer the writer emits, not just the target group: the
