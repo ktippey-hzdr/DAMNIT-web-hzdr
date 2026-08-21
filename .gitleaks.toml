@@ -1,0 +1,45 @@
+# Secret-scanning configuration for the HZDR DAMNIT fork.
+#
+# This is the exception ledger the publication plan's P1 gate asks for: every
+# entry below is a finding that was triaged individually and found not to be a
+# credential. Because the ledger is explicit, the scan can be *blocking* -- a
+# new finding fails CI instead of being lost in a list of known noise.
+#
+# Adding an entry is a review action, not a way to quiet a red build. Record
+# what the value actually is and why it is not a secret, and prefer a path
+# regex narrow enough that an unrelated file cannot slip under it.
+#
+# Every entry is scoped with `targetRules` as well as `paths`. A bare path
+# allowlist suppresses *every* rule in that file, so a real Slack or AWS token
+# committed into an allowlisted test fixture would pass silently. Naming the
+# one rule that produced the false positive keeps the rest of the ruleset live
+# on that path.
+#
+# Used by .github/workflows/secret-scan.yml and by the combo root's
+# scripts/secret-scan.ps1 (which scans this repository's history too).
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = """
+Unit-test fixture, not a credential. `sourceMatchesCampaign` is tested with
+literal campaign keys such as 'exp-2026-05-draco'; the generic-api-key rule
+matches on the shape of the string. Triaged 2026-08-18.
+"""
+targetRules = ["generic-api-key"]
+paths = [
+  '''frontend/apps/app/src/hzdr/utils/__tests__/link-records\.test\.ts$''',
+]
+
+[[allowlists]]
+description = """
+Minified frontend bundles published as GitHub Pages previews for pull requests
+(`this.keys,...` and friends in the Vite output). Build products of source that
+is itself scanned, present only in history -- no such path exists in the
+current tree. Triaged 2026-08-18.
+"""
+targetRules = ["generic-api-key"]
+paths = [
+  '''^pull/\d+/demo/assets/index-[A-Za-z0-9_-]+\.js$''',
+]
