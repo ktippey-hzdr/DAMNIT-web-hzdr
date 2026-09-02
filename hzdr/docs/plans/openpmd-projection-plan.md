@@ -157,7 +157,8 @@ Reason codes, grouped by where they attach:
 
 * **plan** — `plan_schema_version_unsupported`, `plan_standard_unsupported`,
   `plan_source_kind_unsupported`, `plan_rules_missing`, `entry_path_missing`,
-  `duplicate_source_path`, `duplicate_destination`, `rule_malformed`
+  `duplicate_source_path`, `duplicate_destination`, `rule_malformed`,
+  `no_rule_resolved`
 * **iteration** — `iteration_index_missing`,
   `iteration_index_not_one_dimensional`, `iteration_path_missing`,
   `iteration_length_mismatch`

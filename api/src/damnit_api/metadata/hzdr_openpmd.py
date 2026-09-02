@@ -762,6 +762,23 @@ def _assemble(
     payload_policy: dict[str, Any],
 ) -> dict[str, Any]:
     iteration_issues: list[Issue] = list(iteration.get("issues", []))
+    usable = [
+        report for report in rule_reports if report.status in {"accepted", "deferred"}
+    ]
+    # A plan whose every rule was rejected has nothing to project. Without this
+    # it would report `pass` whenever no rule happened to be marked required —
+    # which is exactly the shape a freshly compiled NDS draft arrives in, so the
+    # one case that most needs a clear answer would get the reassuring one.
+    if rule_reports and not usable:
+        plan_issues = [
+            *plan_issues,
+            Issue(
+                "no_rule_resolved",
+                ERROR,
+                f"all {len(rule_reports)} rule(s) were rejected; the plan "
+                "resolves to nothing against this file",
+            ),
+        ]
     blocking = (
         any(issue.severity == ERROR for issue in plan_issues)
         or any(issue.severity == ERROR for issue in iteration_issues)

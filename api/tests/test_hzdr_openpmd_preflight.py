@@ -361,7 +361,17 @@ def test_preflight_rejects_a_non_numeric_scalar_mesh(
             "target_name": "match_status",
             "component": "value",
             "materialization": "inline",
-        }
+        },
+        # A resolvable companion, so this exercises the optional-rejection
+        # policy rather than the separate "plan resolves to nothing" guard.
+        {
+            "source": "labfrog",
+            "source_path": "/entry/derived/ict_charge",
+            "role": "scalar_mesh",
+            "target_name": "ict_charge",
+            "component": "value",
+            "materialization": "inline",
+        },
     ]
 
     report = preflight_projection(
@@ -784,3 +794,73 @@ def test_a_malformed_payload_policy_block_is_rejected(
         issue["code"] for issue in report["plan_issues"]
     }
     assert report["payload_policy"]["max_resolve_bytes"] == 16 * 1024 * 1024
+
+
+def test_a_plan_that_resolves_to_nothing_does_not_report_pass(
+    fixture_paths: dict[str, Path], plan: dict[str, Any]
+):
+    """The shape a freshly compiled NDS draft arrives in.
+
+    None of its rules is `required`, so without an explicit check every rule
+    could be rejected and the run would still say `pass` — the reassuring
+    answer in exactly the case that most needs a clear one.
+    """
+    nothing = copy.deepcopy(plan)
+    nothing["rules"] = [
+        {
+            "source": "nds",
+            "source_path": "/entry/absent_one",
+            "role": "scalar_mesh",
+            "target_name": "absent_one",
+            "component": "value",
+            "materialization": "inline",
+        },
+        {
+            "source": "nds",
+            "source_path": "/entry/absent_two",
+            "role": "iteration_attribute",
+            "target_name": "absent_two",
+            "materialization": "inline",
+        },
+    ]
+
+    report = preflight_projection(
+        nexus_path=fixture_paths["canonical_nexus"], plan=nothing
+    )
+
+    assert report["counts"] == {"accepted": 0, "deferred": 0, "rejected": 2}
+    assert report["status"] == "fail"
+    assert "no_rule_resolved" in {issue["code"] for issue in report["plan_issues"]}
+
+
+def test_one_usable_rule_is_enough_to_avoid_that(
+    fixture_paths: dict[str, Path], plan: dict[str, Any]
+):
+    """A partial plan still passes: an optional rejected rule is the policy."""
+    partial = copy.deepcopy(plan)
+    partial["rules"] = [
+        {
+            "source": "labfrog",
+            "source_path": "/entry/derived/ict_charge",
+            "role": "scalar_mesh",
+            "target_name": "ict_charge",
+            "component": "value",
+            "materialization": "inline",
+        },
+        {
+            "source": "nds",
+            "source_path": "/entry/absent",
+            "role": "scalar_mesh",
+            "target_name": "absent",
+            "component": "value",
+            "materialization": "inline",
+        },
+    ]
+
+    report = preflight_projection(
+        nexus_path=fixture_paths["canonical_nexus"], plan=partial
+    )
+
+    assert report["counts"]["accepted"] == 1
+    assert report["status"] == "pass"
+    assert "no_rule_resolved" not in {issue["code"] for issue in report["plan_issues"]}
