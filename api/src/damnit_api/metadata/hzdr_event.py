@@ -208,6 +208,16 @@ METADATA_KEY_REGISTRY: dict[str, str | None] = {
     "diagnostic.xray_counts": "counts",
     "diagnostic.detector_signal_mean": None,
     "diagnostic.alignment_score": None,
+    # producer.* names the process that emitted the event (registered
+    # 2026-08-31, bridge profile v3). Non-numeric identity, and the only
+    # namespace the NeXus writer promotes to a canonical *column*
+    # (/entry/source_events/producer_instance_id) rather than to a value: two
+    # PLANET Watchdog PCs publishing the same `kind` and the same local
+    # filename are only tellable apart from a projection rule if the instance
+    # id has a path of its own. Absent instance id writes "" - it is
+    # descriptive, never a join key (that is `event_id`).
+    "producer.instance_id": None,
+    "producer.host": None,
 }
 
 
