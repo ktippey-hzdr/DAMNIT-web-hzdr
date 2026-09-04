@@ -39,8 +39,10 @@ See the [roadmap](status/integration-roadmap.md) and short
 
 ## Plans — active
 
-All four plans were reviewed on 2026-07-23 and remain active because each has
-open human, deployment, producer, or upstreaming gates.
+The first four plans were reviewed on 2026-07-23 and remain active because
+each has open human, deployment, producer, or upstreaming gates; the openPMD
+projection plan was added 2026-08-31 with its Phase 2 delivered and Phases 3-5
+open.
 
 | Document | Purpose |
 | --- | --- |
@@ -48,6 +50,7 @@ open human, deployment, producer, or upstreaming gates.
 | [Deployment plan](plans/deployment-plan.md) | Wiring the Kafka and ASAPO spool consumers into the running server |
 | [Standards alignment plan](plans/alignment-implementation-plan.md) | Phased execution plan for enacting the standards alignment |
 | [Remaining work](plans/remaining-work-plan.md) | Next-steps playbook for open items with ordered recommendations |
+| [openPMD projection](plans/openpmd-projection-plan.md) | DAMNIT's slice of the multi-source openPMD companion: canonical path inventory, synthetic fixture, projection preflight |
 
 ## Plans — delivered (`plans/done/`)
 

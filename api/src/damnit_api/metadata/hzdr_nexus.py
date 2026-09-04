@@ -1579,7 +1579,7 @@ def write_nexus_laser_group(
 # bumped to match. See hzdr/docs/nxhzdr-target-profile.md (target map) and
 # hzdr/docs/nexus-semantic-maps.md (laser/vacuum/diagnostic maps).
 HZDR_TARGET_PROFILE_VERSION = "0.10"
-HZDR_BRIDGE_PROFILE_VERSION = "hzdr-canonical-shot-v2"
+HZDR_BRIDGE_PROFILE_VERSION = "hzdr-canonical-shot-v3"
 
 # All 118 IUPAC element symbols, for the conservative formula check below.
 _ELEMENTS = (
@@ -2915,6 +2915,22 @@ def _merged_event_metadata(events: Iterable[dict[str, Any]]) -> dict[str, Any]:
     return merged
 
 
+def _event_producer_instance(event: dict[str, Any]) -> str:
+    """Read `metadata.producer.instance_id` for the source-events column.
+
+    Free-form producer metadata, so anything non-scalar or absent degrades to
+    "" rather than raising - a campaign whose producers predate the key still
+    builds, it just cannot attribute rows to an instance.
+    """
+    metadata = event.get("metadata")
+    if not isinstance(metadata, dict):
+        return ""
+    producer = metadata.get("producer")
+    if not isinstance(producer, dict):
+        return ""
+    return _as_optional_string(producer.get("instance_id")) or ""
+
+
 def _event_shot_number(event: dict[str, Any]) -> int | None:
     for value in (
         event.get("shot_number"),
@@ -3031,6 +3047,11 @@ def _write_source_events(entry: h5py.Group, events: list[dict[str, Any]]) -> Non
             for event in events
         ],
         "source_ref": [event.get("transport") or "" for event in events],
+        # Bridge profile v3: promoted out of metadata_json so a projection rule
+        # can name the emitting PC. Descriptive only - `event_id` stays the
+        # discriminator, and "" is the normal value for a single-instance
+        # producer that never sets it.
+        "producer_instance_id": [_event_producer_instance(event) for event in events],
         "payload_ref_json": [
             json.dumps(event.get("payload_ref", {}), sort_keys=True) for event in events
         ],

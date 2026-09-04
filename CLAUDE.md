@@ -88,6 +88,14 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     `/entry/source_events`, …) and does atomic writes (`write_json_atomic`).
   - `hzdr_sources.py` — the `hzdr_sources.json` source catalog: shot model with
     `hdf5_path`, dataset listing/preview, review-level merge (`VERIFIED > REVIEWED > BASE`).
+  - `hzdr_openpmd.py` — **preflight only**, never a writer: resolves a reviewed
+    nexus-design-studio `OpenPMDProjectionPlan` against a completed canonical file
+    and reports per-rule `accepted`/`deferred`/`rejected` with stable reason codes.
+    Opens the file read-only; no `openpmd-api` dependency. The fixture and CLI are
+    `api/scripts/hzdr-openpmd-{fixture,preflight}.py`; the contract and the
+    canonical path inventory (only `/entry/shots/*` is shot-indexed —
+    `/entry/source_events` and `/entry/data_products` need a `shot_key` join) are in
+    [hzdr/docs/plans/openpmd-projection-plan.md](hzdr/docs/plans/openpmd-projection-plan.md).
   - `scicat.py` — registers the canonical campaign NeXus file as a citable SciCat
     dataset via the `scicat_plugin` HTTP boundary; runs as a best-effort builder
     post-step (never fails a build) and stamps `scicat_pid`/`version_hash` into the
@@ -280,6 +288,13 @@ written down as `LASER_POLARIZATION_VALUES` (`p`, `s`, `horizontal`, `vertical`,
 `unpolarized`; matched case-insensitively, DRACO's signed value is `p`). The
 linter warns about an off-vocabulary producer label and the value is still
 written; the same label in `DW_API_HZDR_LASER__POLARIZATION` is rejected instead.
+**Since 2026-08-31** the `producer.*` namespace is registered (bridge profile
+v3). It is the only namespace the NeXus writer promotes to a *column* rather
+than to a value: `metadata.producer.instance_id` becomes
+`/entry/source_events/producer_instance_id`, so two PLANET Watchdog PCs
+publishing the same `kind` and the same local filename can be told apart from a
+projection rule. It is descriptive only — `event_id` remains the discriminator,
+and a producer that never sets it writes `""`.
 
 | Namespace | Key | Canonical unit |
 | --- | --- | --- |
@@ -303,14 +318,17 @@ written; the same label in `DW_API_HZDR_LASER__POLARIZATION` is rejected instead
 | `diagnostic.*` | `xray_counts` | counts |
 | `diagnostic.*` | `detector_signal_mean` | — (arbitrary/dimensionless) |
 | `diagnostic.*` | `alignment_score` | — (dimensionless, 0–1) |
+| `producer.*` | `instance_id` / `host` | — (string) |
 
 See [hzdr/docs/target-ontology.md §5](hzdr/docs/target-ontology.md#5-units-convention) and
 [hzdr/docs/standards-alignment.md §3.3/§3.5](hzdr/docs/standards-alignment.md#33-laser-parameters)
 for the full rationale and HELPMI cross-walk.
 
-### NeXus bridge profile: `hzdr-canonical-shot-v2`
+### NeXus bridge profile: `hzdr-canonical-shot-v3`
 
-Stamped as `damnit_bridge_profile` on HDF5 root and `/entry/shots`. Current value: `"hzdr-canonical-shot-v2"`. Version 2 adds the shot-aligned `target_metadata_json` column so campaign-varying targets are not lost behind the `/entry/sample` snapshot. Bump this string if the bridge table layout changes (columns added/removed from the shot or source-events groups).
+Stamped as `damnit_bridge_profile` on HDF5 root and `/entry/shots`. Current value: `"hzdr-canonical-shot-v3"`. Version 2 added the shot-aligned `target_metadata_json` column so campaign-varying targets are not lost behind the `/entry/sample` snapshot. **Version 3 (2026-08-31)** adds `/entry/source_events/producer_instance_id`, promoted from `metadata.producer.instance_id`, so a reviewed openPMD projection rule can name the emitting PC; see [hzdr/docs/plans/openpmd-projection-plan.md](hzdr/docs/plans/openpmd-projection-plan.md). Bump this string if the bridge table layout changes (columns added/removed from the shot or source-events groups).
+
+**Axes.** `/entry/shots/*` is the only shot-indexed group. `/entry/source_events` is event-indexed and `/entry/data_products` is product-indexed; both carry a `shot_key` column and must be *joined*, never zipped by position.
 
 ### Shared Pydantic field constraints (`api/src/damnit_api/shared/models.py`)
 

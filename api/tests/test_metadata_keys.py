@@ -177,7 +177,17 @@ class TestLintMetadataKeys:
 # registry. (vacuum.* sat here implicitly and undetected from sign-off
 # 2026-07-02 until the NXenvironment group landed 2026-07-17; this test exists
 # so that state is a visible ruling, never a silent gap.)
-EXPECTED_UNWRITTEN_KEYS: dict[str, str] = {}
+EXPECTED_UNWRITTEN_KEYS: dict[str, str] = {
+    # producer.instance_id *is* written — bridge profile v3 promotes it to the
+    # /entry/source_events/producer_instance_id column. producer.host is
+    # deliberately not: one identifier per producer is enough to attribute a
+    # row, and a hostname is descriptive detail that stays in metadata_json
+    # rather than becoming a second, competing identity in the shot table.
+    "producer.host": (
+        "descriptive producer detail retained in metadata_json; instance_id is "
+        "the promoted identity (bridge profile hzdr-canonical-shot-v3)"
+    ),
+}
 
 
 class TestRegistryWriterCoverage:
