@@ -3051,9 +3051,7 @@ def _write_source_events(entry: h5py.Group, events: list[dict[str, Any]]) -> Non
         # can name the emitting PC. Descriptive only - `event_id` stays the
         # discriminator, and "" is the normal value for a single-instance
         # producer that never sets it.
-        "producer_instance_id": [
-            _event_producer_instance(event) for event in events
-        ],
+        "producer_instance_id": [_event_producer_instance(event) for event in events],
         "payload_ref_json": [
             json.dumps(event.get("payload_ref", {}), sort_keys=True) for event in events
         ],

@@ -672,9 +672,7 @@ def _require_join(report: RuleReport, handle: h5py.File, entry_path: str) -> Non
             f"{report.source_path} is on no canonical axis",
         )
         return
-    table = next(
-        name for name, axis in _TABLE_AXES.items() if axis == report.axis
-    )
+    table = next(name for name, axis in _TABLE_AXES.items() if axis == report.axis)
     join_column = f"{entry_path.rstrip('/')}/{table}/shot_key"
     if isinstance(handle.get(join_column), h5py.Dataset):
         report.join_column = join_column

@@ -538,9 +538,7 @@ def test_preflight_stops_when_the_entry_group_is_absent(
 
     assert report["status"] == "fail"
     assert report["rules"] == []
-    assert "entry_path_missing" in {
-        issue["code"] for issue in report["plan_issues"]
-    }
+    assert "entry_path_missing" in {issue["code"] for issue in report["plan_issues"]}
 
 
 def test_preflight_rejects_a_plan_with_no_rules(
