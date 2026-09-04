@@ -62,6 +62,15 @@ TimeoutStopSec=30
 # Must match DW_API_DAMNIT_PATH in .env.
 ReadWritePaths=<REPLACE /data/damnit/hzdr>
 PrivateTmp=true
+
+# NoNewPrivileges is incompatible with a snap-packaged uv: snap-confine is
+# setuid-root and must acquire cap_dac_override, which this forbids, so the
+# service crash-loops with "snap-confine is packaged without necessary
+# permissions" before the API starts. It works interactively because a shell
+# imposes no such restriction. Check with: readlink -f "$(command -v uv)".
+# If that prints a /snap path, install a real uv binary
+# (curl -LsSf https://astral.sh/uv/install.sh | sh) and point ExecStart= at it
+# rather than removing this line.
 NoNewPrivileges=true
 
 [Install]
