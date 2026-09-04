@@ -8,7 +8,7 @@ open, so this plan is not ready for `plans/done/`.
 
 ## Status snapshot (2026-07-03)
 
-- **Deployed:** test deployment live at `https://fwkt-damnit.fz-rossendorf.de` on `fwkt-webapps.fz-rossendorf.de` (systemd `damnit-api`, port 8000). The offline pilot package gate passed on 2026-07-03 across DAMNIT, LabFrog, LabFrog SQLite tools, DAQ File Watchdog, and shotcounter; live broker `-DockerTests` remains the deployment gate.
+- **Deployed:** NOT currently deployed. A test deployment at `https://fwkt-damnit.fz-rossendorf.de` on `fwkt-webapps.fz-rossendorf.de` (systemd `damnit-api`, port 8000) was recorded here, but as of 2026-09-04 that host has no `damnit-api` unit, no `/opt/damnit-web-hzdr` tree and no `.env` -- only an empty `/data/damnit/hzdr/spool`. Use `hzdr/scripts/damnit-api-checkout.service` to run the API from a user checkout, or build the `/opt` deploy this plan's checklist assumes. The offline pilot package gate passed on 2026-07-03 across DAMNIT, LabFrog, LabFrog SQLite tools, DAQ File Watchdog, and shotcounter; live broker `-DockerTests` remains the deployment gate.
 - **Not yet done:** Kafka and ASAPO spool consumers disabled; real-broker
   restart/replay gate (Step 3) not run against the production broker; nginx
   config for `fwkt-damnit` not yet recorded in the fwkt-webapps hub.

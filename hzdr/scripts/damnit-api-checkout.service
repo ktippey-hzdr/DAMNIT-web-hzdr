@@ -1,0 +1,68 @@
+# systemd unit for the DAMNIT Web API running from a user checkout.
+#
+# Variant of damnit-api.service, which assumes a dedicated `damnit` user and an
+# /opt/damnit-web-hzdr deploy. Use THIS file when the API runs from a normal
+# user's clone -- the fwkt-webapps pattern -- and no /opt layout exists.
+#
+# Installing damnit-api.service on such a host fails before the application
+# ever runs: systemd cannot resolve User=damnit, cannot chdir into
+# /opt/damnit-web-hzdr/api, and treats the missing EnvironmentFile as fatal.
+# systemd reports all three as "Job for damnit-api.service failed because of
+# unavailable resources or another system error."
+#
+# Prerequisites:
+#   1. api/.env exists in the checkout. Copy api/.env.production.example and
+#      fill it in -- at minimum DW_API_SESSION_SECRET and the
+#      DW_API_AUTH__LDAP__* values. Generate a secret with:
+#        openssl rand -hex 32
+#   2. The data root named by DW_API_DAMNIT_PATH in that .env (default
+#      /data/damnit/hzdr) is writable by the user below. It is commonly
+#      root-owned from an earlier install:
+#        sudo chown -R USER:GROUP /data/damnit/hzdr
+#   3. Fill the <REPLACE ...> placeholders below. systemd cannot source User=,
+#      Group=, WorkingDirectory=, EnvironmentFile= or ExecStart= from an
+#      environment file -- they are unit directives, resolved first.
+#
+# Install (as damnit-api, so tooling that looks for that unit finds it):
+#   sudo cp hzdr/scripts/damnit-api-checkout.service \
+#           /etc/systemd/system/damnit-api.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now damnit-api
+#
+# Logs:
+#   journalctl -u damnit-api -f
+
+[Unit]
+Description=DAMNIT Web API (HZDR, user checkout)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=<REPLACE deploy user>
+Group=<REPLACE deploy group>
+WorkingDirectory=<REPLACE /home/USER/DAMNIT-web-hzdr/api>
+
+# Required. Deliberately no leading "-": a missing .env is a configuration
+# error, not something to start the API without.
+EnvironmentFile=<REPLACE /home/USER/DAMNIT-web-hzdr/api/.env>
+
+# Same entry point as damnit-api.service and as
+# api/scripts/damnit-api-deploy.sh -- the regular API, not hzdr-launch.sh,
+# which is a pilot orchestrator that backgrounds its children and would be
+# misreported under Type=simple.
+ExecStart=<REPLACE /usr/local/bin/uv> run python -m damnit_api.main
+
+Restart=on-failure
+RestartSec=5
+
+# The spool consumer must finish flushing before the process exits.
+TimeoutStopSec=30
+
+# Must match DW_API_DAMNIT_PATH in .env.
+ReadWritePaths=<REPLACE /data/damnit/hzdr>
+PrivateTmp=true
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

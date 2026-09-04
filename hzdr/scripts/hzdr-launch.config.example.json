@@ -41,7 +41,7 @@
   },
   "emulator": {
     "sourceKey": "hzdr-emulator",
-    "experimentId": "",
+    "experimentId": "Solenoid_Beamline_Tests_01.2025",
     "shotCount": 6,
     "shotIncrement": 1,
     "eventsDir": "",
