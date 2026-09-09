@@ -3,6 +3,13 @@
 All five images are generated from a disposable local fixture stack at a
 1600×900 viewport:
 
+Install frontend dependencies first with `pnpm --dir frontend install --frozen-lockfile`
+using Node 24 or newer and the pinned pnpm version. The capture keeps a compatible
+Node already on PATH; otherwise it uses the newest installed nvm release matching
+the major version in `.nvmrc` (under `NVM_DIR` or `~/.nvm`). This also works from
+PowerShell without loading nvm in a profile. It does not install Node or change
+your shell configuration.
+
 ```powershell
 uv run --group screenshots playwright install chromium  # one-time
 uv run --group screenshots python hzdr/scripts/capture-screenshots.py
@@ -12,6 +19,7 @@ The command creates canonical fixture events, runs the real package emulator,
 FastAPI service, and Vite frontend on ephemeral localhost ports, captures every
 page below, writes `screenshots/capture-receipt.json`, and stops the processes.
 It requires no broker, MongoDB, credentials, or production service.
+Server output and browser errors are printed to the terminal for troubleshooting.
 
 ## Home — source workspace
 

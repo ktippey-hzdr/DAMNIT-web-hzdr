@@ -140,7 +140,6 @@ def _start_process(
         command,
         cwd=cwd,
         env=env,
-        stdout=subprocess.DEVNULL,
         stderr=subprocess.STDOUT,
         **_process_options(),
     )
@@ -194,8 +193,37 @@ def _stop_process_tree(process: subprocess.Popen[bytes] | None) -> None:
         process.wait(timeout=5)
 
 
-def _frontend_command() -> list[str]:
-    pnpm = shutil.which("pnpm")
+def _frontend_environment() -> dict[str, str]:
+    env = os.environ.copy()
+    required_major = int((ROOT / ".nvmrc").read_text().strip())
+    node = shutil.which("node")
+    if node:
+        version = subprocess.check_output([node, "--version"], text=True).strip()
+        if int(version.lstrip("v").split(".")[0]) >= required_major:
+            return env
+
+    # Non-interactive shells (including PowerShell) may not load nvm's PATH.
+    nvm_dir = Path(env.get("NVM_DIR", str(Path.home() / ".nvm")))
+    candidates = []
+    for binary in (nvm_dir / "versions" / "node").glob(
+        f"v{required_major}.*.*/bin/node"
+    ):
+        parts = binary.parents[1].name.lstrip("v").split(".")
+        if len(parts) == 3 and all(part.isdigit() for part in parts):
+            candidates.append((tuple(map(int, parts)), binary.parent))
+    if candidates:
+        _, bin_dir = max(candidates)
+        env["PATH"] = str(bin_dir) + os.pathsep + env.get("PATH", "")
+        print(f"Using Node from {bin_dir}", flush=True)
+        return env
+    raise SystemExit(
+        f"Node >= {required_major} is required. Activate the version in .nvmrc "
+        "in your shell before running the capture."
+    )
+
+
+def _frontend_command(env: dict[str, str]) -> list[str]:
+    pnpm = shutil.which("pnpm", path=env.get("PATH"))
     if pnpm is None:
         raise SystemExit("pnpm is required to start the HZDR frontend.")
     arguments = [
@@ -240,6 +268,8 @@ def capture() -> None:
         ) from exc
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
+    frontend_env = _frontend_environment()
+    frontend_command = _frontend_command(frontend_env)
     api_process: subprocess.Popen[bytes] | None = None
     frontend_process: subprocess.Popen[bytes] | None = None
 
@@ -285,7 +315,6 @@ def capture() -> None:
                 "DW_API_UVICORN__RELOAD": "false",
             }
         )
-        frontend_env = os.environ.copy()
         frontend_env.update(
             {
                 "VITE_API": api_url,
@@ -302,7 +331,7 @@ def capture() -> None:
             _wait_for_url(f"{api_url}/config/runtime", api_process)
 
             frontend_process = _start_process(
-                _frontend_command(),
+                frontend_command,
                 cwd=ROOT / "frontend",
                 env=frontend_env,
             )
@@ -319,6 +348,18 @@ def capture() -> None:
                     ) from exc
                 try:
                     page = browser.new_page(viewport=VIEWPORT)
+                    page.on(
+                        "pageerror",
+                        lambda error: print(f"Browser error: {error}", file=sys.stderr),
+                    )
+                    page.on(
+                        "console",
+                        lambda message: (
+                            print(f"Browser console: {message.text}", file=sys.stderr)
+                            if message.type == "error"
+                            else None
+                        ),
+                    )
                     page.emulate_media(color_scheme="light", reduced_motion="reduce")
                     for shot in SHOTS:
                         page.goto(

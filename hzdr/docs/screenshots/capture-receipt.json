@@ -1,11 +1,11 @@
 {
-  "capturedAtUtc": "2026-07-26T16:46:58.326486+00:00",
+  "capturedAtUtc": "2026-09-09T12:47:32.787677+00:00",
   "files": {
-    "docs.png": "41ddaa7f6fdf564e66ada50bd0af57f9a24402df341446edaaaf56a3f2936669",
-    "flow-monitor.png": "5daa5fb183c4c045ad2ad72b6457b996ae1dee14c7f1fab4cfe3f1c60284fcd5",
-    "home.png": "ae688476c8b2c0633756114637f89e4ac745516f47289adf030fab1d52edde7e",
-    "link-shot-records.png": "f98381b50b9e7a2a84f87735f22a6fe8d1a2a040dfcfd8e0cdb6b5977cdd99da",
-    "shot-table.png": "1d577e97433b273f918304a8de8cd265663dfe729e35259ffc3854fa2a992e64"
+    "docs.png": "9bb62896ac1a8f47a0ddb71ae2d3883c76c5d39cabe655a4b9d75f13f500913b",
+    "flow-monitor.png": "b7b3d8a7595a9be9ca2a57c1734a00b078542addec101a80a86081740cb43214",
+    "home.png": "070968fb182c46a8f517b833231971b7510b405515213608c131081b750131fc",
+    "link-shot-records.png": "6d1b28bfc86b62f86a0bfc80b9e00e1e28a4af4bbdfee4eb5b0760cbacda7741",
+    "shot-table.png": "8ea5bf26ce8cbf06dbe5b0ac28984241c92f42230f686325c6d2f67e893396e6"
   },
   "schemaVersion": 1
 }
