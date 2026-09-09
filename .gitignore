@@ -20,3 +20,5 @@ __pycache__/
 
 # Local launcher config -- created per machine via hzdr-launch.ps1/.sh -InitConfig
 hzdr/scripts/hzdr-launch.config.json
+api/.env.bak.*
+hzdr/scripts/damnit-api-checkout.service
