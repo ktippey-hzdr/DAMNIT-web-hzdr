@@ -39,19 +39,19 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=tippey
-Group=tippey
-WorkingDirectory=/home/tippey/DAMNIT-web-hzdr/api
+User=<REPLACE ...>
+Group=<REPLACE ...>
+WorkingDirectory=<REPLACE ...>/DAMNIT-web-hzdr/api
 
 # Required. Deliberately no leading "-": a missing .env is a configuration
 # error, not something to start the API without.
-EnvironmentFile=/home/tippey/DAMNIT-web-hzdr/api/.env
+EnvironmentFile=<REPLACE ...>/DAMNIT-web-hzdr/api/.env
 
 # Same entry point as damnit-api.service and as
 # api/scripts/damnit-api-deploy.sh -- the regular API, not hzdr-launch.sh,
 # which is a pilot orchestrator that backgrounds its children and would be
 # misreported under Type=simple.
-ExecStart=/home/tippey/.local/bin/uv run python -m damnit_api.main
+ExecStart=<REPLACE ...>/.local/bin/uv run python -m damnit_api.main
 
 Restart=on-failure
 RestartSec=5
