@@ -177,6 +177,9 @@ keys:
 | `diagnostic.xray_counts` | counts | Integrated X-ray detector counts for the shot |
 | `diagnostic.detector_signal_mean` | — (arbitrary/dimensionless) | Mean detector signal level |
 | `diagnostic.alignment_score` | — (dimensionless, 0–1) | Automated alignment quality score |
+| `diagnostic.tps90_proton_energy` | MeV | Proton energy from the 90° Thomson parabola |
+| `diagnostic.tps90_si11_energy` | MeV | Si¹¹⁺ ion energy from the 90° Thomson parabola |
+| `diagnostic.radiation_dose` | uSv | Radiation dose recorded for the shot |
 
 A new diagnostic scalar must be added to `METADATA_KEY_REGISTRY` (and the
 CLAUDE.md registry table) **before** a producer emits it. An unregistered key

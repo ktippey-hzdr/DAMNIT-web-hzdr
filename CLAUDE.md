@@ -288,6 +288,17 @@ written down as `LASER_POLARIZATION_VALUES` (`p`, `s`, `horizontal`, `vertical`,
 `unpolarized`; matched case-insensitively, DRACO's signed value is `p`). The
 linter warns about an off-vocabulary producer label and the value is still
 written; the same label in `DW_API_HZDR_LASER__POLARIZATION` is rejected instead.
+**Since 2026-09-11** three more `diagnostic.*` scalars are registered:
+`tps90_proton_energy` and `tps90_si11_energy` (MeV) and `radiation_dose` (uSv).
+They are named for the geometry and the species because the number means
+nothing without them — a 90° Thomson-parabola reading for protons and for
+Si¹¹⁺ are two measurements, not one key with a label. Sourced from the
+December 2025 ShootSheet columns `TPS 90° - H`, `TPS 90° -Si 11` and `Dosis`
+in `laser_shot_nexus`, and registered **ahead of** any producer, which is the
+order this registry asks for: that repository is not wired to the Kafka pilot
+and emits no events today. The Thomson parabola was already named in
+[standards-alignment.md §3.5](hzdr/docs/standards-alignment.md) as an important
+DRACO diagnostic with no producer sending it.
 **Since 2026-08-31** the `producer.*` namespace is registered (bridge profile
 v3). It is the only namespace the NeXus writer promotes to a *column* rather
 than to a value: `metadata.producer.instance_id` becomes
@@ -318,6 +329,9 @@ and a producer that never sets it writes `""`.
 | `diagnostic.*` | `xray_counts` | counts |
 | `diagnostic.*` | `detector_signal_mean` | — (arbitrary/dimensionless) |
 | `diagnostic.*` | `alignment_score` | — (dimensionless, 0–1) |
+| `diagnostic.*` | `tps90_proton_energy` | MeV |
+| `diagnostic.*` | `tps90_si11_energy` | MeV |
+| `diagnostic.*` | `radiation_dose` | uSv |
 | `producer.*` | `instance_id` / `host` | — (string) |
 
 See [hzdr/docs/target-ontology.md §5](hzdr/docs/target-ontology.md#5-units-convention) and

@@ -208,6 +208,17 @@ METADATA_KEY_REGISTRY: dict[str, str | None] = {
     "diagnostic.xray_counts": "counts",
     "diagnostic.detector_signal_mean": None,
     "diagnostic.alignment_score": None,
+    # Thomson-parabola and dosimetry scalars (registered 2026-09-11). Named for
+    # the geometry and the species because the number means nothing without
+    # them: a 90-degree TPS reading for protons and for Si-11+ are different
+    # measurements, not one key with a label. Sourced from the December 2025
+    # ShootSheet columns "TPS 90 - H", "TPS 90 -Si 11" and "Dosis"
+    # (laser_shot_nexus); registered ahead of any producer, which is the order
+    # this registry asks for. Observed ranges there: Si-11+ 10-58 MeV, dose
+    # 0-317 uSv, protons a single 2.5 MeV setting.
+    "diagnostic.tps90_proton_energy": "MeV",
+    "diagnostic.tps90_si11_energy": "MeV",
+    "diagnostic.radiation_dose": "uSv",
     # producer.* names the process that emitted the event (registered
     # 2026-08-31, bridge profile v3). Non-numeric identity, and the only
     # namespace the NeXus writer promotes to a canonical *column*
