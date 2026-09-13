@@ -39,8 +39,8 @@ pnpm run dev:app          # Vite dev server at http://localhost:5173
 
 **Refresh all five HZDR documentation screenshots:**
 ```
-uv run --group screenshots playwright install chromium  # one-time
-uv run --group screenshots python hzdr/scripts/capture-screenshots.py
+uv run playwright install chromium  # one-time
+uv run python hzdr/scripts/capture-screenshots.py
 ```
 The capture uses only a disposable local package-emulator stack.
 

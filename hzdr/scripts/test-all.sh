@@ -96,7 +96,7 @@ suite_labfrog() {
     export SKIP_MEDIAWIKI=1
     # `-m "not kafka"` keeps this hermetic: the kafka-marked tests need a real
     # broker via Docker (testcontainers) and are run explicitly with `-m kafka`.
-    uv run --group testing python -m pytest -q -s tests -k "not webkit" -m "not kafka"
+    uv run python -m pytest -q -s tests -k "not webkit" -m "not kafka"
 }
 
 suite_sqlite_tools() { uv run python -m pytest -q; }

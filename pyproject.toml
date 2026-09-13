@@ -29,9 +29,10 @@ dev = [
     "pytest-cov>=7.0.0",
     "coverage>=7.0.0",
     "ruff>=0.7",
-]
-
-screenshots = [
+    # Documentation screenshots (hzdr/scripts/capture-screenshots.py). Folded
+    # into `dev` rather than kept as its own group: the split only meant a
+    # command that forgot to name it failed as if the tool were broken.
+    # `api/`'s groups are upstream's and are deliberately left as they are.
     "playwright>=1.45,<2",
 ]
 

@@ -583,6 +583,7 @@ source = { virtual = "." }
 [package.dev-dependencies]
 dev = [
     { name = "coverage" },
+    { name = "playwright" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -590,15 +591,13 @@ dev = [
     { name = "pytest-mock" },
     { name = "ruff" },
 ]
-screenshots = [
-    { name = "playwright" },
-]
 
 [package.metadata]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "coverage", specifier = ">=7.0.0" },
+    { name = "playwright", specifier = ">=1.45,<2" },
     { name = "pre-commit", specifier = ">=4.5" },
     { name = "pytest", specifier = ">=8.2" },
     { name = "pytest-asyncio", specifier = ">=0.24" },
@@ -606,7 +605,6 @@ dev = [
     { name = "pytest-mock", specifier = ">=3.11" },
     { name = "ruff", specifier = ">=0.7" },
 ]
-screenshots = [{ name = "playwright", specifier = ">=1.45,<2" }]
 
 [[package]]
 name = "datamodel-code-generator"

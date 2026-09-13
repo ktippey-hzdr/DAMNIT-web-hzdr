@@ -2,8 +2,7 @@
 
 Run from the repository root:
 
-    uv run --group screenshots \
-        python hzdr/scripts/capture-screenshots.py
+    uv run python hzdr/scripts/capture-screenshots.py
 
 The command creates canonical fixture events in a temporary directory, runs the
 real package emulator, API, and Vite frontend on ephemeral localhost ports,
@@ -263,8 +262,7 @@ def capture() -> None:
         from playwright.sync_api import sync_playwright
     except ImportError as exc:
         raise SystemExit(
-            "Playwright is required. Run this command through "
-            "`uv run --group screenshots`."
+            "Playwright is required. Run this command through `uv run`."
         ) from exc
 
     OUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -343,7 +341,7 @@ def capture() -> None:
                 except PlaywrightError as exc:
                     raise SystemExit(
                         "Playwright Chromium is not installed. Run "
-                        "`uv run --group screenshots playwright install chromium` "
+                        "`uv run playwright install chromium` "
                         "once, then retry."
                     ) from exc
                 try:

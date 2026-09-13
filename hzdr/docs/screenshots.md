@@ -11,8 +11,8 @@ PowerShell without loading nvm in a profile. It does not install Node or change
 your shell configuration.
 
 ```powershell
-uv run --group screenshots playwright install chromium  # one-time
-uv run --group screenshots python hzdr/scripts/capture-screenshots.py
+uv run playwright install chromium  # one-time
+uv run python hzdr/scripts/capture-screenshots.py
 ```
 
 The command creates canonical fixture events, runs the real package emulator,

@@ -142,7 +142,7 @@ $allSuites = [ordered]@{
             $env:LABFROG_TESTING    = "1"
             $env:SKIP_CUSTOM_OPTIONS = "1"
             $env:SKIP_MEDIAWIKI     = "1"
-            $pa = @('run', '--group', 'testing', 'python', '-m', 'pytest', '-q', '-s', 'tests', '-k', 'not webkit') + (Get-PytestTempArgs "labfrog") + (Get-CovArgs)
+            $pa = @('run', 'python', '-m', 'pytest', '-q', '-s', 'tests', '-k', 'not webkit') + (Get-PytestTempArgs "labfrog") + (Get-CovArgs)
             Invoke-Exe uv @pa
             Update-RepoMap "hzdr/scripts/docs/refresh_coverage_map.py"
         }
