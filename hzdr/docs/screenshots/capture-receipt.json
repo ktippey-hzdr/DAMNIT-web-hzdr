@@ -1,11 +1,11 @@
 {
-  "capturedAtUtc": "2026-09-09T12:47:32.787677+00:00",
+  "capturedAtUtc": "2026-09-13T05:38:19.162849+00:00",
   "files": {
     "docs.png": "9bb62896ac1a8f47a0ddb71ae2d3883c76c5d39cabe655a4b9d75f13f500913b",
     "flow-monitor.png": "b7b3d8a7595a9be9ca2a57c1734a00b078542addec101a80a86081740cb43214",
-    "home.png": "070968fb182c46a8f517b833231971b7510b405515213608c131081b750131fc",
+    "home.png": "4801ef8cf1cd407dab0257518e66f71134718208737c72dae88c14b0f7634bee",
     "link-shot-records.png": "6d1b28bfc86b62f86a0bfc80b9e00e1e28a4af4bbdfee4eb5b0760cbacda7741",
-    "shot-table.png": "8ea5bf26ce8cbf06dbe5b0ac28984241c92f42230f686325c6d2f67e893396e6"
+    "shot-table.png": "d0b7b97e45bdea88b5d90792e607ac05e03d8fb1540fea06df39aa504d58c94f"
   },
   "schemaVersion": 1
 }
