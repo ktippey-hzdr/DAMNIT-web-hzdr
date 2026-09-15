@@ -14,6 +14,12 @@ protocols. See `integration-roadmap.md` for the full work-order history; see
 This review reflects local code and deterministic test evidence. Deployment-broker,
 production-service, and real ASAPO gates were not rerun on 2026-07-23.
 
+Cross-repository deployment and integration state -- what is deployed, which
+gates have passed -- is **not** recorded here. It lives in
+`HZDR_combo/integration-status.json`, which is the single authoritative record
+and is re-proved by `check_alignment.py run --groups repos`. This file keeps the
+per-repo implementation detail; where the two would overlap, the ledger wins.
+
 **Status legend**
 - ✅ implemented and committed (code or config in place)
 - 🟡 code done; human gate or ops step remaining

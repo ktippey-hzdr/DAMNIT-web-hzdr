@@ -14,6 +14,10 @@ open, so this plan is not ready for `plans/done/`.
 ## Status snapshot (2026-07-03)
 
 - **Deployed:** see the `DAMNIT-web API+UI` row in [`fwkt-webapps/docs/operations/deployment-plan.md`](https://codebase.helmholtz.cloud/fwk/fwkt/fwkt-data-management/infrastructure/fwkt-webapps/-/blob/main/docs/operations/deployment-plan.md), which is the operator-facing record of what is actually running. This plan deliberately does not keep its own copy: the two disagreed for weeks, one saying the API was deployed and the other that the host had no unit at all. The offline pilot package gate passed on 2026-07-03 across DAMNIT, LabFrog, LabFrog SQLite tools, DAQ File Watchdog and shotcounter; live broker `-DockerTests` remains the deployment gate.
+- **Gate status:** `HZDR_combo/integration-status.json` is the authoritative
+  record of which integration gates have passed (broker smoke test,
+  restart/replay, ops config, SciCat PID). Entries there are re-proved or
+  carry a dated attestation; this plan does not keep a second copy.
 - **Not yet done:** Kafka and ASAPO spool consumers disabled; real-broker
   restart/replay gate (Step 3) not run against the production broker; nginx
   config for `fwkt-damnit` not yet recorded in the fwkt-webapps hub.
@@ -22,10 +26,11 @@ open, so this plan is not ready for `plans/done/`.
   `localhost:9092`.
 - **Sidecar (decided 2026-07-02):** the `asapo-for-hzdr-damnit` sidecar will
   also run on this VM, writing `/data/damnit/hzdr/spool/asapo/` locally.
-- **Blocked on:** broker deployment on this VM + shotcounter branch merge
+- **Blocked on:** shotcounter branch merge (the broker is deployed and
+  reachable on this VM as of 2026-09-15)
   (see `fwkt-webapps/docs/operations/deployment-plan.md`, Phases 1–2).
-- **Next steps, in order:** (1) enable Kafka spool consumer (Step 1) once the
-  broker exists, (2) run the go-live gate (Step 3) and pilot capture with
+- **Next steps, in order:** (1) enable the Kafka spool consumer (Step 1) --
+  the broker is now deployed, so this is unblocked, (2) run the go-live gate (Step 3) and pilot capture with
   dedup counts, (3) enable the builder auto-trigger + (optional) SciCat
   registration per campaign (Step 2b — landed 2026-07-04, replaces the manual
   per-campaign builder run), (4) enable the ASAPO path only when the LaserData
