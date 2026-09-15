@@ -111,6 +111,13 @@ def mutate_event_for_shot(
     shot_id = str(mutated["shot_id"])
     mutated["shot_id"] = increment_shot_id(shot_id, index * shot_increment)
     mutated["timestamp"] = increment_timestamp(str(mutated["timestamp"]), index)
+    # An explicit shot_number is the authoritative counter, so it has to move
+    # with shot_id. Left alone, every expanded event kept the source event's
+    # number and reconciliation collapsed the whole run into one canonical
+    # shot - which is exactly the shape of the canonical examples in
+    # api/examples/, all of which carry shot_number.
+    if isinstance(mutated.get("shot_number"), int):
+        mutated["shot_number"] += index * shot_increment
 
     payload_ref = mutated.get("payload_ref")
     if isinstance(payload_ref, dict):
@@ -413,10 +420,15 @@ def write_fixture_datasets(handle: h5py.File, events: list[dict[str, Any]]) -> N
         yy, xx = np.mgrid[
             -1 : 1 : complex(image_shape[0]), -1 : 1 : complex(image_shape[1])
         ]
-        center_x = -0.25 + index * 0.08
-        center_y = 0.18 - index * 0.05
+        # Let the beam spot wander inside the frame instead of walking out of
+        # it: the previous linear drift pushed the centre past the edge from
+        # about the thirteenth shot on, so every later image was empty. The
+        # ripple period is bounded for the same reason - one fringe per pixel
+        # is noise, not a representative fixture.
+        center_x = 0.45 * float(np.sin(index * 0.55))
+        center_y = 0.35 * float(np.cos(index * 0.40))
         image = np.exp(-(((xx - center_x) ** 2) / 0.08 + ((yy - center_y) ** 2) / 0.12))
-        image += 0.08 * np.sin((index + 1) * xx * np.pi)
+        image += 0.08 * np.sin((1 + index % 5) * xx * np.pi)
         images.append(image.astype(np.float32))
         masks.append((image > 0.45).astype(np.uint8))
         labels.append(np.digitize(image, bins=[0.15, 0.35, 0.6]).astype(np.int16))

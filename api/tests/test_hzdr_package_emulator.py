@@ -130,6 +130,30 @@ def test_package_emulator_can_expand_shots(tmp_path: Path):
         assert handle["fixtures/images/camera_raw_by_shot"].shape == (3, 64, 64)  # pyright: ignore[reportAttributeAccessIssue]
 
 
+def test_expansion_advances_an_explicit_shot_number(tmp_path: Path):
+    """Events that already carry shot_number must still expand to real shots.
+
+    Every canonical example in api/examples/ sets shot_number, so an expansion
+    that only moved shot_id collapsed the whole run into one canonical shot.
+    """
+    events_dir = tmp_path / "events-in"
+    events_dir.mkdir()
+    write_event(events_dir / "laserdata.json", shot_number=123)
+
+    package = hzdr_package_emulator.run_emulator(
+        events_dir=events_dir,
+        output_dir=tmp_path / "out",
+        source_key="hzdr-emulator",
+        experiment_id=None,
+        shot_count=3,
+        shot_increment=2,
+    )
+
+    sources = load_sources_file(package.sources_file)
+    assert [shot.shot_number for shot in sources[0].shots] == [123, 125, 127]
+    assert len({shot.shot_key for shot in sources[0].shots}) == 3
+
+
 def test_local_shot_status_update_records_review_history(tmp_path: Path):
     events_dir = tmp_path / "events-in"
     events_dir.mkdir()

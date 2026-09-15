@@ -37,7 +37,7 @@ pnpm run dev:app          # Vite dev server at http://localhost:5173
 # point it at the API via apps/app/.env or root .env:  VITE_API=http://127.0.0.1:8000
 ```
 
-**Refresh all five HZDR documentation screenshots:**
+**Refresh all six HZDR documentation screenshots:**
 ```
 uv run playwright install chromium  # one-time
 uv run python hzdr/scripts/capture-screenshots.py

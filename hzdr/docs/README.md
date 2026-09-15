@@ -23,7 +23,7 @@ See the [roadmap](status/integration-roadmap.md) and short
 | --- | --- |
 | [System overview](system-overview.md) | All seven repositories, the end-to-end data flow, shared contracts, and the end products |
 | [Architecture](architecture.md) | Canonical identity, event model, NeXus layout, and system boundaries |
-| [Screenshots](screenshots.md) | Current UI: home, shot table, flow monitor, link records, in-app docs |
+| [Screenshots](screenshots.md) | Current UI: home, shot table, context builder, link records, in-app docs, flow monitor |
 
 ## Reference — data model & standards
 
