@@ -2,7 +2,11 @@
 
 ## Verified
 
-Evidence current through 2026-07-23:
+Evidence current through 2026-07-23. Re-checked 2026-09-15: the named test
+files still exist and the code artefacts they cover are present; the suites
+themselves were not all rerun, and nothing gated on the deployment VM was
+re-verified.
+
 
 | Repository | Result | Evidence date and scope |
 | --- | --- | --- |

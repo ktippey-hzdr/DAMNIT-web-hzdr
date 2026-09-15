@@ -1,6 +1,11 @@
 # DAMNIT-web-hzdr Deployment Plan
 
-Last reviewed: 2026-07-23
+Last full review: 2026-07-23
+Last partial re-check: 2026-09-15 -- code artefacts, branch status and the
+named test files were re-verified against the sibling repositories. Rows
+gated on the deployment VM (broker smoke test, restart/replay, ops config,
+SciCat PID back-population) were **not** re-checked and carry their 07-23
+state.
 
 **Status:** Active. The documented deployment endpoint was not probed during
 this local cleanup pass. Live Kafka restart/replay and pilot-capture gates remain

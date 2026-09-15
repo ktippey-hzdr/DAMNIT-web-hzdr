@@ -1,6 +1,11 @@
 # Integration Roadmap
 
-Updated: 2026-07-23
+Last full review: 2026-07-23
+Last partial re-check: 2026-09-15 -- code artefacts, branch status and the
+named test files were re-verified against the sibling repositories. Rows
+gated on the deployment VM (broker smoke test, restart/replay, ops config,
+SciCat PID back-population) were **not** re-checked and carry their 07-23
+state.
 
 **2026-07-23 review:** local code and documentation were reconciled without
 restructuring this historical roadmap. The DAMNIT API suite passed with

@@ -1,6 +1,11 @@
 # Data-Transfer Protocol Status
 
-Last reviewed: 2026-07-23
+Last full review: 2026-07-23
+Last partial re-check: 2026-09-15 -- code artefacts, branch status and the
+named test files were re-verified against the sibling repositories. Rows
+gated on the deployment VM (broker smoke test, restart/replay, ops config,
+SciCat PID back-population) were **not** re-checked and carry their 07-23
+state.
 
 Per-source, per-repo implementation status for the HZDR DAMNIT pipeline data-transfer
 protocols. See `integration-roadmap.md` for the full work-order history; see
@@ -25,7 +30,7 @@ production-service, and real ASAPO gates were not rerun on 2026-07-23.
 
 | Repo | What | Status |
 |------|------|--------|
-| **shotcounter** | `hzdr-event-v1` envelope: `schema_version`, stable `event_id`, canonical `experiment_id`, UTC timestamp | ✅ on branch; 24/24 was the previously recorded branch result (not rerun on 2026-07-23) |
+| **shotcounter** | `hzdr-event-v1` envelope: `schema_version`, stable `event_id`, canonical `experiment_id`, UTC timestamp | ✅ on branch — run the branch suite for the current result; `test_server.py` needs a live TANGO device server and fails without one |
 | **shotcounter** | `trigger_role` folded into `metadata.trigger.role` at the producer — wire format is now strictly closed | ✅ on branch |
 | **shotcounter** | Kafka key `<experiment_id>:<channel_id>` for per-stream ordering | ✅ on branch |
 | **shotcounter** | `IsShotCounterXX` per-channel gating (default `False`, opt-in); startup warning when all False + KafkaEnabled | ✅ on branch; decision: keep default False |
@@ -35,7 +40,7 @@ production-service, and real ASAPO gates were not rerun on 2026-07-23.
 | **DAMNIT** | `KafkaSpoolConsumer` (`consumer/kafka.py`): manual-commit, claim→write+fsync→ack→dedup | ✅ committed to main |
 | **DAMNIT** | `_normalize_hzdr_event_v1_trigger`: normaliser route for the canonical envelope; migration shim drops legacy `trigger_role` | ✅ committed |
 | **DAMNIT** | `DW_API_HZDR_KAFKA_SPOOL__TOPICS=["draco.trigger","planet.watchdog.events"]` in `.env.production.example` | ✅ committed |
-| **DAMNIT** | 6 offline/in-process tests (`test_hzdr_kafka_spool.py`) + 4 docker-gated tests (`test_hzdr_broker_roundtrip.py`) | ✅ committed |
+| **DAMNIT** | Offline/in-process tests (`test_hzdr_kafka_spool.py`) + docker-gated tests (`test_hzdr_broker_roundtrip.py`) | ✅ committed — counts deliberately not quoted here; run `uv run pytest api/tests/test_hzdr_kafka_spool.py api/tests/test_hzdr_broker_roundtrip.py` |
 | **DAMNIT** | `test-all.ps1 -DockerTests` opt-in for real-broker integration suite | ✅ committed |
 | **DAMNIT** | Real restart/replay pass on deployment broker | 🟡 test infrastructure ready; manual pass not yet run |
 | **kafka-broker-docker** | `topics.env` topic registry (canonical reference for `draco.trigger`) | ✅ committed |
@@ -76,7 +81,7 @@ broker, then merge the shotcounter branch.
 
 **Transport:** Shared filesystem; export drop-in location configurable
 **Protocol:** Curated SQLite + NeXus file pair, with `bundle-complete.json` marker
-**Branch status:** all committed to `main`
+**Branch status:** all committed to `develop`, which is this repo's default branch; `main` trails it (17 commits behind as of 2026-09-15)
 
 | Repo | What | Status |
 |------|------|--------|
@@ -113,7 +118,7 @@ broker, then merge the shotcounter branch.
 | **asapo-for-hzdr-damnit** | `drop-in/consumer.ps1` supports `DAMNIT_CONSUMER_TRANSPORT=asapo` to drive the SDK consumer | ✅ committed |
 | **DAMNIT** | `AsapoSpoolConsumer` (`consumer/asapo.py`): httpx async client, same base loop as Kafka consumer | ✅ committed |
 | **DAMNIT** | `DW_API_HZDR_SPOOL__BROKER_URL` required when enabled (no default — prevents silent connection to localhost) | ✅ committed |
-| **DAMNIT** | 11 tests in `test_hzdr_spool.py` against live in-process harness broker | ✅ committed |
+| **DAMNIT** | `test_hzdr_spool.py` against a live in-process harness broker | ✅ committed — run `uv run pytest api/tests/test_hzdr_spool.py` for the current count |
 | **DAMNIT** | Consume LaserData/ASAPO through the `asapo-for-hzdr-damnit` sidecar writing DAMNIT spool JSONL | preferred follow-up path; not a Kafka pilot blocker |
 | **DAMNIT** | Gated integration test for real ASAPO sidecar against broker | deferred until LaserData/package/broker access is available |
 | **DAMNIT** | Large-array externalisation: `payload_ref.uri` instead of inline `values` for payloads > 64 KiB | ✅ committed — `RealAsapoSpoolConsumer` drops oversized inline `values`, preserves a generated ASAPO `payload_ref.uri`, and leaves the builder size guard as a backstop |
@@ -137,3 +142,4 @@ broker, then merge the shotcounter branch.
 | Versioned JSON Schema publication (public URL for `hzdr-event-vN.schema.json`) | ⬜ deferred until a second schema version is needed |
 | `shot_key` in table row-selection and review actions (UI refactor) | ⬜ post-pilot; tracked separately |
 | SciCat registration from builder post-step + `payload_ref.scicat_pid` | 🟡 DAMNIT builder wiring is implemented and locally tested; deployed PID back-population and replay suppression remain unverified |
+| openPMD projection of canonical NeXus (`metadata/hzdr_openpmd.py`, `hzdr-openpmd-fixture.py`, `hzdr-openpmd-preflight.py`) | ✅ DAMNIT's slice committed. Phase state for the whole workstream is owned by `HZDR_combo/planning/OPENPMD_MULTI_SOURCE_IMPLEMENTATION_PLAN.md`, not tracked here; the constellation check `check_alignment.py run --groups nexus` is the gate |

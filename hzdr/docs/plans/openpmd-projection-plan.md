@@ -1,8 +1,12 @@
 # openPMD projection plan (DAMNIT side)
 
-**Status (2026-09-02):** Active. Phase 2 — the synthetic multi-source canonical
-fixture and the projection preflight — is implemented and green, as is the
-reviewed payload policy. Phases 3–5 are open and belong to other repositories.
+**Status:** see `HZDR_combo/planning/OPENPMD_MULTI_SOURCE_IMPLEMENTATION_PLAN.md`, which owns
+the phase state for this workstream across all the repositories it touches.
+This plan deliberately keeps no second copy: it said "Phase 2 done, Phases 3-5
+open" for weeks after the constellation plan had recorded Phases 1-4 as
+delivered, green and merged. DAMNIT's own slice -- the synthetic multi-source
+canonical fixture, the projection preflight and the reviewed payload policy --
+is implemented and green; `check_alignment.py run --groups nexus` is the gate.
 
 This is DAMNIT's repo-local slice of the constellation plan
 `HZDR_combo/planning/OPENPMD_MULTI_SOURCE_IMPLEMENTATION_PLAN.md`. The reviewed
