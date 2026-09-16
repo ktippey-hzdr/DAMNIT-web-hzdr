@@ -168,7 +168,7 @@ is kept for the HELPMI cross-walk but the *stored* key is the bare name here.
 family-wide, not just `metadata.target.*` — it also applies to
 `metadata.laser.*` and `metadata.vacuum.*`, superseding suffixed keys like
 `pulse_energy_j`. The canonical unit per key is fixed in the metadata key
-registry (see [CLAUDE.md](../CLAUDE.md)); the NeXus writer stamps it as
+registry (see [CLAUDE.md](../../CLAUDE.md#metadata-key-registry-binding-signed-off-2026-07-02)); the NeXus writer stamps it as
 `@units` as above, and the SQLite export carries it in the existing `units`
 table (already part of the labfrog-sqlite-tools schema) rather than in the
 column name. The `properties` extras bag (§4) keeps the `_unit`-suffix
