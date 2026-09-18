@@ -216,6 +216,18 @@ METADATA_KEY_REGISTRY: dict[str, str | None] = {
     # (laser_shot_nexus); registered ahead of any producer, which is the order
     # this registry asks for. Observed ranges there: Si-11+ 10-58 MeV, dose
     # 0-317 uSv, protons a single 2.5 MeV setting.
+    #
+    # Still no producer, and the reason is now a known one rather than an
+    # absence. planet-watchdog's `simpleTPS_parser` reads the Thomson parabola's
+    # own export and emits `estimated_Emax` in MeV -- the right quantity in the
+    # right unit for one of the two keys below. Which one is not in the file: the
+    # export carries the particle channel in its *name*
+    # (`... Spektrum Particle__p.txt`) and not in its header, so a producer that
+    # picked a key from the header alone would file Si-11+ spectra as protons.
+    # That is exactly the confusion these two keys were split to prevent, so the
+    # parser claims neither (parsers/simpleTPS_parser.json) and the gap stays
+    # visible. Settling it needs an operator ruling on the file-name convention,
+    # or an export that states the species.
     "diagnostic.tps90_proton_energy": "MeV",
     "diagnostic.tps90_si11_energy": "MeV",
     "diagnostic.radiation_dose": "uSv",

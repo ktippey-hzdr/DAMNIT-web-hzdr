@@ -298,7 +298,16 @@ in `laser_shot_nexus`, and registered **ahead of** any producer, which is the
 order this registry asks for: that repository is not wired to the Kafka pilot
 and emits no events today. The Thomson parabola was already named in
 [standards-alignment.md §3.5](hzdr/docs/standards-alignment.md) as an important
-DRACO diagnostic with no producer sending it.
+DRACO diagnostic with no producer sending it. **Since 2026-09-18** that gap has
+a known cause rather than being an absence: `planet-watchdog`'s
+`simpleTPS_parser` reads the instrument's own export and emits `estimated_Emax`
+in MeV — the right quantity and unit for one of the two keys — but *which* one
+is carried in the file name (`… Spektrum Particle__p.txt`) and not in the
+header, so a producer choosing from the header alone would file Si¹¹⁺ spectra as
+protons. That is precisely the confusion the two keys were split to prevent, so
+the parser claims neither and says so in its descriptor. Closing it needs an
+operator ruling on the file-name convention, or an export that states the
+species.
 **Since 2026-08-31** the `producer.*` namespace is registered (bridge profile
 v3). It is the only namespace the NeXus writer promotes to a *column* rather
 than to a value: `metadata.producer.instance_id` becomes
