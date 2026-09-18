@@ -298,7 +298,11 @@ in `laser_shot_nexus`, and registered **ahead of** any producer, which is the
 order this registry asks for: that repository is not wired to the Kafka pilot
 and emits no events today. The Thomson parabola was already named in
 [standards-alignment.md §3.5](hzdr/docs/standards-alignment.md) as an important
-DRACO diagnostic with no producer sending it. **Since 2026-09-18** that gap has
+DRACO diagnostic with no producer sending it. **Since 2026-09-18** `laser_shot_nexus`
+stamps all three onto its shot containers from the very ShootSheet columns they
+were registered from, where the column names the species and nothing is
+ambiguous — a NeXus field carrying a registry key, not an event producer, so the
+§3.5 statement stands. The *producer* gap now has
 a known cause rather than being an absence: `planet-watchdog`'s
 `simpleTPS_parser` reads the instrument's own export and emits `estimated_Emax`
 in MeV — the right quantity and unit for one of the two keys — but *which* one

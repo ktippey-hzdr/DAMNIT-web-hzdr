@@ -217,8 +217,17 @@ METADATA_KEY_REGISTRY: dict[str, str | None] = {
     # this registry asks for. Observed ranges there: Si-11+ 10-58 MeV, dose
     # 0-317 uSv, protons a single 2.5 MeV setting.
     #
-    # Still no producer, and the reason is now a known one rather than an
-    # absence. planet-watchdog's `simpleTPS_parser` reads the Thomson parabola's
+    # Since 2026-09-18 laser_shot_nexus stamps all three onto its shot
+    # containers from the ShootSheet columns they were registered from -- the
+    # column names the species (`- H`, `-Si 11`), so nothing there is ambiguous,
+    # and a cell holding an operator's words rather than a number keeps the key
+    # but is marked as text. That is a NeXus field carrying a registry key, NOT
+    # an event producer: nothing in that repository publishes to the pilot, and
+    # standards-alignment.md 3.5 is still right that no producer sends the
+    # Thomson parabola.
+    #
+    # The producer gap has a known cause rather than being an absence.
+    # planet-watchdog's `simpleTPS_parser` reads the Thomson parabola's
     # own export and emits `estimated_Emax` in MeV -- the right quantity in the
     # right unit for one of the two keys below. Which one is not in the file: the
     # export carries the particle channel in its *name*
