@@ -391,4 +391,4 @@ Values: `none`, `number`, `string`, `boolean`, `timestamp`, `complex`, `array`, 
 
 ### API package version
 
-`damnit-api` current: **`0.1.1`** (see `api/pyproject.toml`). No runtime version endpoint exists; bump this when the public schema changes.
+`damnit-api` current: **`0.3.0`** (see `api/pyproject.toml`). No runtime version endpoint exists; bump this when the public schema changes.

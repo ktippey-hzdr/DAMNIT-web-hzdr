@@ -418,7 +418,7 @@ wheels = [
 
 [[package]]
 name = "damnit-api"
-version = "0.1.1"
+version = "0.3.0"
 source = { editable = "api" }
 dependencies = [
     { name = "aiofiles" },
@@ -577,7 +577,7 @@ test = [
 
 [[package]]
 name = "damnit-web"
-version = "0.1.0"
+version = "0.3.0"
 source = { virtual = "." }
 
 [package.dev-dependencies]
