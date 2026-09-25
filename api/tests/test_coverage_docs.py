@@ -27,7 +27,8 @@ def _load_coverage_map():
     path = REPO_ROOT / "scripts" / "docs" / "refresh_coverage_map.py"
     name = "refresh_coverage_map"
     spec = importlib.util.spec_from_file_location(name, path)
-    assert spec and spec.loader, f"cannot load {path}"
+    assert spec is not None, f"cannot load {path}"
+    assert spec.loader is not None, f"cannot load {path}"
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     previously = sys.dont_write_bytecode
