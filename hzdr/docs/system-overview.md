@@ -27,6 +27,7 @@ web UI reads.
 | **kafka-broker-docker** | Single-node Kafka broker + helper scripts and examples | Docker Compose (KRaft) | Transport (local/dev message bus) |
 | **asapo-for-hzdr-damnit** | Local harness proving the event contract + ASAPO/Kafka staging semantics | Node + Python | Transport test rig + contract reference |
 | **DAMNIT-web-hzdr** | Reconciler/builder + FastAPI API + React frontend | Python + TS | Consumer; builds and serves the canonical outputs |
+| **shot-aligner** | Proof of concept and precursor to the automated flow: rebuilds, after the fact, which instrument files belong to which shot, and writes per-shot NeXus once a person has reviewed each link | Python (`uv`) + Flask review app | Outside the flow: reads the rawdata and Shotlists shares, publishes no events — see [Before the chain](#before-the-chain-the-laser-shot-aligner) |
 | **scicat_plugin** | Registers file/path references + metadata in SciCat (reuses `scicat-ingestor` worker codepaths; no binary upload) | Flask + `scicat-ingestor` | Sink; SciCat catalog registration (producer-side per file, or DAMNIT-side per campaign NeXus file) — see [integration-roadmap.md §SciCat Registration](status/integration-roadmap.md#scicat-registration) |
 
 A third producer, **LaserData** (`source = LaserData`, transported over ASAPO),
@@ -124,6 +125,23 @@ flowchart TD
    shot row, and runs a single-writer builder that produces the canonical outputs.
 6. The **API and frontend** read those outputs. DAMNIT never asks producers to
    edit the canonical file or make their own matching decisions.
+
+### Before the chain: the Laser Shot Aligner
+
+**shot-aligner** is not part of this flow and publishes no events. It is a
+proof of concept, and the precursor to the automated version: it works on the
+instrument folders and shot workbooks already on the rawdata and Shotlists
+shares, and reconstructs **after the fact** which files belong to which shot —
+fitting each diagnostic's clock against an anchor, aligning the resulting shot
+events with the workbook's rows, and having a person review every link before
+it writes one NeXus container per shot.
+
+What it has to infer is what this chain records at the source: the `shot_id`
+that shotcounter mints, and the `experiment_id + shot_id` join below. Its
+`governed-keys.md` records, for every key in `METADATA_KEY_REGISTRY`, whether
+the aligner adopts or refuses it; its containers are not built or registered
+through DAMNIT. See the hub's
+[shot-aligner page](https://codebase.helmholtz.cloud/fwk/fwkt/fwkt-data-management/infrastructure/fwkt-webapps/-/blob/main/docs/projects/shot-aligner.md).
 
 ## The Contracts That Hold It Together
 
