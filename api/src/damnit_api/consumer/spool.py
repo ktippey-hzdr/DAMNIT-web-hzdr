@@ -28,7 +28,7 @@ from dataclasses import dataclass, field
 from pathlib import Path  # noqa: TC003
 from typing import Any
 
-from ..metadata.hzdr_event import lint_metadata_keys
+from ..metadata.hzdr_event import UNASSIGNED_EXPERIMENT_ID, lint_metadata_keys
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +91,11 @@ def _append_event_durable(path: Path, message: dict[str, Any]) -> None:
         os.fsync(fh.fileno())
 
 
+# Directory (under each consumer's spool_dir) shared by every campaign for
+# events that arrive as experiment_id "unassigned".
+UNASSIGNED_SPOOL_DIR = "_unassigned"
+
+
 @dataclass
 class SpoolConfig:
     """Runtime config for one spool consumer instance."""
@@ -114,6 +119,23 @@ class SpoolConfig:
         slug = self.campaign.replace(" ", "_") if self.campaign else "default"
         return self.spool_dir / slug / self.filename
 
+    @property
+    def unassigned_jsonl(self) -> Path:
+        """Shared spool file for events whose ``experiment_id`` is ``unassigned``.
+
+        Decision D1: a producer that does not know the campaign says so. Those
+        events are not this consumer's campaign's to claim, so they land in
+        ``<spool>/_unassigned/<filename>``, which every campaign's builder reads
+        and routes at build time (resolution chain in reconcile_canonical_shots).
+        """
+        return self.spool_dir / UNASSIGNED_SPOOL_DIR / self.filename
+
+    def path_for(self, message: dict[str, Any]) -> Path:
+        """The spool file one message belongs in."""
+        if message.get("experiment_id") == UNASSIGNED_EXPERIMENT_ID:
+            return self.unassigned_jsonl
+        return self.events_jsonl
+
 
 class HZDRSpoolConsumer(ABC):
     """Base claim/write/ack/dedup loop for one campaign spool.
@@ -131,7 +153,9 @@ class HZDRSpoolConsumer(ABC):
 
     def _ensure_loaded(self) -> None:
         if not self._loaded:
-            self._staged = _load_staged_identities(self.config.events_jsonl)
+            self._staged = _load_staged_identities(
+                self.config.events_jsonl
+            ) | _load_staged_identities(self.config.unassigned_jsonl)
             self._loaded = True
 
     def consume_one(self, message: dict[str, Any]) -> Path | None:
@@ -153,7 +177,7 @@ class HZDRSpoolConsumer(ABC):
                     message.get("event_id", identity),
                     warning,
                 )
-        path = self.config.events_jsonl
+        path = self.config.path_for(message)
         _append_event_durable(path, message)
         self._staged.add(identity)
         logger.info("Spooled %s → %s", identity, path)

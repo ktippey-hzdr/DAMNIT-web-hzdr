@@ -46,6 +46,72 @@ should prefer `shot_key` for shot detail links; plain `shot_number` routes remai
 for compatibility but are ambiguous when counters restart or LabFrog keeps
 multiple versions of a shot row.
 
+## Campaign Resolution
+
+`experiment_id: "unassigned"` is the registered sentinel
+(`UNASSIGNED_EXPERIMENT_ID` in `hzdr_event.py`, decision D1 of the combo's
+automatic shot assembly plan) for a producer that does not know which campaign
+a shot belongs to. It is an ordinary `hzdr-event-v1` value - the envelope is
+unchanged - and it follows the existing `shot_id = "unassigned-<event_id>"`
+convention. A producer never guesses a campaign from its own configuration to
+avoid sending it.
+
+DAMNIT resolves the campaign before it filters a build's events to one
+`experiment_id` (`resolve_event_experiments`, called first thing in
+`reconcile_canonical_shots`). An event that already names a campaign keeps it
+(`producer`). An `unassigned` event with an authoritative envelope
+`shot_number` goes down the chain; first match wins:
+
+1. **LabFrog record** with that `shot_number`, naming exactly one campaign ->
+   `labfrog`. A record without its own `experiment_id` belongs to the export
+   the build was pointed at.
+2. **Campaign schedule** window containing the event time -> `schedule`. The
+   schedule is LabFrog's `labfrog-campaign-schedule-v1` export (MediaWiki
+   `FWKTBeamtime` dates, decision D4): inclusive calendar days in its
+   `timezone`, each the local window `[start 00:00, end + 1 day 00:00)`. Rows
+   with a null date never match; a time inside two windows is **not** a match.
+   Builder flag `--campaign-schedule`, setting
+   `DW_API_HZDR_BUILDER__CAMPAIGN_SCHEDULE`.
+3. **A reviewer's ruling** in the review sidecar
+   (`append_experiment_ruling`: `{"action": "assign_experiment", "shot_number",
+   "experiment_id", "review_level", ...}` in `<catalog>.review.jsonl`, highest
+   review level wins) -> `ruling`. A build reads its own sidecar plus any passed
+   with `--experiment-rulings`. There is no REST/UI writer for rulings yet.
+4. Otherwise the event stays `unassigned`. It is still built: a build with
+   `--experiment-id unassigned` is the `_unassigned` bucket, and review lists
+   it there. Nothing is dropped.
+
+The spool consumers write `unassigned` events to a shared
+`<spool>/_unassigned/<file>` (deduplicated like the campaign file), and the
+builder auto-trigger passes that file to every campaign's build once it
+exists, so rebuilding after a ruling or a schedule update re-routes them. The
+builder's `--experiment-id` override never rewrites the sentinel on a trigger
+envelope, and the sentinel never counts as a second campaign when the builder
+infers the experiment id.
+
+Each canonical shot records the outcome in `/entry/shots/experiment_id_source`
+(bridge profile v4): `labfrog` for every LabFrog-backed shot, otherwise the
+strongest source among its events.
+
+**Trigger-only shots (plan W6.1).** With LabFrog records present, the
+canonical shots are the union of those records and every `DRACO-Trigger` event
+with an authoritative `shot_number` that no LabFrog record carries and that the
+matcher left unattached. Such a shot is built from its trigger (plus unattached
+events of the same local date, number and `shot_id`); its LabFrog columns are
+empty, and no synthetic LabFrog source event is cited for it. The union is not
+built when the builder preserves a LabFrog **NeXus** projection
+(`--labfrog-nexus`), whose `/entry/shots` axis and shot-indexed
+`/entry/derived` datasets are fixed to LabFrog's rows; there the trigger stays
+a review event, as before.
+
+**Time-based auto-assignment (plan W6.2).** `--no-time-match-autoassign`
+(`DW_API_HZDR_BUILDER__TIME_MATCH_AUTOASSIGN=false`) stops matching steps 4-6
+below from attaching an event: the shot they would have picked becomes a review
+candidate (`match_status` `ambiguous`, `candidate_shot_keys`). It also means a
+trigger whose number LabFrog lacks can no longer be pulled onto a neighbouring
+LabFrog shot by time, so it founds its trigger-only shot. The default (`true`)
+keeps the validated behaviour.
+
 ## Event Envelope
 
 Every transport event should converge on this model, implemented once as the
@@ -202,8 +268,10 @@ The LabFrog NeXus structure is preserved and DAMNIT adds:
 ```text
 /entry/definition                    NXhzdr_target application-definition declaration
 /entry/experiment_identifier         campaign id (standard NXentry field)
-/entry/shots                         canonical shot rows, match provenance, per-shot target JSON
-/entry/source_events                 normalized events, including unmatched events
+/entry/shots                         canonical shot rows, match provenance, per-shot target JSON,
+                                     experiment_id_source (bridge v4)
+/entry/source_events                 normalized events, including unmatched events;
+                                     producer_instance_id (v3), instrument_id (v4) columns
 /entry/data_products                 files and internal dataset references
 /entry/laserdata                     embedded small event arrays
 /entry/watchdog                      Watchdog-derived values when present

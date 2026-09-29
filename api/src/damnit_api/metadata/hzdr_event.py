@@ -28,6 +28,16 @@ from pydantic import BaseModel, ConfigDict, Field, JsonValue
 
 HZDR_EVENT_SCHEMA_VERSION = "hzdr-event-v1"
 
+# The registered `experiment_id` sentinel (decision D1, 2026-09-29). A producer
+# that does not know which campaign a shot belongs to sends exactly this value
+# instead of guessing from its own configuration; `hzdr-event-v1` is unchanged
+# (the field stays a required string). DAMNIT resolves the campaign at build
+# time - LabFrog record, then campaign schedule, then a reviewer's ruling - and
+# a shot none of them claims is still built, in the `_unassigned` bucket. It
+# follows the existing `shot_id = "unassigned-<event_id>"` convention for a
+# shot without an authoritative number.
+UNASSIGNED_EXPERIMENT_ID = "unassigned"
+
 # Guardrail for the inline ``values`` field. ``values`` is for small JSON
 # scalars/objects/arrays only; large datasets belong behind a ``payload_ref``
 # (uri/path/object-store/SciCat/Mongo reference), not embedded in the event
@@ -115,7 +125,14 @@ class HZDREventV1(BaseModel):
         HZDR_EVENT_SCHEMA_VERSION
     )
     event_id: str
-    experiment_id: str
+    experiment_id: str = Field(
+        description=(
+            "Canonical campaign id. A producer that does not know the campaign "
+            "sends the registered sentinel 'unassigned' (UNASSIGNED_EXPERIMENT_ID) "
+            "rather than a guess; the consumer resolves it from LabFrog, the "
+            "campaign schedule, or a reviewer's ruling."
+        ),
+    )
     shot_id: str
     shot_number: int | None = Field(
         default=None,
@@ -250,6 +267,31 @@ METADATA_KEY_REGISTRY: dict[str, str | None] = {
     # descriptive, never a join key (that is `event_id`).
     "producer.instance_id": None,
     "producer.host": None,
+    # instrument.*, attribution.* and acquisition.* (registered 2026-09-29,
+    # decision D2 of the automatic shot assembly plan, change class
+    # additive-metadata: hzdr-event-v1 is unchanged). They say *which*
+    # instrument wrote a file, *how* the producer tied it to a shot, and *when*
+    # the data was taken. Registered ahead of any producer, which is the order
+    # this registry asks for; once a producer emits them, renaming one is a
+    # breaking change. `instrument.id` is the stable instrument-catalogue id
+    # (null when unregistered) and is the one the NeXus writer promotes to a
+    # column (/entry/source_events/instrument_id, bridge profile v4); the rest
+    # stay in metadata_json for audit and review. The string enums are written
+    # down in METADATA_KEY_VALUES below. `attribution.candidates` is a list of
+    # shot numbers, `acquisition.time` an ISO-8601 UTC string, and
+    # `attribution.delta_s` the one numeric key (first_seen - trigger receipt,
+    # in seconds, audit only - DAMNIT never re-attributes from it).
+    "instrument.id": None,
+    "instrument.group": None,
+    "instrument.timing_role": None,
+    "instrument.format": None,
+    "instrument.record_source": None,
+    "attribution.method": None,
+    "attribution.status": None,
+    "attribution.delta_s": "s",
+    "attribution.candidates": None,
+    "acquisition.time": None,
+    "acquisition.time_source": None,
 }
 
 
@@ -275,6 +317,38 @@ LASER_POLARIZATION_VALUES: frozenset[str] = frozenset({
     "elliptical",
     "unpolarized",
 })
+
+
+# Every registry key typed as a string enum, with its accepted labels. Matched
+# case-insensitively and only *warned* about (lint_metadata_keys), never
+# rejected - the same rule as laser.polarization, whose vocabulary predates this
+# table. The instrument/attribution/acquisition enums were registered
+# 2026-09-29 (decision D2); see the registry comment above.
+METADATA_KEY_VALUES: dict[str, frozenset[str]] = {
+    "laser.polarization": LASER_POLARIZATION_VALUES,
+    "instrument.group": frozenset({"ions", "electrons"}),
+    "instrument.timing_role": frozenset({"on_shot", "pre_shot"}),
+    "instrument.record_source": frozenset({
+        "catalogue",
+        "catalogue+labfrog",
+        "watch_rule",
+        "none",
+    }),
+    "attribution.method": frozenset({
+        "trigger_window",
+        "filename_counter",
+        "cadence",
+        "manual",
+    }),
+    "attribution.status": frozenset({
+        "attributed",
+        "ambiguous",
+        "no_trigger",
+        "rescan",
+        "unregistered",
+    }),
+    "acquisition.time_source": frozenset({"filename", "first_seen", "mtime", "none"}),
+}
 
 
 # Superseded flat/unit-suffixed key name -> new namespaced bare key (a
@@ -334,11 +408,12 @@ def lint_metadata_keys(metadata: dict[str, Any]) -> list[str]:
     written to the NeXus bridge without `@units` — register the key (code
     registry + CLAUDE.md table) before producing it.
 
-    The one *value* this linter looks at is `metadata.laser.polarization`,
-    the registry's only string enum (LASER_POLARIZATION_VALUES, written down
-    2026-07-27): an off-vocabulary label is written to
-    `NXbeam.incident_polarization` verbatim and would otherwise silently
-    fragment the vocabulary across producers.
+    The *values* this linter looks at are the registry's string enums
+    (METADATA_KEY_VALUES): `metadata.laser.polarization` (written down
+    2026-07-27, an off-vocabulary label is written to
+    `NXbeam.incident_polarization` verbatim) and, since 2026-09-29, the
+    instrument/attribution/acquisition enums. An off-vocabulary label would
+    otherwise silently fragment the vocabulary across producers.
 
     Returns a list of human-readable warning strings; does not log by itself
     (callers decide whether/how to log - see the call site in
@@ -371,21 +446,26 @@ def lint_metadata_keys(metadata: dict[str, Any]) -> list[str]:
                     "METADATA_KEY_REGISTRY (and the CLAUDE.md registry table) "
                     "so the NeXus writer can stamp @units"
                 )
-            elif path == "laser.polarization":
-                warnings.extend(_lint_polarization_value(value[inner_key]))
+            elif path in METADATA_KEY_VALUES:
+                warnings.extend(_lint_enum_value(path, value[inner_key]))
     return warnings
 
 
-def _lint_polarization_value(value: Any) -> list[str]:
-    """Warn when a polarization label is outside the registry's string enum."""
+def _lint_enum_value(path: str, value: Any) -> list[str]:
+    """Warn when a string-enum label is outside its registered vocabulary."""
     if value is None or not isinstance(value, str):
         return []
-    if value.strip().lower() in LASER_POLARIZATION_VALUES:
+    vocabulary = METADATA_KEY_VALUES[path]
+    if value.strip().lower() in vocabulary:
         return []
-    accepted = ", ".join(sorted(LASER_POLARIZATION_VALUES))
+    accepted = ", ".join(sorted(vocabulary))
+    consequence = (
+        "it is written to NXbeam.incident_polarization verbatim"
+        if path == "laser.polarization"
+        else "it is kept in metadata_json verbatim"
+    )
     warning = (
-        f"metadata.laser.polarization value {value!r} is outside the accepted "
-        f"vocabulary ({accepted}); it is written to "
-        "NXbeam.incident_polarization verbatim"
+        f"metadata.{path} value {value!r} is outside the accepted "
+        f"vocabulary ({accepted}); {consequence}"
     )
     return [warning]

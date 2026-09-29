@@ -187,6 +187,28 @@ EXPECTED_UNWRITTEN_KEYS: dict[str, str] = {
         "descriptive producer detail retained in metadata_json; instance_id is "
         "the promoted identity (bridge profile hzdr-canonical-shot-v3)"
     ),
+    # Registered 2026-09-29 (decision D2) ahead of any producer. Only
+    # instrument.id is promoted (the /entry/source_events/instrument_id column,
+    # bridge profile v4); the rest describe the instrument or the producer's
+    # attribution of a file and are retained verbatim in metadata_json for
+    # audit and review. Grouping data_products under /entry/instrument/<id>
+    # (W3) and feeding attribution.candidates into review (W6.3) will route
+    # some of them - remove each from here when it does.
+    **dict.fromkeys(
+        (
+            "instrument.group",
+            "instrument.timing_role",
+            "instrument.format",
+            "instrument.record_source",
+            "attribution.method",
+            "attribution.status",
+            "attribution.delta_s",
+            "attribution.candidates",
+            "acquisition.time",
+            "acquisition.time_source",
+        ),
+        "retained in metadata_json; not yet routed (plan W3/W6.3), audit only",
+    ),
 }
 
 

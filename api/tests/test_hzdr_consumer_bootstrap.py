@@ -34,7 +34,10 @@ class _FakeConsumer:
 
     def __init__(self, spool_root: Path, name: str) -> None:
         self.name = name
-        self.config = SimpleNamespace(events_jsonl=Path(spool_root) / f"{name}.jsonl")
+        self.config = SimpleNamespace(
+            events_jsonl=Path(spool_root) / f"{name}.jsonl",
+            unassigned_jsonl=Path(spool_root) / "_unassigned" / f"{name}.jsonl",
+        )
         self.on_new_events_hook = None
         self.stop_seen = None
         self.closed = False
@@ -63,10 +66,19 @@ class _FakeKafka(_FakeConsumer):
 class _FakeBuilderTrigger:
     created: ClassVar[list[_FakeBuilderTrigger]] = []
 
-    def __init__(self, settings, events_jsonl=(), trigger_jsonl=()) -> None:
+    def __init__(
+        self,
+        settings,
+        events_jsonl=(),
+        trigger_jsonl=(),
+        unassigned_events_jsonl=(),
+        unassigned_trigger_jsonl=(),
+    ) -> None:
         self.settings = settings
         self.events_jsonl = list(events_jsonl)
         self.trigger_jsonl = list(trigger_jsonl)
+        self.unassigned_events_jsonl = list(unassigned_events_jsonl)
+        self.unassigned_trigger_jsonl = list(unassigned_trigger_jsonl)
         self.stop_seen = None
         _FakeBuilderTrigger.created.append(self)
 
@@ -168,6 +180,13 @@ async def test_both_consumers_wire_the_builder_trigger(tmp_path, wired):
         # builder points at the ASAPO event spool and the Kafka trigger spool
         assert trigger.events_jsonl == [tmp_path / "asapo.jsonl"]
         assert trigger.trigger_jsonl == [tmp_path / "kafka.jsonl"]
+        # ...and at both consumers' shared _unassigned spools (decision D1)
+        assert trigger.unassigned_events_jsonl == [
+            tmp_path / "_unassigned" / "asapo.jsonl"
+        ]
+        assert trigger.unassigned_trigger_jsonl == [
+            tmp_path / "_unassigned" / "kafka.jsonl"
+        ]
         # every running consumer notifies the one trigger
         for c in wired.consumers:
             assert c.on_new_events_hook == trigger.notify

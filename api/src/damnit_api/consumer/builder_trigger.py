@@ -49,10 +49,17 @@ class BuilderTrigger:
         events_jsonl: Sequence[Path] = (),
         trigger_jsonl: Sequence[Path] = (),
         runner: BuilderRunner | None = None,
+        unassigned_events_jsonl: Sequence[Path] = (),
+        unassigned_trigger_jsonl: Sequence[Path] = (),
     ) -> None:
         self._settings = settings
         self._events_jsonl = list(events_jsonl)
         self._trigger_jsonl = list(trigger_jsonl)
+        # The shared ``_unassigned`` spool files (decision D1). Every build
+        # reads them so the resolution stage can route their events; they are
+        # passed only once they exist, since a campaign may never see one.
+        self._unassigned_events_jsonl = list(unassigned_events_jsonl)
+        self._unassigned_trigger_jsonl = list(unassigned_trigger_jsonl)
         self._runner = runner or self._run_subprocess
         self._wake = asyncio.Event()
 
@@ -70,6 +77,7 @@ class BuilderTrigger:
             cmd += ["--events-jsonl", str(path)]
         for path in self._trigger_jsonl:
             cmd += ["--trigger-jsonl", str(path)]
+        cmd += self._unassigned_args()
         if s.output_nexus is not None:
             cmd += ["--output-nexus", str(s.output_nexus)]
         if s.experiment_id:
@@ -85,8 +93,31 @@ class BuilderTrigger:
         if s.sources_file is not None:
             cmd += ["--sources-file", str(s.sources_file)]
         cmd += ["--match-tolerance-s", str(s.match_tolerance_s)]
+        cmd += self._resolution_args()
         cmd += list(s.extra_args)
         return cmd
+
+    def _unassigned_args(self) -> list[str]:
+        """Inputs from the shared ``_unassigned`` spools that exist so far."""
+        args: list[str] = []
+        for flag, paths in (
+            ("--events-jsonl", self._unassigned_events_jsonl),
+            ("--trigger-jsonl", self._unassigned_trigger_jsonl),
+        ):
+            for path in paths:
+                if path.exists():
+                    args += [flag, str(path)]
+        return args
+
+    def _resolution_args(self) -> list[str]:
+        """Campaign-schedule and time-match flags (plan W1/W6.2)."""
+        s = self._settings
+        args: list[str] = []
+        if s.campaign_schedule is not None:
+            args += ["--campaign-schedule", str(s.campaign_schedule)]
+        if not s.time_match_autoassign:
+            args.append("--no-time-match-autoassign")
+        return args
 
     async def _run_subprocess(self, cmd: Sequence[str]) -> tuple[int, str]:
         # Merge stderr into stdout so a single captured stream carries the full

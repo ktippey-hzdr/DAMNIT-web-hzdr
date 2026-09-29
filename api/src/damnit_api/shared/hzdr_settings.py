@@ -234,6 +234,13 @@ class HZDRBuilderSettings(BaseModel):
     labfrog_sqlite: Path | None = None
     sources_file: Path | None = None
     match_tolerance_s: float = 120.0
+    # False: the time-based match ranks stop attaching events and produce
+    # review candidates instead (automatic shot assembly plan W6.2). True keeps
+    # the behaviour every existing deployment was validated with.
+    time_match_autoassign: bool = True
+    # LabFrog labfrog-campaign-schedule-v1 export whose windows route
+    # "unassigned" events (plan W1, decision D4).
+    campaign_schedule: Path | None = None
     python_executable: str = ""
     script_path: Path | None = None
     extra_args: list[str] = Field(default_factory=list)

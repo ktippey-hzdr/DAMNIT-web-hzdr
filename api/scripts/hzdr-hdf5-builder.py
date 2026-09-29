@@ -10,8 +10,11 @@ from typing import Any
 
 os.environ.setdefault("DW_API_DAMNIT_PATH", str(Path.cwd()))
 
+from damnit_api.metadata.hzdr_event import UNASSIGNED_EXPERIMENT_ID
 from damnit_api.metadata.hzdr_nexus import (
     discover_labfrog_data_products,
+    load_campaign_schedule,
+    load_experiment_rulings,
     load_normalized_events,
     merge_labfrog_shots,
     normalize_labfrog_mongo_shots,
@@ -20,6 +23,7 @@ from damnit_api.metadata.hzdr_nexus import (
     read_labfrog_nexus_shots,
     read_labfrog_sqlite_shots,
     reconcile_canonical_shots,
+    review_sidecar_path,
     single_writer_lock,
     write_nexus_bridge,
     write_sources_catalog,
@@ -67,10 +71,17 @@ def select_experiment_id(
     labfrog_shots: list[dict[str, Any]],
     source_nexus: Path | None,
 ) -> str:
-    """Choose one experiment boundary and reject mixed event batches."""
+    """Choose one experiment boundary and reject mixed event batches.
+
+    ``unassigned`` events (decision D1) do not name a boundary: they are routed
+    by the resolution stage, so they neither count as a second campaign nor
+    choose one. Only when nothing else names a campaign does the build become
+    the ``unassigned`` bucket.
+    """
     if explicit:
         return explicit
-    event_ids = {str(event["experiment_id"]) for event in events}
+    all_event_ids = {str(event["experiment_id"]) for event in events}
+    event_ids = all_event_ids - {UNASSIGNED_EXPERIMENT_ID}
     if len(event_ids) == 1:
         return event_ids.pop()
     if len(event_ids) > 1:
@@ -114,6 +125,8 @@ def select_experiment_id(
         return campaigns.pop()
     if source_nexus is not None:
         return source_nexus.stem
+    if UNASSIGNED_EXPERIMENT_ID in all_event_ids:
+        return UNASSIGNED_EXPERIMENT_ID
     message = "Could not infer experiment_id; provide --experiment-id"
     raise ValueError(message)
 
@@ -148,6 +161,25 @@ def build(args: argparse.Namespace) -> tuple[Path, Path]:
     experiment_id = select_experiment_id(
         args.experiment_id, events, labfrog_shots, args.labfrog_nexus
     )
+    output_nexus = args.output_nexus.resolve()
+    sources_file = (
+        args.sources_file.resolve()
+        if args.sources_file
+        else output_nexus.parent / "hzdr_sources.json"
+    )
+    schedule = (
+        load_campaign_schedule(args.campaign_schedule)
+        if getattr(args, "campaign_schedule", None)
+        else []
+    )
+    # Campaign rulings (resolution step 3) are read from this campaign's own
+    # review sidecar plus any shared sidecars named on the command line - the
+    # ``_unassigned`` bucket build needs the latter to see a ruling written by
+    # the campaign it assigned the shot to.
+    rulings = load_experiment_rulings([
+        review_sidecar_path(sources_file),
+        *(getattr(args, "experiment_rulings", None) or []),
+    ])
     shots, normalized_events = reconcile_canonical_shots(
         events,
         experiment_id=experiment_id,
@@ -155,6 +187,14 @@ def build(args: argparse.Namespace) -> tuple[Path, Path]:
         labfrog_shots=labfrog_shots,
         match_tolerance_s=args.match_tolerance_s,
         campaign_timezone=args.campaign_timezone,
+        campaign_schedule=schedule,
+        experiment_rulings=rulings,
+        time_match_autoassign=getattr(args, "time_match_autoassign", True),
+        # A preserved LabFrog NeXus projection fixes the /entry/shots axis (and
+        # every shot-indexed /entry/derived dataset) to its own rows, so
+        # trigger-only shots cannot be appended to it; they stay review events.
+        # The SQLite/Mongo and LabFrog-less paths build the full union.
+        include_trigger_only=args.labfrog_nexus is None,
     )
 
     if args.labfrog_nexus:
@@ -166,12 +206,6 @@ def build(args: argparse.Namespace) -> tuple[Path, Path]:
         for shot in shots:
             shot["data_products"].extend(products_by_shot.get(shot["shot_key"], []))
 
-    output_nexus = args.output_nexus.resolve()
-    sources_file = (
-        args.sources_file.resolve()
-        if args.sources_file
-        else output_nexus.parent / "hzdr_sources.json"
-    )
     # Reconciliation above only reads inputs; only the publish step below
     # touches this campaign's shared output files, so that is what a second
     # concurrent invocation must not be allowed to race on.
@@ -306,6 +340,34 @@ def main() -> None:
         help=(
             "IANA timezone used for naive LabFrog date_time values and the "
             "date-scoped shot identity, for example Europe/Berlin."
+        ),
+    )
+    parser.add_argument(
+        "--campaign-schedule",
+        type=Path,
+        help=(
+            "LabFrog labfrog-campaign-schedule-v1 export "
+            "(scripts/export_campaign_schedule.py); routes 'unassigned' events "
+            "whose trigger time falls in exactly one window (resolution step 2)."
+        ),
+    )
+    parser.add_argument(
+        "--experiment-rulings",
+        action="append",
+        type=Path,
+        help=(
+            "Extra review sidecar(s) to read campaign rulings from, in addition "
+            "to this build's own; repeat as needed."
+        ),
+    )
+    parser.add_argument(
+        "--time-match-autoassign",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help=(
+            "Let the time-based match ranks attach events automatically "
+            "(default). --no-time-match-autoassign turns them into review "
+            "candidates instead."
         ),
     )
     args = parser.parse_args()

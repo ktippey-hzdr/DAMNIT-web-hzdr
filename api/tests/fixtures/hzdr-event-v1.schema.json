@@ -114,6 +114,7 @@
       "type": "string"
     },
     "experiment_id": {
+      "description": "Canonical campaign id. A producer that does not know the campaign sends the registered sentinel 'unassigned' (UNASSIGNED_EXPERIMENT_ID) rather than a guess; the consumer resolves it from LabFrog, the campaign schedule, or a reviewer's ruling.",
       "title": "Experiment Id",
       "type": "string"
     },

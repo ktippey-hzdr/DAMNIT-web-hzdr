@@ -152,6 +152,14 @@ states the deployment's *fixed* laser-system constants — the `metadata.laser.*
 keys no producer event carries. The builder fills only the gaps into
 `/entry/instrument/laser` and marks each filled dataset `damnit_source="config"`;
 a producer value always wins, and an unset block writes nothing.
+Two builder settings belong to campaign resolution (automatic shot assembly
+plan W1/W6): `DW_API_HZDR_BUILDER__CAMPAIGN_SCHEDULE` (a LabFrog
+`labfrog-campaign-schedule-v1` export that routes `experiment_id: "unassigned"`
+events by trigger time) and `DW_API_HZDR_BUILDER__TIME_MATCH_AUTOASSIGN`
+(default `true`, the validated behaviour; `false` makes the time-based match
+ranks propose review candidates instead of attaching). Consumers spool
+`unassigned` events to a shared `<spool>/_unassigned/` file that every
+campaign's build reads.
 Structured JSON logging turns on when `DW_API_DEBUG=false`.
 `hzdr/scripts/damnit-api.service` is the systemd unit (`Restart=on-failure`).
 
@@ -167,7 +175,7 @@ update this table together when the model changes).
 | --- | --- | --- | --- |
 | `schema_version` | str | defaulted | must match `^hzdr-event-v1$` |
 | `event_id` | str | yes\* | stable + deterministic; a publish retry must resend the same id |
-| `experiment_id` | str | yes | canonical campaign id |
+| `experiment_id` | str | yes | canonical campaign id, or the sentinel `unassigned` (`UNASSIGNED_EXPERIMENT_ID`) when the producer does not know it |
 | `shot_id` | str | yes | join key together with `experiment_id` |
 | `shot_number` | int \| null | no (null) | TANGO is the authority; `null` is valid, not an error |
 | `source` | str | yes | producer/source label |
@@ -319,6 +327,19 @@ than to a value: `metadata.producer.instance_id` becomes
 publishing the same `kind` and the same local filename can be told apart from a
 projection rule. It is descriptive only — `event_id` remains the discriminator,
 and a producer that never sets it writes `""`.
+**Since 2026-09-29** the `instrument.*`, `attribution.*` and `acquisition.*`
+namespaces are registered (decision D2 of the combo's automatic shot assembly
+plan; change class `additive-metadata`, so `hzdr-event-v1` is unchanged) —
+ahead of any producer, so renaming one after the first producer emits it is a
+breaking change. The string enums are written down as `METADATA_KEY_VALUES` in
+code (which now also holds `laser.polarization`'s vocabulary) and are linted
+exactly like polarization: warned about, case-insensitively, never rejected.
+`instrument.id` is promoted to the `/entry/source_events/instrument_id` column
+(bridge profile v4, `""` when absent); the other keys stay in `metadata_json`
+for audit and review. The same decision round (D1) registered
+`experiment_id: "unassigned"` as the sentinel a producer sends when it does not
+know the campaign (`UNASSIGNED_EXPERIMENT_ID`); see
+[hzdr/docs/architecture.md](hzdr/docs/architecture.md#campaign-resolution).
 
 | Namespace | Key | Canonical unit |
 | --- | --- | --- |
@@ -346,14 +367,25 @@ and a producer that never sets it writes `""`.
 | `diagnostic.*` | `tps90_si11_energy` | MeV |
 | `diagnostic.*` | `radiation_dose` | uSv |
 | `producer.*` | `instance_id` / `host` | — (string) |
+| `instrument.*` | `id` | — (string or null; instrument-catalogue id) |
+| `instrument.*` | `group` | — (string enum: `ions`, `electrons`) |
+| `instrument.*` | `timing_role` | — (string enum: `on_shot`, `pre_shot`) |
+| `instrument.*` | `format` | — (string; pack/format id) |
+| `instrument.*` | `record_source` | — (string enum: `catalogue`, `catalogue+labfrog`, `watch_rule`, `none`) |
+| `attribution.*` | `method` | — (string enum: `trigger_window`, `filename_counter`, `cadence`, `manual`) |
+| `attribution.*` | `status` | — (string enum: `attributed`, `ambiguous`, `no_trigger`, `rescan`, `unregistered`) |
+| `attribution.*` | `delta_s` | s |
+| `attribution.*` | `candidates` | — (list of shot numbers) |
+| `acquisition.*` | `time` | — (ISO-8601 UTC string) |
+| `acquisition.*` | `time_source` | — (string enum: `filename`, `first_seen`, `mtime`, `none`) |
 
 See [hzdr/docs/target-ontology.md §5](hzdr/docs/target-ontology.md#5-units-convention) and
 [hzdr/docs/standards-alignment.md §3.3/§3.5](hzdr/docs/standards-alignment.md#33-laser-parameters)
 for the full rationale and HELPMI cross-walk.
 
-### NeXus bridge profile: `hzdr-canonical-shot-v3`
+### NeXus bridge profile: `hzdr-canonical-shot-v4`
 
-Stamped as `damnit_bridge_profile` on HDF5 root and `/entry/shots`. Current value: `"hzdr-canonical-shot-v3"`. Version 2 added the shot-aligned `target_metadata_json` column so campaign-varying targets are not lost behind the `/entry/sample` snapshot. **Version 3 (2026-08-31)** adds `/entry/source_events/producer_instance_id`, promoted from `metadata.producer.instance_id`, so a reviewed openPMD projection rule can name the emitting PC; see [hzdr/docs/plans/openpmd-projection-plan.md](hzdr/docs/plans/openpmd-projection-plan.md). Bump this string if the bridge table layout changes (columns added/removed from the shot or source-events groups).
+Stamped as `damnit_bridge_profile` on HDF5 root and `/entry/shots`. Current value: `"hzdr-canonical-shot-v4"`. Version 2 added the shot-aligned `target_metadata_json` column so campaign-varying targets are not lost behind the `/entry/sample` snapshot. **Version 3 (2026-08-31)** adds `/entry/source_events/producer_instance_id`, promoted from `metadata.producer.instance_id`, so a reviewed openPMD projection rule can name the emitting PC; see [hzdr/docs/plans/openpmd-projection-plan.md](hzdr/docs/plans/openpmd-projection-plan.md). **Version 4 (2026-09-29)** adds `/entry/shots/experiment_id_source` (why the shot is in this campaign: `labfrog` / `schedule` / `ruling` / `producer` / `unassigned`, see [architecture.md](hzdr/docs/architecture.md#campaign-resolution)) and `/entry/source_events/instrument_id` (from `metadata.instrument.id`, `""` when absent). Bump this string if the bridge table layout changes (columns added/removed from the shot or source-events groups).
 
 **Axes.** `/entry/shots/*` is the only shot-indexed group. `/entry/source_events` is event-indexed and `/entry/data_products` is product-indexed; both carry a `shot_key` column and must be *joined*, never zipped by position.
 

@@ -46,12 +46,17 @@ async def spool_lifespan(settings: Settings, logger: Any) -> AsyncIterator[None]
     # auto-trigger reruns the builder against exactly the running spool files.
     builder_events_jsonl = []
     builder_trigger_jsonl = []
+    # ...plus each consumer's shared ``_unassigned`` spool (decision D1), which
+    # every campaign's build reads so it can route those events itself.
+    unassigned_events_jsonl = []
+    unassigned_trigger_jsonl = []
     if settings.hzdr_spool.enabled:
         from .asapo import AsapoSpoolConsumer
 
         asapo_consumer = AsapoSpoolConsumer.from_settings(spool_root)
         spool_consumers.append(asapo_consumer)
         builder_events_jsonl.append(asapo_consumer.config.events_jsonl)
+        unassigned_events_jsonl.append(asapo_consumer.config.unassigned_jsonl)
         spool_tasks.append(asyncio.create_task(asapo_consumer.run(spool_stop)))
         logger.info(
             "ASAPO spool consumer started",
@@ -69,6 +74,7 @@ async def spool_lifespan(settings: Settings, logger: Any) -> AsyncIterator[None]
         kafka_consumer = KafkaSpoolConsumer.from_settings(spool_root)
         spool_consumers.append(kafka_consumer)
         builder_trigger_jsonl.append(kafka_consumer.config.events_jsonl)
+        unassigned_trigger_jsonl.append(kafka_consumer.config.unassigned_jsonl)
         spool_tasks.append(asyncio.create_task(kafka_consumer.run(spool_stop)))
         logger.info(
             "Kafka spool consumer started",
@@ -84,6 +90,8 @@ async def spool_lifespan(settings: Settings, logger: Any) -> AsyncIterator[None]
             settings.hzdr_builder,
             events_jsonl=builder_events_jsonl,
             trigger_jsonl=builder_trigger_jsonl,
+            unassigned_events_jsonl=unassigned_events_jsonl,
+            unassigned_trigger_jsonl=unassigned_trigger_jsonl,
         )
         for consumer in spool_consumers:
             consumer.on_new_events_hook = builder_trigger.notify

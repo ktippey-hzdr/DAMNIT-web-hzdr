@@ -87,6 +87,7 @@ AREAS = (
             f"{T}/test_hzdr_catalog_publisher.py",
             f"{T}/test_hzdr_package_emulator.py",
             f"{T}/test_hzdr_integration.py",
+            f"{T}/test_hzdr_campaign_resolution.py",
         ),
         watch_next="Real SciCat and PID reconciliation, which the offline suite can only emulate",
     ),

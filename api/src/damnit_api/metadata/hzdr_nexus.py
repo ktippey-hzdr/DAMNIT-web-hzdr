@@ -12,7 +12,7 @@ import shutil
 import sqlite3
 import uuid
 from collections import defaultdict
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from operator import itemgetter
 from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -23,12 +23,13 @@ import numpy as np
 from .hzdr_event import (
     EVENT_REQUIRED_FIELDS,
     METADATA_KEY_REGISTRY,
+    UNASSIGNED_EXPERIMENT_ID,
     check_values_size,
     lint_metadata_keys,
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Container, Iterable, Iterator
+    from collections.abc import Container, Iterable, Iterator, Mapping
     from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -275,6 +276,91 @@ def load_review_decisions(
         if existing is None or incoming_rank >= existing_rank:
             decisions[event_id] = record
     return decisions
+
+
+# A campaign ruling is the third step of the experiment_id resolution chain
+# (see resolve_event_experiments): a reviewer assigns a shot that no LabFrog
+# record and no campaign-schedule window claimed to a campaign. It lives in the
+# same durable review sidecar as confirm/dismiss decisions, but is keyed by
+# shot_number, not event_id, so load_review_decisions() never sees it (it skips
+# records without an event_id) and the two mechanisms cannot interfere.
+EXPERIMENT_RULING_ACTION = "assign_experiment"
+
+
+def append_experiment_ruling(
+    sources_file: Path,
+    *,
+    shot_number: int,
+    experiment_id: str,
+    by: str,
+    note: str | None = None,
+    review_level: str = "REVIEWED",
+) -> None:
+    """Append one reviewer ruling assigning a shot number to a campaign.
+
+    Written to the same ``.review.jsonl`` sidecar (with the same fsync and
+    rolling-backup discipline) as ``append_review_decision``. The builder reads
+    rulings back through ``load_experiment_rulings`` on every rebuild, so a
+    ruling routes the shot's unassigned events into ``experiment_id`` from then
+    on. There is no REST/UI surface for writing one yet; this function is the
+    one writer.
+    """
+    if review_level not in _REVIEW_LEVEL_RANK:
+        message = f"review_level must be one of {REVIEW_LEVELS}"
+        raise ValueError(message)
+    if not experiment_id or experiment_id == UNASSIGNED_EXPERIMENT_ID:
+        message = "a ruling must name a real campaign experiment_id"
+        raise ValueError(message)
+    record: dict[str, Any] = {
+        "action": EXPERIMENT_RULING_ACTION,
+        "shot_number": int(shot_number),
+        "experiment_id": experiment_id,
+        "review_level": review_level,
+        "by": by,
+        "at": datetime.now(UTC).isoformat(),
+        "note": note,
+    }
+    sidecar = review_sidecar_path(sources_file)
+    sidecar.parent.mkdir(parents=True, exist_ok=True)
+    with sidecar.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record) + "\n")
+        fh.flush()
+        os.fsync(fh.fileno())
+    shutil.copy2(sidecar, review_sidecar_backup_path(sources_file))
+
+
+def load_experiment_rulings(sidecars: Iterable[Path]) -> dict[int, str]:
+    """Read campaign rulings (shot_number -> experiment_id) from sidecar files.
+
+    Same precedence as ``load_review_decisions``: the highest review level wins
+    per shot number, ties go to the latest entry. Missing files are skipped, so
+    a build can always pass its own sidecar path. Non-ruling lines are ignored.
+    """
+    rulings: dict[int, tuple[int, str]] = {}
+    for sidecar in sidecars:
+        if not sidecar.exists():
+            continue
+        text = sidecar.read_text(encoding="utf-8")
+        for lineno, raw in enumerate(text.splitlines(), 1):
+            raw = raw.strip()
+            if not raw:
+                continue
+            try:
+                record = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                msg = f"Corrupt review sidecar {sidecar}, line {lineno}: {exc}"
+                raise ValueError(msg) from exc
+            if record.get("action") != EXPERIMENT_RULING_ACTION:
+                continue
+            shot_number = _as_optional_int(record.get("shot_number"))
+            experiment_id = _as_optional_string(record.get("experiment_id"))
+            if shot_number is None or not experiment_id:
+                continue
+            rank = _REVIEW_LEVEL_RANK.get(record.get("review_level", ""), -1)
+            existing = rulings.get(shot_number)
+            if existing is None or rank >= existing[0]:
+                rulings[shot_number] = (rank, experiment_id)
+    return {number: ruling for number, (_, ruling) in rulings.items()}
 
 
 def _apply_review_decisions(
@@ -956,6 +1042,286 @@ def merge_labfrog_shots(
     return merged
 
 
+# Where a canonical shot's experiment_id came from (/entry/shots column
+# `experiment_id_source`, bridge profile v4). The first four are the resolution
+# chain of the automatic shot assembly plan (W1), first match wins; "producer"
+# is an event that arrived already naming its campaign, which is every event a
+# producer emits today and is kept as-is rather than second-guessed.
+EXPERIMENT_ID_SOURCES = ("labfrog", "schedule", "ruling", "producer", "unassigned")
+_EXPERIMENT_ID_SOURCE_RANK = {
+    source: rank for rank, source in enumerate(EXPERIMENT_ID_SOURCES)
+}
+
+# The trigger source whose authoritative shot_number founds a trigger-only shot
+# (W6.1 union): shotcounter's hzdr-event-v1 envelope and the legacy
+# processed_message adapter both use this label.
+TRIGGER_SOURCE = "DRACO-Trigger"
+
+_DATE_ONLY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+# The one campaign-schedule format DAMNIT reads: LabFrog's export
+# (labfrog/labfrog/campaign_schedule.py, scripts/export_campaign_schedule.py,
+# documented in labfrog/doc/data_integrations.md "Campaign Schedule"). Windows
+# come from the MediaWiki FWKTBeamtime dates until new campaign settings exist
+# (decision D4).
+CAMPAIGN_SCHEDULE_SCHEMA = "labfrog-campaign-schedule-v1"
+
+
+def load_campaign_schedule(path: Path) -> list[dict[str, Any]]:
+    """Load a LabFrog ``labfrog-campaign-schedule-v1`` export as window rows.
+
+    The document is ``{"schema", "timezone", "window_rule", "campaigns":
+    [{"campaign", "experiment_id", "start", "end", "source"}], "warnings"}``.
+    ``start``/``end`` are inclusive calendar days in ``timezone``; each row
+    becomes the local window ``[start 00:00, end + 1 day 00:00)``. A row with a
+    null ``start``, ``end`` or ``experiment_id`` never matches and is dropped
+    here. ``experiment_id`` is used as-is: it is LabFrog's canonical slug. An
+    unknown ``schema`` is rejected rather than half-read. LabFrog's own
+    ``warnings`` (overlaps, collisions) are logged; an overlap needs no special
+    handling because a time inside two windows is never a match.
+    """
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        message = f"{path} is not valid JSON: {exc.msg}"
+        raise ValueError(message) from exc
+    if not isinstance(document, dict):
+        message = f"{path} is not a {CAMPAIGN_SCHEDULE_SCHEMA} document"
+        raise ValueError(message)
+    schema = document.get("schema")
+    if schema != CAMPAIGN_SCHEDULE_SCHEMA:
+        message = (
+            f"{path} has campaign schedule schema {schema!r}; DAMNIT reads only "
+            f"{CAMPAIGN_SCHEDULE_SCHEMA!r}"
+        )
+        raise ValueError(message)
+    timezone = _as_optional_string(document.get("timezone"))
+    if not timezone:
+        message = f"{path} does not name a timezone"
+        raise ValueError(message)
+    resolve_timezone(timezone)
+    campaigns = document.get("campaigns")
+    if not isinstance(campaigns, list):
+        message = f"{path} campaigns must be a list"
+        raise ValueError(message)
+    for warning in document.get("warnings") or []:
+        logger.warning("Campaign schedule %s: %s", path, warning)
+    schedule: list[dict[str, Any]] = []
+    for index, row in enumerate(campaigns):
+        if not isinstance(row, dict):
+            message = f"{path} campaigns[{index}] is not an object"
+            raise ValueError(message)
+        experiment_id = _as_optional_string(row.get("experiment_id"))
+        start = _as_optional_string(row.get("start"))
+        end = _as_optional_string(row.get("end"))
+        if not experiment_id or not start or not end:
+            continue
+        schedule.append({
+            "experiment_id": experiment_id,
+            "start": start,
+            "end": end,
+            "timezone": timezone,
+        })
+    return schedule
+
+
+def _schedule_windows(
+    schedule: Iterable[Mapping[str, Any]], *, campaign_timezone: str
+) -> list[tuple[datetime, datetime, str]]:
+    """Turn schedule rows into UTC ``[start, end)`` windows.
+
+    A row's own ``timezone`` (from the LabFrog export) wins over the build's
+    ``campaign_timezone``. A date-only ``end`` is inclusive, so the window
+    closes at 00:00 local on the following day.
+    """
+    windows: list[tuple[datetime, datetime, str]] = []
+    for entry in schedule:
+        experiment_id = _as_optional_string(entry.get("experiment_id"))
+        start_text = _as_optional_string(entry.get("start"))
+        end_text = _as_optional_string(entry.get("end"))
+        timezone = _as_optional_string(entry.get("timezone")) or campaign_timezone
+        start = parse_datetime(start_text, naive_timezone=timezone)
+        if end_text and _DATE_ONLY.match(end_text):
+            end_day = datetime.fromisoformat(end_text) + timedelta(days=1)
+            end = parse_datetime(end_day, naive_timezone=timezone)
+        else:
+            end = parse_datetime(end_text, naive_timezone=timezone)
+        if not experiment_id or start is None or end is None or end <= start:
+            logger.warning("Skipping unusable campaign schedule entry: %s", entry)
+            continue
+        windows.append((start, end, experiment_id))
+    return windows
+
+
+def _authoritative_shot_number(event: dict[str, Any]) -> int | None:
+    """The envelope's own ``shot_number`` only - never a nested/local counter."""
+    return _as_optional_int(event.get("shot_number"))
+
+
+def _labfrog_experiment_by_shot_number(
+    labfrog_shots: Iterable[dict[str, Any]], default_experiment_id: str
+) -> dict[int, set[str]]:
+    """Map each LabFrog shot_number to the campaign(s) its records name.
+
+    A record with no experiment_id of its own belongs to the export the builder
+    was pointed at, i.e. ``default_experiment_id``.
+    """
+    by_number: dict[int, set[str]] = defaultdict(set)
+    for record in labfrog_shots:
+        number = _as_optional_int(record.get("shot_number"))
+        if number is None:
+            continue
+        metadata = record.get("metadata")
+        experiment_id = _as_optional_string(record.get("experiment_id")) or (
+            _as_optional_string(metadata.get("experiment_id"))
+            if isinstance(metadata, dict)
+            else None
+        )
+        by_number[number].add(experiment_id or default_experiment_id)
+    return by_number
+
+
+def resolve_event_experiments(
+    events: Iterable[dict[str, Any]],
+    *,
+    labfrog_shots: Iterable[dict[str, Any]] = (),
+    labfrog_experiment_id: str,
+    campaign_schedule: Iterable[Mapping[str, Any]] = (),
+    experiment_rulings: Mapping[int, str] | None = None,
+    campaign_timezone: str = "UTC",
+) -> list[dict[str, Any]]:
+    """Resolve the campaign of every ``unassigned`` event (decision D1).
+
+    Returns shallow copies with ``experiment_id`` set to the resolved campaign
+    and ``experiment_id_source`` recording why. An event that arrived naming a
+    campaign keeps it (source ``producer``). An ``unassigned`` event with an
+    authoritative ``shot_number`` goes down the chain, first match wins:
+
+    1. a LabFrog record with that shot_number names exactly one campaign ->
+       ``labfrog``;
+    2. exactly one campaign-schedule window contains the event time ->
+       ``schedule`` (overlapping windows are no match, never a guess);
+    3. a reviewer's ruling for that shot_number -> ``ruling``;
+    4. otherwise it stays ``unassigned`` and is built in the ``_unassigned``
+       bucket, never dropped.
+
+    ``event_id`` is fixed *before* experiment_id is rewritten, so a legacy
+    event without one keeps the synthesized id it would have had.
+    """
+    labfrog_by_number = _labfrog_experiment_by_shot_number(
+        labfrog_shots, labfrog_experiment_id
+    )
+    windows = _schedule_windows(campaign_schedule, campaign_timezone=campaign_timezone)
+    rulings = experiment_rulings or {}
+    resolved: list[dict[str, Any]] = []
+    for event in events:
+        copied = dict(event)
+        if not copied.get("event_id"):
+            copied["event_id"] = _event_id(event)
+        experiment_id = str(copied.get("experiment_id"))
+        if experiment_id != UNASSIGNED_EXPERIMENT_ID:
+            copied["experiment_id_source"] = "producer"
+            resolved.append(copied)
+            continue
+        experiment_id, source = _resolve_unassigned(
+            copied, labfrog_by_number, windows, rulings
+        )
+        copied["experiment_id"] = experiment_id
+        copied["experiment_id_source"] = source
+        resolved.append(copied)
+    return resolved
+
+
+def _resolve_unassigned(
+    event: dict[str, Any],
+    labfrog_by_number: Mapping[int, set[str]],
+    windows: list[tuple[datetime, datetime, str]],
+    rulings: Mapping[int, str],
+) -> tuple[str, str]:
+    shot_number = _authoritative_shot_number(event)
+    if shot_number is None:
+        return UNASSIGNED_EXPERIMENT_ID, "unassigned"
+    labfrog = labfrog_by_number.get(shot_number, set())
+    if len(labfrog) == 1:
+        return next(iter(labfrog)), "labfrog"
+    event_time = parse_datetime(event.get("timestamp"))
+    if event_time is not None:
+        containing = {
+            experiment_id
+            for start, end, experiment_id in windows
+            if start <= event_time < end
+        }
+        if len(containing) == 1:
+            return containing.pop(), "schedule"
+    ruling = rulings.get(shot_number)
+    if ruling:
+        return ruling, "ruling"
+    return UNASSIGNED_EXPERIMENT_ID, "unassigned"
+
+
+def _shot_experiment_id_source(events: Iterable[dict[str, Any]]) -> str:
+    """The strongest resolution source among a shot's events."""
+    sources = [
+        str(event.get("experiment_id_source"))
+        for event in events
+        if event.get("experiment_id_source") in _EXPERIMENT_ID_SOURCE_RANK
+    ]
+    if not sources:
+        return "producer"
+    return min(sources, key=_EXPERIMENT_ID_SOURCE_RANK.__getitem__)
+
+
+def _is_trigger_only_candidate(
+    event: dict[str, Any], labfrog_numbers: Container[int]
+) -> bool:
+    shot_number = _authoritative_shot_number(event)
+    return (
+        event.get("source") == TRIGGER_SOURCE
+        and shot_number is not None
+        and shot_number not in labfrog_numbers
+        and not event.get("shot_key")
+    )
+
+
+def _trigger_only_shots(
+    events: list[dict[str, Any]],
+    labfrog_numbers: Container[int],
+    experiment_id: str,
+    source_key: str,
+    *,
+    campaign_timezone: str,
+) -> list[dict[str, Any]]:
+    """Build the trigger-only half of the W6.1 union.
+
+    A DRACO-Trigger event with an authoritative shot_number that no LabFrog
+    record carries, and that the matcher left unattached, founds its own shot.
+    Other unattached events with the same identity group (local date, number,
+    shot_id - the rule the LabFrog-less build already uses) join it. LabFrog
+    columns stay null; nothing is invented for them.
+    """
+    triggers = [
+        event for event in events if _is_trigger_only_candidate(event, labfrog_numbers)
+    ]
+    if not triggers:
+        return []
+    trigger_groups = {
+        _identity_group_key(event, campaign_timezone=campaign_timezone)
+        for event in triggers
+    }
+    members = [
+        event
+        for event in events
+        if not event.get("shot_key")
+        and _identity_group_key(event, campaign_timezone=campaign_timezone)
+        in trigger_groups
+    ]
+    for event in members:
+        event["candidate_shot_keys"] = []
+    return _canonical_from_event_identities(
+        members, experiment_id, source_key, campaign_timezone=campaign_timezone
+    )
+
+
 def reconcile_canonical_shots(  # noqa: C901
     events: list[dict[str, Any]],
     *,
@@ -964,12 +1330,37 @@ def reconcile_canonical_shots(  # noqa: C901
     labfrog_shots: list[dict[str, Any]] | None = None,
     match_tolerance_s: float = 120.0,
     campaign_timezone: str = "UTC",
+    campaign_schedule: Iterable[Mapping[str, Any]] = (),
+    experiment_rulings: Mapping[int, str] | None = None,
+    time_match_autoassign: bool = True,
+    include_trigger_only: bool = True,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
-    """Link normalized source events to canonical LabFrog shots."""
+    """Link normalized source events to canonical shots.
+
+    Resolution comes first: ``unassigned`` events are routed to a campaign by
+    ``resolve_event_experiments`` and only then filtered to ``experiment_id``
+    (pass ``experiment_id="unassigned"`` to build the ``_unassigned`` bucket).
+
+    With LabFrog records, the canonical shots are the union (plan W6.1) of the
+    LabFrog records and, when ``include_trigger_only``, the trigger-only shots
+    the matcher left unattached. ``time_match_autoassign=False`` stops the
+    time-based match ranks from attaching events: they become review
+    candidates instead (plan W6.2's "never guess"); the default keeps the
+    pre-2026-09-29 behaviour.
+    """
     labfrog_shots = labfrog_shots or []
+    trigger_only_keys: set[str] = set()
+    resolved_events = resolve_event_experiments(
+        events,
+        labfrog_shots=labfrog_shots,
+        labfrog_experiment_id=experiment_id,
+        campaign_schedule=campaign_schedule,
+        experiment_rulings=experiment_rulings,
+        campaign_timezone=campaign_timezone,
+    )
     selected_events = [
-        dict(event)
-        for event in events
+        event
+        for event in resolved_events
         if str(event.get("experiment_id")) == experiment_id
     ]
     normalized_events = _deduplicate_by_event_id(
@@ -987,6 +1378,7 @@ def reconcile_canonical_shots(  # noqa: C901
                 canonical,
                 match_tolerance_s=match_tolerance_s,
                 campaign_timezone=campaign_timezone,
+                time_match_autoassign=time_match_autoassign,
             )
             event["match_quality"] = quality
             event["match_status"] = status
@@ -1010,6 +1402,18 @@ def reconcile_canonical_shots(  # noqa: C901
             ):
                 match["match_quality"] = quality
                 match["match_time_delta_s"] = delta
+        for shot in canonical:
+            shot["experiment_id_source"] = "labfrog"
+        if include_trigger_only:
+            trigger_only = _trigger_only_shots(
+                normalized_events,
+                {shot["shot_number"] for shot in canonical},
+                experiment_id,
+                source_key,
+                campaign_timezone=campaign_timezone,
+            )
+            trigger_only_keys = {shot["shot_key"] for shot in trigger_only}
+            canonical.extend(trigger_only)
     else:
         canonical = _canonical_from_event_identities(
             normalized_events,
@@ -1018,7 +1422,14 @@ def reconcile_canonical_shots(  # noqa: C901
             campaign_timezone=campaign_timezone,
         )
 
+    events_by_id = {event["event_id"]: event for event in normalized_events}
     for shot in canonical:
+        if "experiment_id_source" not in shot:
+            shot["experiment_id_source"] = _shot_experiment_id_source(
+                events_by_id[event["event_id"]]
+                for event in shot["events"]
+                if event.get("event_id") in events_by_id
+            )
         shot["metadata"] = _merge_shot_metadata(
             shot["metadata"], _merged_event_metadata(shot["events"])
         )
@@ -1040,6 +1451,8 @@ def reconcile_canonical_shots(  # noqa: C901
         )
     if labfrog_shots:
         for shot in canonical:
+            if shot["shot_key"] in trigger_only_keys:
+                continue  # trigger-only shot: there is no LabFrog row to cite
             labfrog_event = _labfrog_source_event(shot, experiment_id)
             normalized_events.append(labfrog_event)
             shot["events"].append(_event_api_record(labfrog_event))
@@ -1579,7 +1992,7 @@ def write_nexus_laser_group(
 # bumped to match. See hzdr/docs/nxhzdr-target-profile.md (target map) and
 # hzdr/docs/nexus-semantic-maps.md (laser/vacuum/diagnostic maps).
 HZDR_TARGET_PROFILE_VERSION = "0.10"
-HZDR_BRIDGE_PROFILE_VERSION = "hzdr-canonical-shot-v3"
+HZDR_BRIDGE_PROFILE_VERSION = "hzdr-canonical-shot-v4"
 
 # All 118 IUPAC element symbols, for the conservative formula check below.
 _ELEMENTS = (
@@ -2287,6 +2700,21 @@ def normalize_watchdog_document(
     return normalized
 
 
+def _selected_trigger_experiment(
+    override: str | None, document_experiment: str | None
+) -> str | None:
+    """Apply the builder's --experiment-id override, except to the sentinel.
+
+    A trigger that says it does not know its campaign (``unassigned``, decision
+    D1) keeps saying so, so the resolution stage in reconcile_canonical_shots
+    can route it; overriding it here would silently claim every shot in the
+    shared ``_unassigned`` spool for whichever campaign happened to build.
+    """
+    if document_experiment == UNASSIGNED_EXPERIMENT_ID:
+        return document_experiment
+    return _as_optional_string(override or document_experiment)
+
+
 def _normalize_hzdr_event_v1_trigger(
     document: dict[str, Any], *, experiment_id: str | None = None
 ) -> dict[str, Any]:
@@ -2296,14 +2724,15 @@ def _normalize_hzdr_event_v1_trigger(
     experiment_id, shot_number, source, kind, trigger_role (top-level),
     timestamp, transport, payload_ref, values, and metadata. It is already
     in the canonical shape; we only need to:
-    - Override experiment_id if the caller supplies one (builder --experiment-id flag).
+    - Override experiment_id if the caller supplies one (builder --experiment-id
+      flag) - unless the envelope carries the ``unassigned`` sentinel.
     - Normalise shot_id from shot_number, matching the convention used for the
       legacy path.
     - Strip trigger_role from the top level (it belongs in metadata.trigger.role,
       same as the legacy path produces) so downstream code sees one consistent shape.
     """
-    selected_experiment = _as_optional_string(
-        experiment_id or document.get("experiment_id")
+    selected_experiment = _selected_trigger_experiment(
+        experiment_id, _as_optional_string(document.get("experiment_id"))
     )
     if not selected_experiment:
         message = "hzdr-event-v1 trigger message does not contain experiment_id"
@@ -2362,8 +2791,9 @@ def normalize_processed_trigger_message(
         message = "processed_message must be an object"
         raise ValueError(message)
 
-    selected_experiment = _as_optional_string(
-        experiment_id or payload.get("experiment_id") or payload.get("Campaign")
+    selected_experiment = _selected_trigger_experiment(
+        experiment_id,
+        _as_optional_string(payload.get("experiment_id") or payload.get("Campaign")),
     )
     if not selected_experiment:
         message = "Trigger message does not contain Campaign/experiment_id"
@@ -2537,6 +2967,22 @@ def _labfrog_source_event(shot: dict[str, Any], experiment_id: str) -> dict[str,
     return event
 
 
+def _identity_group_key(
+    event: dict[str, Any], *, campaign_timezone: str
+) -> tuple[str, int, str] | None:
+    """(local date, shot number, shot_id): how LabFrog-less shots are grouped."""
+    shot_number = _event_shot_number(event)
+    if shot_number is None:
+        return None
+    timestamp = parse_datetime(event.get("timestamp"))
+    shot_date = (
+        timestamp.astimezone(resolve_timezone(campaign_timezone)).date().isoformat()
+        if timestamp
+        else None
+    )
+    return shot_date or "", shot_number, str(event.get("shot_id"))
+
+
 def _canonical_from_event_identities(
     events: list[dict[str, Any]],
     experiment_id: str,
@@ -2546,16 +2992,10 @@ def _canonical_from_event_identities(
 ) -> list[dict[str, Any]]:
     grouped: dict[tuple[str, int, str], list[dict[str, Any]]] = defaultdict(list)
     for event in events:
-        shot_number = _event_shot_number(event)
-        timestamp = parse_datetime(event.get("timestamp"))
-        if shot_number is None:
+        key = _identity_group_key(event, campaign_timezone=campaign_timezone)
+        if key is None:
             continue
-        shot_date = (
-            timestamp.astimezone(resolve_timezone(campaign_timezone)).date().isoformat()
-            if timestamp
-            else None
-        )
-        grouped[shot_date or "", shot_number, str(event.get("shot_id"))].append(event)
+        grouped[key].append(event)
 
     shots: list[dict[str, Any]] = []
     for (shot_date, shot_number, shot_id), shot_events in grouped.items():
@@ -2675,6 +3115,7 @@ def _match_event(
     *,
     match_tolerance_s: float,
     campaign_timezone: str,
+    time_match_autoassign: bool = True,
 ) -> tuple[dict[str, Any] | None, str, str, list[str]]:
     """Match one event to a canonical shot.
 
@@ -2682,7 +3123,42 @@ def _match_event(
     candidate_shot_keys is only populated when match_status is "ambiguous": it lists
     the shot_key of every tied candidate, so a reviewer can be offered exactly the
     shots the matcher actually considered, not the whole source.
+
+    With ``time_match_autoassign=False`` the three time-based ranks
+    (``exact_day_shot_number_time_window``, ``shot_number_time_window``,
+    ``nearest_time``) never attach: the shot(s) they would have picked are
+    returned as review candidates with status ``ambiguous`` instead.
     """
+    result = _match_event_ranked(
+        event,
+        shots,
+        match_tolerance_s=match_tolerance_s,
+        campaign_timezone=campaign_timezone,
+    )
+    match, quality, _status, candidates = result
+    if (
+        time_match_autoassign
+        or match is None
+        or quality not in _TIME_BASED_MATCH_QUALITIES
+    ):
+        return result
+    return None, "ambiguous", "ambiguous", candidates or [match["shot_key"]]
+
+
+_TIME_BASED_MATCH_QUALITIES = frozenset({
+    "exact_day_shot_number_time_window",
+    "shot_number_time_window",
+    "nearest_time",
+})
+
+
+def _match_event_ranked(
+    event: dict[str, Any],
+    shots: list[dict[str, Any]],
+    *,
+    match_tolerance_s: float,
+    campaign_timezone: str,
+) -> tuple[dict[str, Any] | None, str, str, list[str]]:
     current_shots = [
         shot
         for shot in shots
@@ -2931,6 +3407,21 @@ def _event_producer_instance(event: dict[str, Any]) -> str:
     return _as_optional_string(producer.get("instance_id")) or ""
 
 
+def _event_instrument_id(event: dict[str, Any]) -> str:
+    """Read `metadata.instrument.id` for the source-events column (v4).
+
+    Same degradation as `_event_producer_instance`: absent, null (an
+    unregistered instrument) or non-scalar all write "".
+    """
+    metadata = event.get("metadata")
+    if not isinstance(metadata, dict):
+        return ""
+    instrument = metadata.get("instrument")
+    if not isinstance(instrument, dict):
+        return ""
+    return _as_optional_string(instrument.get("id")) or ""
+
+
 def _event_shot_number(event: dict[str, Any]) -> int | None:
     for value in (
         event.get("shot_number"),
@@ -3002,6 +3493,12 @@ def _write_shot_bridge_columns(
             json.dumps(_shot_target_metadata(shot), sort_keys=True, default=str)
             for shot in shots
         ],
+        # Bridge profile v4: why this shot sits in this campaign -
+        # labfrog / schedule / ruling / producer / unassigned
+        # (EXPERIMENT_ID_SOURCES, resolve_event_experiments).
+        "experiment_id_source": [
+            shot.get("experiment_id_source") or "" for shot in shots
+        ],
     }
     for name, values in columns.items():
         _replace_dataset(group, name, values)
@@ -3052,6 +3549,10 @@ def _write_source_events(entry: h5py.Group, events: list[dict[str, Any]]) -> Non
         # discriminator, and "" is the normal value for a single-instance
         # producer that never sets it.
         "producer_instance_id": [_event_producer_instance(event) for event in events],
+        # Bridge profile v4: the instrument-catalogue id from
+        # metadata.instrument.id, "" for an unregistered instrument or a
+        # producer that predates the key.
+        "instrument_id": [_event_instrument_id(event) for event in events],
         "payload_ref_json": [
             json.dumps(event.get("payload_ref", {}), sort_keys=True) for event in events
         ],
