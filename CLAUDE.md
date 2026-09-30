@@ -399,9 +399,19 @@ Stamped as `damnit_bridge_profile` on HDF5 root and `/entry/shots`. Current valu
 
 ### Match quality ranks (ascending, `hzdr_nexus.MATCH_RANK`)
 
-`unmatched` (0) → `labfrog_only` (1) → `nearest_time` (2) → `shot_number_time_window` (3) → `exact_day_shot_number` (4) → `event_identity` (5)
+`unmatched` (0) → `labfrog_only` (1) → `nearest_time` (2) → `shot_number_time_window` (3) → `exact_day_shot_number_time_window` (4) → `exact_day_shot_number` (5) → `event_identity` (6) → `exact_transport_position` (7) → `exact_kafka_event_id` (8)
 
-Higher rank wins when two matches compete for the same shot.
+Higher rank wins when two matches compete for the same shot. `_match_event_ranked`
+tries them top down: the event's Kafka `event_id`, then its `topic/partition/offset`,
+then the TANGO `shot_number` on the event's campaign-local day (disambiguated by
+time when that day has several), then the same number on any day within the
+tolerance, then nearest time alone. `event_identity` marks events on a shot
+built from the events themselves, grouped by shot number with no LabFrog record
+(`_canonical_from_event_identities`), and `labfrog_only` a LabFrog shot no event
+reached. The three time-based ranks
+(`_TIME_BASED_MATCH_QUALITIES`) become review candidates instead of attaching
+when `TIME_MATCH_AUTOASSIGN` is `false`. `ambiguous` is a status, not a rank
+(`MATCH_RANK.get(q, 0)`).
 
 ### Review levels (ascending, `hzdr_nexus.REVIEW_LEVELS`)
 
