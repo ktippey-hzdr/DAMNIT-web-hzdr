@@ -293,9 +293,9 @@ The API + frontend are live at
 [https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/),
 deployed via `api/scripts/damnit-api-deploy.sh`/`.ps1` from an
 `.env.production.example`-derived config, served behind the `frontend/nginx`
-proxy templates, with LDAP auth against `ldap.fz-rossendorf.de`. The durable
-spool consumers there still run against the local ASAPO/Kafka harness rather
-than the real facility brokers — the real ASAPO SDK client
+proxy templates, with LDAP auth against `ldap.fz-rossendorf.de`. It receives
+no events yet: the Kafka and ASAPO spool consumers are not enabled there
+(confirmed 2026-09-30). The real ASAPO SDK client
 (`RealAsapoSpoolConsumer`, `DW_API_HZDR_SPOOL__BROKER_KIND=asapo`) is
 implemented, and pointing the deployment at real broker credentials is the
 next step (see [remaining-work-plan.md](plans/remaining-work-plan.md) and

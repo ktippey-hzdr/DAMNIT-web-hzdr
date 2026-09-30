@@ -58,6 +58,9 @@ consumer starts as a FastAPI lifespan background task.
 
 ## Open on the deployed host (2026-09-30)
 
+- **State:** deployed and running, receiving no events yet (confirmed by the
+  maintainer, 2026-09-30). Enabling the Kafka spool (Step 1) is the next step.
+
 - **Updating the code is not documented.** This plan covers editing `.env` and
   restarting; there is no recorded procedure for bringing `/opt/damnit-web-hzdr`
   to a new commit (a `git pull` there, or `damnit-api-deploy.sh`) or for
