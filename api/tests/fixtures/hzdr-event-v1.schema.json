@@ -146,6 +146,7 @@
     "shot_number": {
       "anyOf": [
         {
+          "minimum": 0,
           "type": "integer"
         },
         {
@@ -153,7 +154,7 @@
         }
       ],
       "default": null,
-      "description": "TANGO's shot counter is the authority. Null means no authoritative shot number is available yet for this event - this is expected, not an error, while labfrog/DRACO do not yet propagate one. Producers may still carry a non-authoritative nested/local counter, but only as provenance in metadata, never as this field.",
+      "description": "TANGO's shot counter is the authority. A whole number: a JSON integer >= 0, never a boolean, float or string. Null means no authoritative shot number is available yet for this event - this is expected, not an error, while labfrog/DRACO do not yet propagate one. Producers may still carry a non-authoritative nested/local counter, but only as provenance in metadata, never as this field.",
       "title": "Shot Number"
     },
     "source": {

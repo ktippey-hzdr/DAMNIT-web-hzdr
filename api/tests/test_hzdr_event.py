@@ -80,6 +80,21 @@ def test_shot_number_null_validates_and_means_not_yet_authoritative():
     assert event.shot_number is None
 
 
+@pytest.mark.parametrize("value", [0, 1, 1_234_567])
+def test_shot_number_accepts_whole_numbers(value):
+    assert HZDREventV1.model_validate(
+        _minimal_event(shot_number=value)
+    ).shot_number == (value)
+
+
+@pytest.mark.parametrize("value", [True, False, 42.0, 42.5, "42", "42.0", -3])
+def test_shot_number_refuses_anything_that_only_converts_to_one(value):
+    # Lax parsing made `true` shot 1 and 42.0 / "42.0" shot 42, so a producer
+    # bug became a different shot. Ruled 2026-09-30: whole numbers only.
+    with pytest.raises(ValidationError):
+        HZDREventV1.model_validate(_minimal_event(shot_number=value))
+
+
 def test_values_none_validates():
     event = HZDREventV1.model_validate(_minimal_event(values=None))
 

@@ -177,7 +177,7 @@ update this table together when the model changes).
 | `event_id` | str | yes\* | stable + deterministic; a publish retry must resend the same id |
 | `experiment_id` | str | yes | canonical campaign id, or the sentinel `unassigned` (`UNASSIGNED_EXPERIMENT_ID`) when the producer does not know it |
 | `shot_id` | str | yes | join key together with `experiment_id` |
-| `shot_number` | int \| null | no (null) | TANGO is the authority; `null` is valid, not an error |
+| `shot_number` | int \| null | no (null) | TANGO is the authority; a whole number (JSON integer >= 0; never a boolean, float or string, all refused since 2026-09-30); `null` is valid, not an error |
 | `source` | str | yes | producer/source label |
 | `kind` | str | yes | event kind, e.g. `draco.trigger` |
 | `timestamp` | str | yes | UTC ISO-8601 |

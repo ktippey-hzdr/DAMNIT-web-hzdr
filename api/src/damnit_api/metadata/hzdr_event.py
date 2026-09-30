@@ -134,14 +134,19 @@ class HZDREventV1(BaseModel):
         ),
     )
     shot_id: str
-    shot_number: int | None = Field(
+    # Strict: a JSON integer and nothing that merely converts to one. Lax
+    # parsing turned `true` into shot 1 and `42.0` / "42.0" into shot 42, so a
+    # producer bug became a different shot instead of a refusal. Ruled
+    # 2026-09-30: whole numbers only.
+    shot_number: Annotated[int, Field(strict=True, ge=0)] | None = Field(
         default=None,
         description=(
-            "TANGO's shot counter is the authority. Null means no authoritative "
-            "shot number is available yet for this event - this is expected, not "
-            "an error, while labfrog/DRACO do not yet propagate one. Producers "
-            "may still carry a non-authoritative nested/local counter, but only "
-            "as provenance in metadata, never as this field."
+            "TANGO's shot counter is the authority. A whole number: a JSON "
+            "integer >= 0, never a boolean, float or string. Null means no "
+            "authoritative shot number is available yet for this event - this is "
+            "expected, not an error, while labfrog/DRACO do not yet propagate "
+            "one. Producers may still carry a non-authoritative nested/local "
+            "counter, but only as provenance in metadata, never as this field."
         ),
     )
     source: str
