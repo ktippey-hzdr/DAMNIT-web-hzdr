@@ -59,13 +59,13 @@ function Fail([string] $msg) {
 
 function Compare-FilePair([string] $canonical, [string] $copy, [string] $label) {
     if (-not (Test-Path $copy)) {
-        Fail "$label — not found at: $copy"
+        Fail "$label - not found at: $copy"
         return
     }
     $a = [System.IO.File]::ReadAllText($canonical)
     $b = [System.IO.File]::ReadAllText($copy)
     if ($a -ne $b) {
-        Fail "$label — differs from canonical"
+        Fail "$label - differs from canonical"
         # Show first few differing lines as a hint
         $aLines = $a -split "`n"
         $bLines = $b -split "`n"
