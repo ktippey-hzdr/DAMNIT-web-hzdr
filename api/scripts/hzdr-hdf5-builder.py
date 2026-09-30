@@ -189,7 +189,7 @@ def build(args: argparse.Namespace) -> tuple[Path, Path]:
         campaign_timezone=args.campaign_timezone,
         campaign_schedule=schedule,
         experiment_rulings=rulings,
-        time_match_autoassign=getattr(args, "time_match_autoassign", True),
+        time_match_autoassign=getattr(args, "time_match_autoassign", False),
         # A preserved LabFrog NeXus projection fixes the /entry/shots axis (and
         # every shot-indexed /entry/derived dataset) to its own rows, so
         # trigger-only shots cannot be appended to it; they stay review events.
@@ -363,11 +363,12 @@ def main() -> None:
     parser.add_argument(
         "--time-match-autoassign",
         action=argparse.BooleanOptionalAction,
-        default=True,
+        default=False,
         help=(
-            "Let the time-based match ranks attach events automatically "
-            "(default). --no-time-match-autoassign turns them into review "
-            "candidates instead."
+            "Let the time-based match ranks attach events automatically, the "
+            "pre-2026-09-30 ladder. Off by default (ruling A7): they propose "
+            "review candidates, and a shot_number naming exactly one shot "
+            "attaches on the number alone."
         ),
     )
     args = parser.parse_args()

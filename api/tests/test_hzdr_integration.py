@@ -244,7 +244,12 @@ def write_labfrog_export_with_duplicate_shot_number(path: Path) -> None:
 
 
 def build_args(
-    *, trigger_jsonl, labfrog_nexus, output_nexus, sources_file
+    *,
+    trigger_jsonl,
+    labfrog_nexus,
+    output_nexus,
+    sources_file,
+    time_match_autoassign=False,
 ) -> argparse.Namespace:
     return argparse.Namespace(
         events_jsonl=[],
@@ -263,6 +268,7 @@ def build_args(
         sources_file=sources_file,
         match_tolerance_s=120.0,
         campaign_timezone="Europe/Berlin",
+        time_match_autoassign=time_match_autoassign,
     )
 
 
@@ -394,7 +400,10 @@ def test_missing_shot_number_falls_back_to_nearest_time_or_unmatched(
     tmp_path: Path,
 ):
     """An event with no shot_number at all (e.g. shotcounter's IsShotCounterXX
-    never enabled) must not crash and must still be classified, not dropped."""
+    never enabled) must not crash and must still be classified, not dropped.
+
+    The pre-A7 ladder, opted into: nearest time attaches it. The default
+    (ruling A7, 2026-09-30) only proposes it -- see the next test."""
     labfrog_nexus = tmp_path / "labfrog.nxs"
     trigger_event = tmp_path / "trigger.jsonl"
     output_nexus = tmp_path / "canonical.nxs"
@@ -410,6 +419,7 @@ def test_missing_shot_number_falls_back_to_nearest_time_or_unmatched(
         labfrog_nexus=labfrog_nexus,
         output_nexus=output_nexus,
         sources_file=sources_file,
+        time_match_autoassign=True,
     )
     _, built_sources = hzdr_hdf5_builder.build(args)
 
@@ -426,6 +436,36 @@ def test_missing_shot_number_falls_back_to_nearest_time_or_unmatched(
     assert source.review_events == []
     matched_shot = next(shot for shot in source.shots if shot.match_status == "matched")
     assert matched_shot.shot_date == "2025-01-16"
+
+
+def test_by_default_an_unnumbered_trigger_is_proposed_not_attached(tmp_path: Path):
+    """Ruling A7: the same trigger as above is a review candidate for the
+    nearer shot, and no LabFrog shot is attached until a person rules."""
+    labfrog_nexus = tmp_path / "labfrog.nxs"
+    trigger_event = tmp_path / "trigger.jsonl"
+    output_nexus = tmp_path / "canonical.nxs"
+    sources_file = tmp_path / "hzdr_sources.json"
+    write_labfrog_export(labfrog_nexus)
+    write_trigger_event(
+        trigger_event, shot_number=None, timestamp="2025-01-16T08:00:02Z"
+    )
+
+    _, built_sources = hzdr_hdf5_builder.build(
+        build_args(
+            trigger_jsonl=[trigger_event],
+            labfrog_nexus=labfrog_nexus,
+            output_nexus=output_nexus,
+            sources_file=sources_file,
+        )
+    )
+    source = HZDRSourceProvider(
+        MetadataSettings(provider="local", sources_file=built_sources)
+    ).get_source(SOURCE_KEY)
+    assert source is not None
+    assert source.match_summary.matched == 0
+    assert source.match_summary.ambiguous == 1
+    assert len(source.review_events) == 1
+    assert all(shot.match_status != "matched" for shot in source.shots)
 
 
 def test_flat_hzdr_event_v1_trigger_matches_shot(tmp_path: Path):

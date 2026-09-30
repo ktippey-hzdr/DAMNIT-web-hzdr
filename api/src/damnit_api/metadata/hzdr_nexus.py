@@ -136,10 +136,14 @@ MATCH_RANK = {
     "nearest_time": 2,
     "shot_number_time_window": 3,
     "exact_day_shot_number_time_window": 4,
-    "exact_day_shot_number": 5,
-    "event_identity": 6,
-    "exact_transport_position": 7,
-    "exact_kafka_event_id": 8,
+    # The authoritative number names exactly one shot, on another day or with
+    # no event day: attached on the number alone (plan W6.2), only while the
+    # time-based ranks are off, i.e. while numbers are trusted as identity.
+    "shot_number": 5,
+    "exact_day_shot_number": 6,
+    "event_identity": 7,
+    "exact_transport_position": 8,
+    "exact_kafka_event_id": 9,
 }
 
 
@@ -1339,7 +1343,7 @@ def reconcile_canonical_shots(  # noqa: C901
     campaign_timezone: str = "UTC",
     campaign_schedule: Iterable[Mapping[str, Any]] = (),
     experiment_rulings: Mapping[int, str] | None = None,
-    time_match_autoassign: bool = True,
+    time_match_autoassign: bool = False,
     include_trigger_only: bool = True,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Link normalized source events to canonical shots.
@@ -1350,10 +1354,11 @@ def reconcile_canonical_shots(  # noqa: C901
 
     With LabFrog records, the canonical shots are the union (plan W6.1) of the
     LabFrog records and, when ``include_trigger_only``, the trigger-only shots
-    the matcher left unattached. ``time_match_autoassign=False`` stops the
-    time-based match ranks from attaching events: they become review
-    candidates instead (plan W6.2's "never guess"); the default keeps the
-    pre-2026-09-29 behaviour.
+    the matcher left unattached. The time-based match ranks never attach
+    events by default (plan W6.2's "never guess", ruling A7, 2026-09-30): they
+    become review candidates, and an authoritative ``shot_number`` that names
+    exactly one shot attaches on the number alone. ``time_match_autoassign=True``
+    restores the pre-2026-09-30 ladder exactly.
     """
     labfrog_shots = labfrog_shots or []
     trigger_only_keys: set[str] = set()
@@ -3164,7 +3169,7 @@ def _match_event(
     *,
     match_tolerance_s: float,
     campaign_timezone: str,
-    time_match_autoassign: bool = True,
+    time_match_autoassign: bool = False,
 ) -> tuple[dict[str, Any] | None, str, str, list[str]]:
     """Match one event to a canonical shot.
 
@@ -3173,16 +3178,21 @@ def _match_event(
     the shot_key of every tied candidate, so a reviewer can be offered exactly the
     shots the matcher actually considered, not the whole source.
 
-    With ``time_match_autoassign=False`` the three time-based ranks
-    (``exact_day_shot_number_time_window``, ``shot_number_time_window``,
-    ``nearest_time``) never attach: the shot(s) they would have picked are
-    returned as review candidates with status ``ambiguous`` instead.
+    With ``time_match_autoassign=False`` (the default since ruling A7,
+    2026-09-30) the three time-based ranks (``exact_day_shot_number_time_window``,
+    ``shot_number_time_window``, ``nearest_time``) never attach: the shot(s) they
+    would have picked are returned as review candidates with status
+    ``ambiguous`` instead. Numbers are then trusted as identity, so an
+    authoritative ``shot_number`` that names exactly one shot attaches on the
+    number alone (rank ``shot_number``). Before that ruling a trigger numbered 1
+    with no LabFrog shot 1 was attached by nearest time to LabFrog shot 2.
     """
     result = _match_event_ranked(
         event,
         shots,
         match_tolerance_s=match_tolerance_s,
         campaign_timezone=campaign_timezone,
+        number_is_identity=not time_match_autoassign,
     )
     match, quality, _status, candidates = result
     if (
@@ -3192,6 +3202,23 @@ def _match_event(
     ):
         return result
     return None, "ambiguous", "ambiguous", candidates or [match["shot_key"]]
+
+
+def _unique_number_match(
+    candidates: list[dict[str, Any]], shot_number: int, event_date: str | None
+) -> tuple[dict[str, Any], str, str, list[str]] | None:
+    """The one shot holding ``shot_number``, if exactly one does (plan W6.2).
+
+    With unique shot numbers the number alone is the identity, on any day. A
+    number several shots hold (per-day numbering, a rebase) is not, and falls
+    through to the day and time ranks, which then only propose.
+    """
+    same_number = [shot for shot in candidates if shot["shot_number"] == shot_number]
+    if len(same_number) != 1:
+        return None
+    only = same_number[0]
+    same_day = bool(event_date) and only.get("shot_date") == event_date
+    return only, "exact_day_shot_number" if same_day else "shot_number", "matched", []
 
 
 _TIME_BASED_MATCH_QUALITIES = frozenset({
@@ -3207,6 +3234,7 @@ def _match_event_ranked(
     *,
     match_tolerance_s: float,
     campaign_timezone: str,
+    number_is_identity: bool = False,
 ) -> tuple[dict[str, Any] | None, str, str, list[str]]:
     current_shots = [
         shot
@@ -3228,6 +3256,35 @@ def _match_event_ranked(
         if event_time
         else None
     )
+    if shot_number is not None and number_is_identity:
+        unique = _unique_number_match(candidates, shot_number, event_date)
+        if unique is not None:
+            return unique
+    return _match_by_number_and_time(
+        candidates,
+        shot_number,
+        event_time,
+        event_date,
+        match_tolerance_s=match_tolerance_s,
+        campaign_timezone=campaign_timezone,
+    )
+
+
+def _match_by_number_and_time(
+    candidates: list[dict[str, Any]],
+    shot_number: int | None,
+    event_time: datetime | None,
+    event_date: str | None,
+    *,
+    match_tolerance_s: float,
+    campaign_timezone: str,
+) -> tuple[dict[str, Any] | None, str, str, list[str]]:
+    """The day, number and time ranks, in the order the ladder tries them.
+
+    Split out of ``_match_event_ranked`` unchanged when the unique-number
+    rank was added (ruling A7): it is the whole ladder when time
+    auto-assignment is on, and only proposes when it is off.
+    """
     if shot_number is not None and event_date:
         exact = [
             shot

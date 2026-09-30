@@ -156,8 +156,11 @@ Two builder settings belong to campaign resolution (automatic shot assembly
 plan W1/W6): `DW_API_HZDR_BUILDER__CAMPAIGN_SCHEDULE` (a LabFrog
 `labfrog-campaign-schedule-v1` export that routes `experiment_id: "unassigned"`
 events by trigger time) and `DW_API_HZDR_BUILDER__TIME_MATCH_AUTOASSIGN`
-(default `true`, the validated behaviour; `false` makes the time-based match
-ranks propose review candidates instead of attaching). Consumers spool
+(default `false` since ruling A7, 2026-09-30: the time-based match ranks only
+propose review candidates, and an authoritative `shot_number` naming exactly
+one shot attaches on the number alone; `true` restores the earlier ladder,
+which attached a numbered trigger to a neighbouring LabFrog shot by time).
+Consumers spool
 `unassigned` events to a shared `<spool>/_unassigned/` file that every
 campaign's build reads.
 Structured JSON logging turns on when `DW_API_DEBUG=false`.
@@ -399,18 +402,22 @@ Stamped as `damnit_bridge_profile` on HDF5 root and `/entry/shots`. Current valu
 
 ### Match quality ranks (ascending, `hzdr_nexus.MATCH_RANK`)
 
-`unmatched` (0) → `labfrog_only` (1) → `nearest_time` (2) → `shot_number_time_window` (3) → `exact_day_shot_number_time_window` (4) → `exact_day_shot_number` (5) → `event_identity` (6) → `exact_transport_position` (7) → `exact_kafka_event_id` (8)
+`unmatched` (0) → `labfrog_only` (1) → `nearest_time` (2) → `shot_number_time_window` (3) → `exact_day_shot_number_time_window` (4) → `shot_number` (5) → `exact_day_shot_number` (6) → `event_identity` (7) → `exact_transport_position` (8) → `exact_kafka_event_id` (9)
 
 Higher rank wins when two matches compete for the same shot. `_match_event_ranked`
 tries them top down: the event's Kafka `event_id`, then its `topic/partition/offset`,
-then the TANGO `shot_number` on the event's campaign-local day (disambiguated by
-time when that day has several), then the same number on any day within the
-tolerance, then nearest time alone. `event_identity` marks events on a shot
+then — by default (`TIME_MATCH_AUTOASSIGN=false`, ruling A7) — an authoritative
+`shot_number` held by exactly one shot, on its day (`exact_day_shot_number`) or
+any other (`shot_number`, plan W6.2). Then, and for a number several shots hold,
+the TANGO `shot_number` on the event's campaign-local day (disambiguated by
+time when that day has several), the same number on any day within the
+tolerance, and nearest time alone. `event_identity` marks events on a shot
 built from the events themselves, grouped by shot number with no LabFrog record
 (`_canonical_from_event_identities`), and `labfrog_only` a LabFrog shot no event
 reached. The three time-based ranks
 (`_TIME_BASED_MATCH_QUALITIES`) become review candidates instead of attaching
-when `TIME_MATCH_AUTOASSIGN` is `false`. `ambiguous` is a status, not a rank
+unless `TIME_MATCH_AUTOASSIGN` is `true`, and the `shot_number` rank is used
+only while it is `false`, so opting back in restores the earlier ladder exactly. `ambiguous` is a status, not a rank
 (`MATCH_RANK.get(q, 0)`).
 
 ### Review levels (ascending, `hzdr_nexus.REVIEW_LEVELS`)

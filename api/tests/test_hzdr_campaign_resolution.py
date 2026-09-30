@@ -263,28 +263,28 @@ def test_labfrog_record_and_trigger_join_on_shot_number():
     assert trigger_event["shot_key"] == shot["shot_key"]
 
 
-def test_time_match_autoassign_false_turns_time_ranks_into_candidates():
+def test_time_ranks_only_propose_by_default():
     # A watchdog event with no shot number of its own lands within tolerance of
-    # LabFrog shot 17: the default attaches it by nearest time, the new mode
-    # only proposes it.
+    # LabFrog shot 17: the pre-A7 ladder (opted into) attaches it by nearest
+    # time; the default since ruling A7 only proposes it.
     stray = watchdog(0, timestamp="2026-06-10T12:00:30Z")
     stray.pop("shot_number")
     stray["shot_id"] = "unnumbered"
 
-    _, default_events = reconcile_canonical_shots(
+    _, legacy_events = reconcile_canonical_shots(
         [dict(stray)],
         experiment_id=CAMPAIGN,
         source_key=SOURCE_KEY,
         labfrog_shots=[labfrog_record(17)],
+        time_match_autoassign=True,
     )
-    assert default_events[0]["match_quality"] == "nearest_time"
+    assert legacy_events[0]["match_quality"] == "nearest_time"
 
     shots, events = reconcile_canonical_shots(
         [dict(stray)],
         experiment_id=CAMPAIGN,
         source_key=SOURCE_KEY,
         labfrog_shots=[labfrog_record(17)],
-        time_match_autoassign=False,
     )
     assert events[0]["match_status"] == "ambiguous"
     assert events[0]["shot_key"] == ""
@@ -292,30 +292,89 @@ def test_time_match_autoassign_false_turns_time_ranks_into_candidates():
     assert shots[0]["match_status"] == "labfrog-only"
 
 
-def test_time_match_autoassign_false_keeps_a_trigger_off_another_shot():
-    # Trigger 99 has no LabFrog record but fires 10 s after LabFrog shot 17.
-    # The default nearest-time rank attaches it to 17 (pre-existing behaviour);
-    # with auto-assignment off it founds its own trigger-only shot instead.
+def test_a_numbered_trigger_is_never_pulled_onto_another_shot():
+    # Ruling A7. Trigger 99 has no LabFrog record but fires 10 s after LabFrog
+    # shot 17. The pre-A7 ladder (opted into) attached it to 17 by nearest time,
+    # merging two shots; by default it founds its own trigger-only shot.
     near = trigger(99, timestamp="2026-06-10T12:00:10Z")
-    default_shots, _ = reconcile_canonical_shots(
+    legacy_shots, _ = reconcile_canonical_shots(
         [dict(near)],
         experiment_id=CAMPAIGN,
         source_key=SOURCE_KEY,
         labfrog_shots=[labfrog_record(17)],
+        time_match_autoassign=True,
     )
-    assert set(by_number(default_shots)) == {17}
+    assert set(by_number(legacy_shots)) == {17}
 
     shots, events = reconcile_canonical_shots(
         [dict(near)],
         experiment_id=CAMPAIGN,
         source_key=SOURCE_KEY,
         labfrog_shots=[labfrog_record(17)],
-        time_match_autoassign=False,
     )
     assert set(by_number(shots)) == {17, 99}
     trigger_event = next(e for e in events if e["source"] == "DRACO-Trigger")
     assert trigger_event["shot_key"] == by_number(shots)[99]["shot_key"]
     assert trigger_event["candidate_shot_keys"] == []
+
+
+def test_a_unique_number_attaches_on_the_number_alone_across_days():
+    # W6.2: LabFrog's shot 17 is dated the day before the trigger (a record
+    # entered late, or a shot just after midnight). Far outside the time
+    # tolerance, the unique number is still the identity.
+    late = trigger(17, timestamp="2026-06-11T09:00:00Z")
+    shots, events = reconcile_canonical_shots(
+        [late],
+        experiment_id=CAMPAIGN,
+        source_key=SOURCE_KEY,
+        labfrog_shots=[labfrog_record(17)],
+    )
+    assert set(by_number(shots)) == {17}
+    trigger_event = next(e for e in events if e["source"] == "DRACO-Trigger")
+    assert trigger_event["match_quality"] == "shot_number"
+    assert trigger_event["match_status"] == "matched"
+    assert by_number(shots)[17]["labfrog_record_id"] == "mongo-17"
+
+
+def test_a_number_held_by_two_shots_is_only_proposed():
+    # Per-day numbering (or a rebase) gives two shots number 17 on different
+    # days; the number is no longer an identity, so nothing attaches by time.
+    other_day = labfrog_record(17)
+    other_day.update(
+        record_index=117,
+        record_id="mongo-17b",
+        shot_date="2026-06-09",
+        labfrog_date_time="2026-06-09T12:00:00Z",
+    )
+    _, events = reconcile_canonical_shots(
+        [trigger(17, timestamp="2026-06-11T12:00:00Z")],
+        experiment_id=CAMPAIGN,
+        source_key=SOURCE_KEY,
+        labfrog_shots=[labfrog_record(17), other_day],
+    )
+    trigger_event = next(e for e in events if e["source"] == "DRACO-Trigger")
+    assert trigger_event["match_status"] != "matched"
+
+
+def test_numbered_triggers_near_another_labfrog_shot_stay_their_own_shots():
+    # The Test Baseline 1.1 case that surfaced A7: triggers 1 and 3, each with
+    # an authoritative number, 10 s either side of LabFrog shot 2.
+    events = [
+        trigger(1, timestamp="2026-06-10T12:00:00Z"),
+        trigger(2, timestamp="2026-06-10T12:00:10Z"),
+        trigger(3, timestamp="2026-06-10T12:00:20Z"),
+    ]
+    shots, _ = reconcile_canonical_shots(
+        events,
+        experiment_id=CAMPAIGN,
+        source_key=SOURCE_KEY,
+        labfrog_shots=[labfrog_record(2)],
+    )
+    shots_by_number = by_number(shots)
+    assert set(shots_by_number) == {1, 2, 3}
+    assert shots_by_number[2]["labfrog_record_id"] == "mongo-2"
+    assert shots_by_number[1]["labfrog_record_id"] is None
+    assert shots_by_number[3]["labfrog_record_id"] is None
 
 
 def test_include_trigger_only_false_keeps_the_labfrog_axis():
@@ -697,9 +756,16 @@ def test_builder_trigger_reads_unassigned_spools_once_they_exist(tmp_path: Path)
     assert trigger_inputs == [str(unassigned_triggers)]
 
 
-def test_builder_defaults_keep_time_matching_on(tmp_path: Path):
+def test_builder_defaults_keep_time_matching_off(tmp_path: Path):
+    # Ruling A7: off by default, and always passed explicitly, so the setting
+    # governs whatever the script's own default is.
     settings = HZDRBuilderSettings(enabled=True, output_nexus=tmp_path / "c.nxs")
-    assert settings.time_match_autoassign is True
+    assert settings.time_match_autoassign is False
     command = BuilderTrigger(settings).build_command()
-    assert "--no-time-match-autoassign" not in command
+    assert "--no-time-match-autoassign" in command
+    assert "--time-match-autoassign" not in command
+    opted_in = HZDRBuilderSettings(
+        enabled=True, output_nexus=tmp_path / "c.nxs", time_match_autoassign=True
+    )
+    assert "--time-match-autoassign" in BuilderTrigger(opted_in).build_command()
     assert "--campaign-schedule" not in command

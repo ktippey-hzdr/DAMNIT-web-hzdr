@@ -234,10 +234,14 @@ class HZDRBuilderSettings(BaseModel):
     labfrog_sqlite: Path | None = None
     sources_file: Path | None = None
     match_tolerance_s: float = 120.0
-    # False: the time-based match ranks stop attaching events and produce
-    # review candidates instead (automatic shot assembly plan W6.2). True keeps
-    # the behaviour every existing deployment was validated with.
-    time_match_autoassign: bool = True
+    # False (the default since ruling A7, 2026-09-30, once the shot authority
+    # made shot numbers unique): the time-based match ranks stop attaching
+    # events and produce review candidates instead, and an authoritative
+    # shot_number naming exactly one shot attaches on the number alone
+    # (automatic shot assembly plan W6.2). With it true, a trigger numbered 1
+    # with no LabFrog shot 1 was attached by nearest time to LabFrog shot 2.
+    # True restores the pre-A7 ladder exactly.
+    time_match_autoassign: bool = False
     # LabFrog labfrog-campaign-schedule-v1 export whose windows route
     # "unassigned" events (plan W1, decision D4).
     campaign_schedule: Path | None = None

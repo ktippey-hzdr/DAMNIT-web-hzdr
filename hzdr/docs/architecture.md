@@ -104,13 +104,17 @@ built when the builder preserves a LabFrog **NeXus** projection
 `/entry/derived` datasets are fixed to LabFrog's rows; there the trigger stays
 a review event, as before.
 
-**Time-based auto-assignment (plan W6.2).** `--no-time-match-autoassign`
-(`DW_API_HZDR_BUILDER__TIME_MATCH_AUTOASSIGN=false`) stops matching steps 4-6
-below from attaching an event: the shot they would have picked becomes a review
-candidate (`match_status` `ambiguous`, `candidate_shot_keys`). It also means a
-trigger whose number LabFrog lacks can no longer be pulled onto a neighbouring
-LabFrog shot by time, so it founds its trigger-only shot. The default (`true`)
-keeps the validated behaviour.
+**Time-based auto-assignment (plan W6.2, ruling A7).** Off by default since
+2026-09-30 (`DW_API_HZDR_BUILDER__TIME_MATCH_AUTOASSIGN=false`,
+`--no-time-match-autoassign`): matching steps 4-6 below never attach an event;
+the shot they would have picked becomes a review candidate (`match_status`
+`ambiguous`, `candidate_shot_keys`). A trigger whose number LabFrog lacks can
+therefore no longer be pulled onto a neighbouring LabFrog shot by time, and
+founds its trigger-only shot; before the ruling, triggers 1 and 3 were merged
+into LabFrog shot 2 that way. With it off, numbers are trusted as identity: an
+authoritative `shot_number` held by exactly one shot attaches on the number
+alone, on any day (step 3a). `true` (`--time-match-autoassign`) restores the
+earlier ladder exactly.
 
 ## Event Envelope
 
@@ -247,11 +251,15 @@ and fallback:
    ever recreated/compacted so offsets are reused, drop to `kafka_event_id`
    identity matching (step 1) instead.
 3. Same local date and TANGO/shotcounter `shot_number`.
+   3a. By default (time auto-assignment off): the same `shot_number` on any
+   day, when exactly one shot holds it (match quality `shot_number`).
 4. Same local date and `shot_number`, resolved by unique nearest timestamp when
    duplicate current LabFrog rows remain.
 5. Same `shot_number` and unique nearest timestamp within tolerance.
 6. Unique nearest timestamp within tolerance.
 7. Otherwise retain the event as ambiguous or unmatched.
+
+Steps 4-6 attach only when time auto-assignment is on; by default they propose.
 
 Archived/superseded LabFrog rows from curated exports are kept as provenance but
 are excluded from automatic matching when an active row for the same

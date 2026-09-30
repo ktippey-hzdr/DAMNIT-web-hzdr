@@ -115,8 +115,13 @@ class BuilderTrigger:
         args: list[str] = []
         if s.campaign_schedule is not None:
             args += ["--campaign-schedule", str(s.campaign_schedule)]
-        if not s.time_match_autoassign:
-            args.append("--no-time-match-autoassign")
+        # Always explicit, so the setting governs whatever the script's own
+        # default is.
+        args.append(
+            "--time-match-autoassign"
+            if s.time_match_autoassign
+            else "--no-time-match-autoassign"
+        )
         return args
 
     async def _run_subprocess(self, cmd: Sequence[str]) -> tuple[int, str]:

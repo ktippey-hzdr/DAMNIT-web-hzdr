@@ -277,6 +277,7 @@ def test_duplicate_tango_shot_number_uses_timestamp_disambiguation():
         experiment_id="HELPMI",
         source_key="hzdr-labfrog",
         labfrog_shots=duplicate_rows,
+        time_match_autoassign=True,  # the pre-A7 ladder, opted into
     )
 
     assert events[0]["match_status"] == "matched"
