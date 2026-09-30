@@ -56,6 +56,21 @@ consumer starts as a FastAPI lifespan background task.
 
 ---
 
+## Open on the deployed host (2026-09-30)
+
+- **Updating the code is not documented.** This plan covers editing `.env` and
+  restarting; there is no recorded procedure for bringing `/opt/damnit-web-hzdr`
+  to a new commit (a `git pull` there, or `damnit-api-deploy.sh`) or for
+  rebuilding the frontend under `/var/www/damnit-web`. Write it here the next
+  time it is done.
+- **Ruling A7 (`730c99ab`):** `DW_API_HZDR_BUILDER__TIME_MATCH_AUTOASSIGN` now
+  defaults to `false`. An `.env` copied from the old example still says `true`
+  and keeps the old behaviour -- a numbered trigger attached to a neighbouring
+  LabFrog shot by time -- until the line is changed or removed.
+- The shot number is no longer blocked on the shotcounter merge: the shot
+  authority on fwkt-webapps supplies it on `draco.trigger`
+  (`planet-watchdog/docs/SHOT_AUTHORITY.md`).
+
 ## Pre-flight checklist
 
 Before enabling any consumer, verify:
