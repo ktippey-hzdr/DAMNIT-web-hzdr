@@ -7,6 +7,13 @@ gated on the deployment VM (broker smoke test, restart/replay, ops config,
 SciCat PID back-population) were **not** re-checked and carry their 07-23
 state.
 
+**2026-09-30 update:** The downstream shot-number path now uses the persistent
+shot authority in `planet-watchdog`, fed by shotcounter's current ZMQ stream.
+Its server unit is deployed, while the code update, restart check and consumer
+connections remain on the combo root's `CHECK_FWKT.md`. Older "blocked on
+shotcounter merge" rows below are historical; the branch merge and live broker
+smoke test remain their own open gates.
+
 **2026-07-23 review:** local code and documentation were reconciled without
 restructuring this historical roadmap. The DAMNIT API suite passed with
 `346 passed, 5 skipped`; the HZDR-focused subset passed with

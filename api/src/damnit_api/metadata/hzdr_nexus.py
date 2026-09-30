@@ -1392,6 +1392,13 @@ def reconcile_canonical_shots(  # noqa: C901
                 campaign_timezone=campaign_timezone,
                 time_match_autoassign=time_match_autoassign,
             )
+            if match is None:
+                attributed_keys = _attribution_candidate_keys(event, canonical)
+                if attributed_keys:
+                    candidate_shot_keys = list(
+                        dict.fromkeys([*candidate_shot_keys, *attributed_keys])
+                    )
+                    status = quality = "ambiguous"
             event["match_quality"] = quality
             event["match_status"] = status
             event["match_time_delta_s"] = None
@@ -1643,12 +1650,14 @@ def write_nexus_bridge(
             if "NX_class" not in shots_group.attrs:
                 shots_group.attrs["NX_class"] = "NXcollection"
             existing_count = _table_length(shots_group)
-            if existing_count not in (0, len(shots)):
+            if existing_count > len(shots):
                 message = (
                     "Canonical shot count does not match the preserved LabFrog "
                     f"/entry/shots table ({len(shots)} != {existing_count})"
                 )
                 raise ValueError(message)
+            if 0 < existing_count < len(shots):
+                _extend_preserved_shot_table(shots_group, shots, existing_count)
             _write_shot_bridge_columns(
                 shots_group, shots, write_identity=existing_count == 0
             )
@@ -1659,6 +1668,7 @@ def write_nexus_bridge(
             ]
             _fill_default_product_paths(products, output_path)
             _write_source_events(entry, events)
+            _write_instrument_event_groups(entry, events)
             _write_data_products(entry, products, output_path=output_path)
             write_nexus_detector_groups(entry, products)
 
@@ -3204,6 +3214,26 @@ def _match_event(
     return None, "ambiguous", "ambiguous", candidates or [match["shot_key"]]
 
 
+def _attribution_candidate_keys(
+    event: dict[str, Any], shots: list[dict[str, Any]]
+) -> list[str]:
+    """Offer watchdog candidate numbers as review choices, never as an auto-match."""
+    metadata = event.get("metadata")
+    attribution = metadata.get("attribution") if isinstance(metadata, dict) else None
+    numbers = attribution.get("candidates") if isinstance(attribution, dict) else None
+    if not isinstance(numbers, list):
+        return []
+    candidate_numbers = {number for number in numbers if type(number) is int}
+    return list(
+        dict.fromkeys(
+            shot["shot_key"]
+            for shot in shots
+            if shot.get("shot_number") in candidate_numbers
+            and not _as_bool(shot.get("metadata", {}).get("has_newer_version"))
+        )
+    )
+
+
 def _unique_number_match(
     candidates: list[dict[str, Any]], shot_number: int, event_date: str | None
 ) -> tuple[dict[str, Any], str, str, list[str]] | None:
@@ -3612,6 +3642,74 @@ def _write_shot_bridge_columns(
     group.attrs["stable_key"] = "shot_key"
 
 
+def _extend_preserved_shot_table(
+    group: h5py.Group, shots: list[dict[str, Any]], existing_count: int
+) -> None:
+    """Append trigger-only rows to a copied LabFrog shot table.
+
+    LabFrog's other groups remain byte-for-byte preserved: their data refers to
+    the original prefix of this table. New rows carry no LabFrog measurements.
+    """
+    original_numbers = list(group["shot_number"][...])
+    expected_numbers = [shot["shot_number"] for shot in shots[:existing_count]]
+    if original_numbers != expected_numbers:
+        message = "Canonical shots do not preserve the LabFrog row order"
+        raise ValueError(message)
+    extra = shots[existing_count:]
+    known = {
+        "shot_index": list(range(existing_count, len(shots))),
+        "record_id": ["" for _ in extra],
+        "shot_number": [shot["shot_number"] for shot in extra],
+        "shot_date": [shot.get("shot_date") or "" for shot in extra],
+        "date_time": ["" for _ in extra],
+        "campaign": ["" for _ in extra],
+        "shot_status": ["shot" for _ in extra],
+        "has_newer_version": [False for _ in extra],
+    }
+    for name, dataset in list(group.items()):
+        if not isinstance(dataset, h5py.Dataset) or not dataset.shape:
+            continue
+        if dataset.shape[0] != existing_count:
+            continue
+        if dataset.ndim != 1:
+            message = (
+                "Cannot append trigger-only rows to multidimensional "
+                f"/entry/shots/{name}"
+            )
+            raise ValueError(message)
+        values = known.get(name)
+        if values is None:
+            values = [_neutral_shot_column_value(dataset.dtype) for _ in extra]
+        old_values = dataset[...]
+        attrs = dict(dataset.attrs)
+        dtype = dataset.dtype
+        layout = {
+            "chunks": dataset.chunks,
+            "compression": dataset.compression,
+            "compression_opts": dataset.compression_opts,
+            "shuffle": dataset.shuffle,
+            "fletcher32": dataset.fletcher32,
+            "scaleoffset": dataset.scaleoffset,
+        }
+        extension = np.asarray(values, dtype=dtype)
+        combined = np.concatenate((old_values, extension))
+        del group[name]
+        replacement = group.create_dataset(name, data=combined, dtype=dtype, **layout)
+        for key, value in attrs.items():
+            replacement.attrs[key] = value
+    group.attrs["labfrog_shot_count"] = existing_count
+
+
+def _neutral_shot_column_value(dtype: np.dtype) -> Any:
+    if h5py.check_string_dtype(dtype) is not None:
+        return ""
+    if np.issubdtype(dtype, np.floating):
+        return np.nan
+    if np.issubdtype(dtype, np.signedinteger):
+        return -1
+    return 0
+
+
 def _write_source_payloads(entry: h5py.Group, events: list[dict[str, Any]]) -> None:
     for event in events:
         values = event.get("values")
@@ -3680,6 +3778,47 @@ def _write_source_events(entry: h5py.Group, events: list[dict[str, Any]]) -> Non
     }
     for name, values in columns.items():
         _replace_dataset(group, name, values)
+
+
+def _write_instrument_event_groups(
+    entry: h5py.Group, events: list[dict[str, Any]]
+) -> None:
+    """Index source events under their declared instrument id.
+
+    The canonical event table remains /entry/source_events. These groups give
+    NeXus readers an instrument route without copying measurements or guessing
+    an id for unregistered files.
+    """
+    by_id: dict[str, list[tuple[int, dict[str, Any]]]] = {}
+    for index, event in enumerate(events):
+        instrument_id = _event_instrument_id(event)
+        if instrument_id:
+            by_id.setdefault(instrument_id, []).append((index, event))
+    if not by_id:
+        return
+    instrument = entry.require_group("instrument")
+    if "NX_class" not in instrument.attrs:
+        instrument.attrs["NX_class"] = "NXinstrument"
+    names: set[str] = set()
+    for instrument_id, members in sorted(by_id.items()):
+        name = safe_hdf5_name(instrument_id)
+        if name in names:
+            message = f"instrument ids collide as HDF5 name {name!r}"
+            raise ValueError(message)
+        names.add(name)
+        if not _claim_damnit_group(instrument, name, "instrument_events"):
+            message = f"/entry/instrument/{name} is owned by the preserved NeXus file"
+            raise ValueError(message)
+        group = instrument.create_group(name)
+        group.attrs["NX_class"] = "NXcollection"
+        group.attrs["damnit_source"] = "instrument_events"
+        group.attrs["instrument_id"] = instrument_id
+        group.attrs["event_table"] = "/entry/source_events"
+        _replace_dataset(group, "event_index", [index for index, _ in members])
+        _replace_dataset(group, "event_id", [event["event_id"] for _, event in members])
+        _replace_dataset(
+            group, "shot_key", [event.get("shot_key") or "" for _, event in members]
+        )
 
 
 def _write_data_products(

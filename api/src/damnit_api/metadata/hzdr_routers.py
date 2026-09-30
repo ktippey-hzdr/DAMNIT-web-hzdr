@@ -23,7 +23,12 @@ from pydantic import BaseModel, Field
 from ..auth.dependencies import OAuthUserInfo
 from ..shared.hzdr_settings import HZDRWikiSettings
 from ..shared.settings import settings
-from .hzdr_nexus import REVIEW_LEVELS, append_review_decision, write_json_atomic
+from .hzdr_nexus import (
+    REVIEW_LEVELS,
+    append_experiment_ruling,
+    append_review_decision,
+    write_json_atomic,
+)
 from .hzdr_sources import (
     HZDRDatasetPreview,
     HZDRMatchSummary,
@@ -118,6 +123,15 @@ class HZDRConfirmMatchRequest(BaseModel):
 class HZDRDismissReviewEventRequest(BaseModel):
     """Operator acknowledgement for one unmatched event, with no shot attached."""
 
+    note: str | None = None
+    review_level: str = "REVIEWED"
+
+
+class HZDRAssignExperimentRequest(BaseModel):
+    """Reviewer assignment for a shot the producer left unassigned."""
+
+    shot_number: int = Field(strict=True, gt=0)
+    experiment_id: str = Field(min_length=1)
     note: str | None = None
     review_level: str = "REVIEWED"
 
@@ -601,6 +615,45 @@ async def get_hzdr_review(source_key: str) -> HZDRReviewResponse:
     return HZDRReviewResponse(
         match_summary=source.match_summary, review_events=source.review_events
     )
+
+
+@hzdr_router.post("/hzdr/experiment-rulings", status_code=202)
+async def assign_hzdr_experiment(
+    payload: HZDRAssignExperimentRequest, user: OAuthUserInfo
+) -> dict[str, Any]:
+    """Persist an experiment ruling for the next canonical rebuild."""
+    sources_file = settings.metadata.sources_file
+    if settings.metadata.provider != "local" or sources_file is None:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "Experiment rulings require local metadata provider and sources_file."
+            ),
+        )
+    if not sources_file.exists():
+        raise HTTPException(status_code=404, detail="HZDR sources file not found.")
+    if payload.review_level not in REVIEW_LEVELS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"review_level must be one of {REVIEW_LEVELS}",
+        )
+    try:
+        append_experiment_ruling(
+            sources_file,
+            shot_number=payload.shot_number,
+            experiment_id=payload.experiment_id,
+            by=user.preferred_username or user.email,
+            note=payload.note,
+            review_level=payload.review_level,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {
+        "shot_number": payload.shot_number,
+        "experiment_id": payload.experiment_id,
+        "review_level": payload.review_level,
+        "status": "pending_rebuild",
+    }
 
 
 @hzdr_router.post("/hzdr/sources/{source_key}/review/{event_id}/confirm")

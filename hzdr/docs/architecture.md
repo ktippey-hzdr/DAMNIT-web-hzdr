@@ -301,9 +301,16 @@ The LabFrog NeXus structure is preserved and DAMNIT adds:
 /entry/instrument/laser/shot_series  per-shot metadata.laser.* series (NXdata)
 /entry/instrument/<key>              per-shot metadata.diagnostic.* scalars (NXdetector)
 /entry/instrument/detector_<kind>    per-kind data-product references (NXdetector)
+/entry/instrument/<instrument.id>    event-index view for a declared instrument (NXcollection)
 /entry/sample                        target metadata (NXsample, NXhzdr_target profile)
 /entry/sample/environment            vacuum metadata (NXenvironment)
 ```
+
+With `--labfrog-nexus`, trigger-only shots join the canonical `/entry/shots`
+table after the preserved LabFrog rows. `labfrog_shot_count` marks that prefix;
+the preserved `/entry/derived` arrays still refer only to its rows. An
+instrument group contains `event_index` values that join to
+`/entry/source_events`, not copies of the producer data.
 
 The semantic `metadata.*` promotions (laser, target, vacuum, diagnostics,
 per-kind detectors) are documented field-by-field in

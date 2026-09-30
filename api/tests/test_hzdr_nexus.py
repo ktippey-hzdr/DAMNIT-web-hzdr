@@ -84,6 +84,43 @@ def normalized_event(**overrides):
     return event
 
 
+def test_preserved_labfrog_nexus_accepts_trigger_only_union(tmp_path: Path):
+    source = tmp_path / "labfrog.nxs"
+    output = tmp_path / "canonical.nxs"
+    write_labfrog_nexus(source)
+    event = normalized_event(
+        source="DRACO-Trigger",
+        kind="trigger.threshold_crossing",
+        shot_id="shot-000099",
+        shot_number=99,
+        timestamp="2026-06-10T15:00:00Z",
+        values=None,
+    )
+    shots, events = reconcile_canonical_shots(
+        [event],
+        experiment_id="HELPMI",
+        source_key="hzdr-labfrog",
+        labfrog_shots=read_labfrog_nexus_shots(source),
+    )
+    assert [shot["shot_number"] for shot in shots] == [17, 18, 99]
+    write_nexus_bridge(
+        output_path=output,
+        source_nexus=source,
+        experiment_id="HELPMI",
+        shots=shots,
+        events=events,
+    )
+    with h5py.File(output, "r") as handle:
+        assert list(handle["entry/shots/shot_number"]) == [17, 18, 99]
+        assert list(handle["entry/shots/record_id"].asstr()) == [
+            "mongo-17",
+            "mongo-18",
+            "",
+        ]
+        assert handle["entry/shots"].attrs["labfrog_shot_count"] == 2
+        assert list(handle["entry/derived/ict_charge"]) == [1.2, 1.4]
+
+
 def test_preserves_rich_labfrog_nexus_and_adds_damnit_bridge(tmp_path: Path):
     labfrog_nexus = tmp_path / "labfrog.nxs"
     output_nexus = tmp_path / "canonical.nxs"

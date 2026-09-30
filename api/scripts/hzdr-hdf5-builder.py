@@ -190,11 +190,7 @@ def build(args: argparse.Namespace) -> tuple[Path, Path]:
         campaign_schedule=schedule,
         experiment_rulings=rulings,
         time_match_autoassign=getattr(args, "time_match_autoassign", False),
-        # A preserved LabFrog NeXus projection fixes the /entry/shots axis (and
-        # every shot-indexed /entry/derived dataset) to its own rows, so
-        # trigger-only shots cannot be appended to it; they stay review events.
-        # The SQLite/Mongo and LabFrog-less paths build the full union.
-        include_trigger_only=args.labfrog_nexus is None,
+        include_trigger_only=True,
     )
 
     if args.labfrog_nexus:

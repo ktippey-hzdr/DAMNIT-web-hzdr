@@ -249,6 +249,21 @@ def test_watchdog_file_attaches_to_its_trigger_only_shot():
     }
 
 
+def test_watchdog_attribution_candidates_become_review_choices():
+    event = watchdog(99, timestamp="2026-06-10T15:00:03Z")
+    event["metadata"]["attribution"] = {"status": "ambiguous", "candidates": [17]}
+    shots, events = reconcile_canonical_shots(
+        [event],
+        experiment_id=CAMPAIGN,
+        source_key=SOURCE_KEY,
+        labfrog_shots=[labfrog_record(17)],
+    )
+    candidate = next(item for item in events if item["source"] == "DAQ-File-Watchdog")
+    assert candidate["match_status"] == "ambiguous"
+    assert candidate["candidate_shot_keys"] == [shots[0]["shot_key"]]
+    assert not any(item["source"] == "DAQ-File-Watchdog" for item in shots[0]["events"])
+
+
 def test_labfrog_record_and_trigger_join_on_shot_number():
     shots, events = reconcile_canonical_shots(
         [trigger(17, timestamp="2026-06-10T12:00:02Z")],
@@ -693,6 +708,12 @@ def test_bridge_v4_writes_experiment_id_source_and_instrument_id(tmp_path: Path)
         by_source = dict(zip(event_sources, instruments, strict=False))
         assert by_source["DAQ-File-Watchdog"] == "BAM"
         assert set(instruments) == {"BAM", ""}
+        instrument = handle["entry/instrument/BAM"]
+        assert instrument.attrs["NX_class"] == "NXcollection"
+        assert instrument.attrs["event_table"] == "/entry/source_events"
+        assert [event_sources[i] for i in instrument["event_index"]] == [
+            "DAQ-File-Watchdog"
+        ]
 
 
 # --- spool + trigger ---------------------------------------------------------

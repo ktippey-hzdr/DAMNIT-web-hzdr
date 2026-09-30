@@ -364,16 +364,14 @@ def test_ambiguous_duplicate_shot_number_is_listed_for_review(tmp_path: Path):
     assert source.match_summary.matched == 0
 
 
-def test_unmatched_event_with_no_candidate_is_listed_for_review(tmp_path: Path):
-    """A trigger far outside the tolerance window and with no shot_number match
-    must land as unmatched, not crash, and not be silently dropped."""
+def test_numbered_trigger_without_labfrog_row_joins_preserved_nexus(tmp_path: Path):
+    """The preserved LabFrog path includes an independently numbered shot."""
     labfrog_nexus = tmp_path / "labfrog.nxs"
     trigger_event = tmp_path / "trigger.jsonl"
     output_nexus = tmp_path / "canonical.nxs"
     sources_file = tmp_path / "hzdr_sources.json"
     write_labfrog_export(labfrog_nexus)
-    # shot_number=99 matches no LabFrog shot, and the timestamp is far outside
-    # match_tolerance_s of either shot, so nearest-time can't rescue it either.
+    # Number 99 matches no LabFrog row and is far outside the time window.
     write_trigger_event(trigger_event, shot_number=99, timestamp="2025-06-01T08:00:02Z")
 
     args = build_args(
@@ -389,11 +387,16 @@ def test_unmatched_event_with_no_candidate_is_listed_for_review(tmp_path: Path):
     )
     source = provider.get_source(SOURCE_KEY)
     assert source is not None
-    assert source.match_summary.unmatched == 1
+    assert source.match_summary.unmatched == 0
+    assert source.match_summary.matched == 1
+    assert source.review_events == []
+    trigger_only = next(shot for shot in source.shots if shot.shot_number == 99)
+    assert trigger_only.match_status == "matched"
+    assert trigger_only.labfrog_record_id is None
+    with h5py.File(output_nexus, "r") as handle:
+        assert list(handle["entry/shots/shot_number"]) == [1, 1, 99]
+        assert handle["entry/shots"].attrs["labfrog_shot_count"] == 2
     assert source.match_summary.ambiguous == 0
-    assert len(source.review_events) == 1
-    assert source.review_events[0].match_status == "unmatched"
-    assert source.review_events[0].candidate_shot_keys == []
 
 
 def test_missing_shot_number_falls_back_to_nearest_time_or_unmatched(

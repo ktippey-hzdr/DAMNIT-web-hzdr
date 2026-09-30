@@ -3,14 +3,49 @@ from pathlib import Path
 import orjson
 import pytest
 from fastapi import HTTPException
+from fastapi.testclient import TestClient
 
-from damnit_api.metadata.hzdr_nexus import load_review_decisions
+from damnit_api.main import create_app
+from damnit_api.metadata.hzdr_nexus import (
+    load_experiment_rulings,
+    load_review_decisions,
+    review_sidecar_path,
+)
 from damnit_api.metadata.hzdr_routers import (
     confirm_local_review_event,
     dismiss_local_review_event,
 )
+from damnit_api.shared.settings import AuthSettings, settings
 
 SOURCE_KEY = "hzdr-local"
+
+
+def test_experiment_ruling_route_persists_named_decision(tmp_path: Path, monkeypatch):
+    sources_file = write_review_fixture(tmp_path)
+    monkeypatch.setattr(settings.metadata, "provider", "local")
+    monkeypatch.setattr(settings.metadata, "sources_file", sources_file)
+    monkeypatch.setattr(settings, "auth", AuthSettings(mode="disabled"))
+
+    with TestClient(create_app()) as client:
+        response = client.post(
+            "/metadata/hzdr/experiment-rulings",
+            json={"shot_number": 9, "experiment_id": "Pilot_2026", "note": "Logbook"},
+        )
+        invalid = client.post(
+            "/metadata/hzdr/experiment-rulings",
+            json={"shot_number": True, "experiment_id": "Pilot_2026"},
+        )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "pending_rebuild"
+    assert invalid.status_code == 422
+    assert load_experiment_rulings([review_sidecar_path(sources_file)]) == {
+        9: "Pilot_2026"
+    }
+    decision_line = review_sidecar_path(sources_file).read_bytes().splitlines()[0]
+    decision = orjson.loads(decision_line)
+    assert decision["by"] == "hzdr-dev"
+    assert decision["note"] == "Logbook"
 
 
 def write_review_fixture(tmp_path: Path) -> Path:

@@ -392,6 +392,14 @@ Stamped as `damnit_bridge_profile` on HDF5 root and `/entry/shots`. Current valu
 
 **Axes.** `/entry/shots/*` is the only shot-indexed group. `/entry/source_events` is event-indexed and `/entry/data_products` is product-indexed; both carry a `shot_key` column and must be *joined*, never zipped by position.
 
+The builder now includes trigger-only rows when it preserves a LabFrog NeXus
+file. They are appended to `/entry/shots`, with empty LabFrog fields and
+`labfrog_shot_count` marking the original prefix. Preserved `/entry/derived`
+arrays still describe that LabFrog prefix. `/entry/instrument/<instrument.id>`
+is an `NXcollection` index of source-event rows for a declared instrument; its
+`event_index` points into `/entry/source_events`. Unregistered files get no
+instrument group. These additive views keep the v4 table columns unchanged.
+
 ### Shared Pydantic field constraints (`api/src/damnit_api/shared/models.py`)
 
 | Type | Constraint |

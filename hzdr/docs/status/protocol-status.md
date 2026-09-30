@@ -7,6 +7,15 @@ gated on the deployment VM (broker smoke test, restart/replay, ops config,
 SciCat PID back-population) were **not** re-checked and carry their 07-23
 state.
 
+**2026-09-30 shot-number update:** `planet-watchdog` now has a persistent shot
+authority that stamps the shotcounter's existing ZMQ stream. The maintainer
+reports its server unit deployed, but it still needs the current code, restart
+check, and consumer connections described in the combo root's `CHECK_FWKT.md`.
+The older rows below describe the 2026-09-15 assessment; their claim that
+watchdog and LabFrog must wait for the shotcounter branch merge is superseded.
+The shotcounter merge and its deployment-broker smoke test remain separate open
+gates.
+
 Per-source, per-repo implementation status for the HZDR DAMNIT pipeline data-transfer
 protocols. See `integration-roadmap.md` for the full work-order history; see
 `remaining-work-plan.md` for next-steps detail on open items.
