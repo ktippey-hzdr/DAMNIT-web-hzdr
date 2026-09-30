@@ -512,6 +512,7 @@ def read_labfrog_nexus_shots(path: Path) -> list[dict[str, Any]]:
                 "date_time",
                 "campaign",
                 "has_newer_version",
+                "shot_status",
             )
         }
 
@@ -532,6 +533,11 @@ def read_labfrog_nexus_shots(path: Path) -> list[dict[str, Any]]:
             "metadata": {
                 "labfrog_record_index": index,
                 "has_newer_version": has_newer_version,
+                **(
+                    {"shot_status": status}
+                    if (status := _as_optional_string(fields["shot_status"][index]))
+                    else {}
+                ),
             },
         })
     return shots
@@ -795,6 +801,7 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
                 "target_series_notes",
                 "target_series_status",
                 "status",
+                "shot_status",
                 "version",
                 "kafka_topic",
                 "kafka_partition",
@@ -2915,6 +2922,35 @@ def _copy_payload_ref_fields(source: dict[str, Any], target: dict[str, Any]) -> 
         target["scicat_pid"] = scicat_pid
 
 
+# LabFrog's not-a-shot marker (automatic shot assembly plan W10). LabFrog's
+# labfrog/helpers/choices.py owns the vocabulary; labfrog-sqlite-tools exports
+# it as shots.shot_status (schema v12). DAMNIT only carries it.
+LABFROG_SHOT_STATUS_VALUES = ("shot", "misfire", "test", "dark", "calibration")
+DEFAULT_LABFROG_SHOT_STATUS = "shot"
+
+
+def labfrog_shot_status(value: Any) -> str:
+    """Return a LabFrog record's shot_status; absent, NULL or empty is "shot".
+
+    A known value comes back lower-case. An unknown one is kept as written and
+    logged, never coerced to "shot": carrying it is the contract, and turning
+    an unexpected status into a real shot would hide it.
+    """
+    text = _as_optional_string(value)
+    text = text.strip() if text else ""
+    if not text:
+        return DEFAULT_LABFROG_SHOT_STATUS
+    folded = text.casefold()
+    if folded in LABFROG_SHOT_STATUS_VALUES:
+        return folded
+    logger.warning(
+        "LabFrog shot_status %r is not one of %s; carried as written",
+        text,
+        ", ".join(LABFROG_SHOT_STATUS_VALUES),
+    )
+    return text
+
+
 def _canonical_from_labfrog(
     record: dict[str, Any], experiment_id: str, source_key: str
 ) -> dict[str, Any]:
@@ -2938,6 +2974,12 @@ def _canonical_from_labfrog(
             "experiment_id": experiment_id,
             "campaign": record.get("campaign"),
             **record.get("metadata", {}),
+            # Every LabFrog-backed shot says whether it is a real shot; a
+            # record or export without the field is one. Never used to drop a
+            # shot - a misfire is built and flagged like any other.
+            "shot_status": labfrog_shot_status(
+                record.get("metadata", {}).get("shot_status")
+            ),
         },
         "events": [],
         "data_products": [],
@@ -2955,7 +2997,14 @@ def _labfrog_source_event(shot: dict[str, Any], experiment_id: str) -> dict[str,
         "timestamp": shot.get("labfrog_date_time") or shot.get("fired_at") or "",
         "transport": "nexus",
         "payload_ref": {"record_id": record_id, "nexus_path": "/entry/shots"},
-        "metadata": {"campaign": shot.get("metadata", {}).get("campaign")},
+        # shot_status rides this row's metadata_json, so the NeXus file keeps
+        # it without a new /entry/shots column (bridge profile unchanged).
+        "metadata": {
+            "campaign": shot.get("metadata", {}).get("campaign"),
+            "shot_status": labfrog_shot_status(
+                shot.get("metadata", {}).get("shot_status")
+            ),
+        },
         "shot_key": shot["shot_key"],
         "match_status": "canonical",
         "match_quality": "canonical_record",

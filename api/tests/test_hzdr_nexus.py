@@ -17,6 +17,7 @@ from damnit_api.metadata.hzdr_nexus import (
     _first_shot_vacuum,
     append_review_decision,
     discover_labfrog_data_products,
+    labfrog_shot_status,
     load_normalized_events,
     load_review_decisions,
     normalize_processed_trigger_message,
@@ -2064,3 +2065,61 @@ def test_verified_beats_reviewed_in_write_sources_catalog(tmp_path: Path):
     history = matched_shots[0].metadata["match_confirmation_history"]
     assert history[0]["review_level"] == "VERIFIED"
     assert history[0]["by"] == "bob"
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        (None, "shot"),
+        ("", "shot"),
+        ("misfire", "misfire"),
+        (" Calibration ", "calibration"),
+        # Unknown values are carried as written, never turned into a shot.
+        ("Dud", "Dud"),
+    ],
+)
+def test_labfrog_shot_status_defaults_to_shot_and_keeps_unknown_values(raw, expected):
+    assert labfrog_shot_status(raw) == expected
+
+
+def test_reads_labfrog_sqlite_shot_status_into_metadata(tmp_path: Path):
+    sqlite_path = tmp_path / "campaign.sqlite"
+    with sqlite3.connect(sqlite_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE shots (
+                mongo_id TEXT PRIMARY KEY,
+                shot_number INTEGER,
+                date_time TEXT,
+                campaign TEXT,
+                shot_status TEXT
+            )
+            """
+        )
+        connection.executemany(
+            "INSERT INTO shots VALUES (?, ?, ?, ?, ?)",
+            [
+                ("mongo-17", 17, "2026-06-10T12:00:20Z", "HELPMI", "misfire"),
+                ("mongo-18", 18, "2026-06-10T12:01:20Z", "HELPMI", "shot"),
+            ],
+        )
+
+    shots = read_labfrog_sqlite_shots(sqlite_path)
+
+    assert [shot["metadata"]["shot_status"] for shot in shots] == ["misfire", "shot"]
+
+
+def test_reads_labfrog_nexus_shot_status_when_the_projection_has_it(tmp_path: Path):
+    nexus_path = tmp_path / "labfrog.nxs"
+    write_labfrog_nexus(nexus_path)
+    with h5py.File(nexus_path, "a") as handle:
+        handle["entry/shots"].create_dataset(  # pyright: ignore[reportAttributeAccessIssue]
+            "shot_status",
+            data=np.asarray(
+                ["misfire", "shot"], dtype=h5py.string_dtype(encoding="utf-8")
+            ),
+        )
+
+    shots = read_labfrog_nexus_shots(nexus_path)
+
+    assert [shot["metadata"]["shot_status"] for shot in shots] == ["misfire", "shot"]

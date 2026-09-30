@@ -1,6 +1,7 @@
 import argparse
 import importlib.util
 import json
+import sqlite3
 import sys
 from pathlib import Path
 
@@ -465,3 +466,151 @@ def test_flat_hzdr_event_v1_trigger_matches_shot(tmp_path: Path):
     assert matched_shot.shot_date == "2025-01-16"
     draco_event = next(e for e in matched_shot.events if e.source == "DRACO-Trigger")
     assert draco_event.kind == "draco.trigger"
+
+
+def write_labfrog_sqlite_export(
+    path: Path, rows: list[tuple], *, with_shot_status: bool = True
+) -> None:
+    """A curated LabFrog SQLite export shaped like labfrog-sqlite-tools v12.
+
+    `with_shot_status=False` is an export written before the column existed.
+    """
+    columns = [
+        "mongo_id TEXT PRIMARY KEY",
+        "shot_number INTEGER",
+        "date_time TEXT",
+        "date_time_utc TEXT",
+        "campaign TEXT",
+        "experiment_id TEXT",
+        "status TEXT",
+        "version INTEGER",
+    ]
+    if with_shot_status:
+        columns.append("shot_status TEXT")
+    with sqlite3.connect(path) as connection:
+        connection.execute(f"CREATE TABLE shots ({', '.join(columns)})")
+        placeholders = ", ".join("?" for _ in columns)
+        connection.executemany(
+            f"INSERT INTO shots VALUES ({placeholders})",  # noqa: S608
+            [row if with_shot_status else row[:-1] for row in rows],
+        )
+
+
+def _labfrog_row(shot_number: int, minute: int, shot_status: str | None) -> tuple:
+    return (
+        f"mongo-{shot_number}",
+        shot_number,
+        f"2025-01-16T09:{minute:02d}:00",
+        f"2025-01-16T08:{minute:02d}:00Z",
+        EXPERIMENT_ID,
+        EXPERIMENT_ID,
+        "active",
+        0,
+        shot_status,
+    )
+
+
+def sqlite_build_args(
+    *, labfrog_sqlite: Path, trigger_jsonl: list[Path], tmp_path: Path
+) -> argparse.Namespace:
+    args = build_args(
+        trigger_jsonl=trigger_jsonl,
+        labfrog_nexus=None,
+        output_nexus=tmp_path / "canonical.nxs",
+        sources_file=tmp_path / "hzdr_sources.json",
+    )
+    args.labfrog_sqlite = labfrog_sqlite
+    return args
+
+
+def test_labfrog_misfire_is_built_as_a_flagged_shot_not_dropped(tmp_path: Path):
+    """Plan W10: a misfire from the LabFrog export is still a shot, flagged."""
+    labfrog_sqlite = tmp_path / "campaign.sqlite"
+    write_labfrog_sqlite_export(
+        labfrog_sqlite,
+        [
+            _labfrog_row(1, 0, "shot"),
+            _labfrog_row(2, 1, "misfire"),
+            # Saved before LabFrog recorded a status: NULL reads as a shot.
+            _labfrog_row(3, 2, None),
+        ],
+    )
+    misfire_trigger = tmp_path / "trigger-2.jsonl"
+    write_trigger_event_v1(
+        misfire_trigger,
+        event_id="evt-draco-misfire",
+        shot_number=2,
+        timestamp="2025-01-16T08:01:02Z",
+    )
+    trigger_only = tmp_path / "trigger-4.jsonl"
+    write_trigger_event_v1(
+        trigger_only,
+        event_id="evt-draco-trigger-only",
+        shot_number=4,
+        # Far from every LabFrog time, so no time-based rank can claim it.
+        timestamp="2025-01-16T10:00:00Z",
+    )
+
+    built_nexus, built_sources = hzdr_hdf5_builder.build(
+        sqlite_build_args(
+            labfrog_sqlite=labfrog_sqlite,
+            trigger_jsonl=[misfire_trigger, trigger_only],
+            tmp_path=tmp_path,
+        )
+    )
+
+    with h5py.File(built_nexus, "r") as handle:
+        assert sorted(handle["entry/shots/shot_number"][...].tolist()) == [1, 2, 3, 4]  # pyright: ignore[reportAttributeAccessIssue, reportIndexIssue]
+        assert handle["entry/shots"].attrs["damnit_bridge_profile"] == (
+            "hzdr-canonical-shot-v4"
+        ), "shot_status must not change the bridge layout"
+        events = handle["entry/source_events"]
+        labfrog_status = {
+            number: json.loads(metadata)["shot_status"]
+            for source, number, metadata in zip(
+                events["source"].asstr()[...],  # pyright: ignore[reportAttributeAccessIssue, reportIndexIssue]
+                events["shot_number"][...].tolist(),  # pyright: ignore[reportAttributeAccessIssue, reportIndexIssue]
+                events["metadata_json"].asstr()[...],  # pyright: ignore[reportAttributeAccessIssue, reportIndexIssue]
+                strict=True,
+            )
+            if source == "LabFrog"
+        }
+    assert labfrog_status == {1: "shot", 2: "misfire", 3: "shot"}
+
+    provider = HZDRSourceProvider(
+        MetadataSettings(provider="local", sources_file=built_sources)
+    )
+    source = provider.get_source(SOURCE_KEY)
+    assert source is not None
+    by_number = {shot.shot_number: shot for shot in source.shots}
+    assert set(by_number) == {1, 2, 3, 4}
+    assert by_number[2].metadata["shot_status"] == "misfire"
+    assert by_number[2].match_status == "matched", "a misfire's trigger still attaches"
+    assert by_number[1].metadata["shot_status"] == "shot"
+    assert by_number[3].metadata["shot_status"] == "shot"
+    # A trigger-only shot has no LabFrog record: its LabFrog columns are
+    # absent, never invented.
+    assert "shot_status" not in by_number[4].metadata
+
+
+def test_labfrog_export_without_shot_status_reads_every_shot_as_a_shot(
+    tmp_path: Path,
+):
+    labfrog_sqlite = tmp_path / "campaign.sqlite"
+    write_labfrog_sqlite_export(
+        labfrog_sqlite,
+        [_labfrog_row(1, 0, None), _labfrog_row(2, 1, None)],
+        with_shot_status=False,
+    )
+
+    _, built_sources = hzdr_hdf5_builder.build(
+        sqlite_build_args(
+            labfrog_sqlite=labfrog_sqlite, trigger_jsonl=[], tmp_path=tmp_path
+        )
+    )
+
+    source = HZDRSourceProvider(
+        MetadataSettings(provider="local", sources_file=built_sources)
+    ).get_source(SOURCE_KEY)
+    assert source is not None
+    assert [shot.metadata["shot_status"] for shot in source.shots] == ["shot", "shot"]

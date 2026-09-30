@@ -261,6 +261,20 @@ source-owner-review warning even when their version numbers match. The result
 records `match_status`, `match_quality`, and `match_time_delta_s`. No ambiguous
 event is silently attached.
 
+**Not-a-shot records.** A LabFrog record can carry `shot_status`: `shot`,
+`misfire`, `test`, `dark` or `calibration` (LabFrog owns the vocabulary;
+labfrog-sqlite-tools exports it as `shots.shot_status`, schema v12). This is the
+live-flow version of the Laser Shot Aligner's inclusion rule, and DAMNIT only
+carries it: every LabFrog-backed shot gets `metadata.shot_status` (`shot` when
+the record, or an older export, has none; an unknown value is kept as written
+and logged), matching and building ignore it, and a `misfire` is built, matched
+and catalogued like any other shot. A trigger-only shot has no LabFrog record,
+so it has no `shot_status`. In the NeXus file the value rides the LabFrog
+`shotsheet.row` event's `/entry/source_events/metadata_json` (joined on
+`shot_key`), and `/entry/shots/shot_status` when a preserved LabFrog projection
+has it; no bridge column is added, so the profile stays
+`hzdr-canonical-shot-v4`.
+
 ## Canonical Outputs
 
 The LabFrog NeXus structure is preserved and DAMNIT adds:
