@@ -688,9 +688,9 @@ def test_bridge_v4_writes_experiment_id_source_and_instrument_id(tmp_path: Path)
     write_nexus_bridge(
         output_path=output, experiment_id=CAMPAIGN, shots=shots, events=events
     )
-    assert HZDR_BRIDGE_PROFILE_VERSION == "hzdr-canonical-shot-v4"
+    assert HZDR_BRIDGE_PROFILE_VERSION == "hzdr-canonical-shot-v5"
     with h5py.File(output, "r") as handle:
-        assert handle.attrs["damnit_bridge_profile"] == "hzdr-canonical-shot-v4"
+        assert handle.attrs["damnit_bridge_profile"] == "hzdr-canonical-shot-v5"
         shot_numbers = list(cast("h5py.Dataset", handle["entry/shots/shot_number"]))
         sources = cast(
             "h5py.Dataset", handle["entry/shots/experiment_id_source"]

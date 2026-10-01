@@ -2147,6 +2147,55 @@ def test_reads_labfrog_sqlite_shot_status_into_metadata(tmp_path: Path):
     assert [shot["metadata"]["shot_status"] for shot in shots] == ["misfire", "shot"]
 
 
+def test_reads_labfrog_sqlite_local_count_onto_the_shot_record(tmp_path: Path):
+    """Schema v12 local_count rides the record, not the free-form metadata."""
+    sqlite_path = tmp_path / "campaign.sqlite"
+    with sqlite3.connect(sqlite_path) as connection:
+        connection.execute(
+            """
+            CREATE TABLE shots (
+                mongo_id TEXT PRIMARY KEY,
+                shot_number INTEGER,
+                date_time TEXT,
+                campaign TEXT,
+                local_count INTEGER
+            )
+            """
+        )
+        connection.executemany(
+            "INSERT INTO shots VALUES (?, ?, ?, ?, ?)",
+            [
+                ("mongo-17", 17, "2026-06-10T12:00:20Z", "HELPMI", 3),
+                ("mongo-18", 18, "2026-06-10T12:01:20Z", "HELPMI", None),
+            ],
+        )
+
+    shots = read_labfrog_sqlite_shots(sqlite_path)
+
+    assert [shot.get("local_count") for shot in shots] == [3, None]
+    assert "local_count" not in shots[1], "no count is invented"
+    assert [shot["shot_number"] for shot in shots] == [17, 18]
+    assert all("local_count" not in shot["metadata"] for shot in shots)
+
+
+def test_reads_labfrog_sqlite_without_local_count_column(tmp_path: Path):
+    """A pre-v12 export has no local_count column and still loads."""
+    sqlite_path = tmp_path / "campaign.sqlite"
+    with sqlite3.connect(sqlite_path) as connection:
+        connection.execute(
+            "CREATE TABLE shots (mongo_id TEXT PRIMARY KEY, shot_number INTEGER, "
+            "date_time TEXT, campaign TEXT)"
+        )
+        connection.execute(
+            "INSERT INTO shots VALUES (?, ?, ?, ?)",
+            ("mongo-17", 17, "2026-06-10T12:00:20Z", "HELPMI"),
+        )
+
+    shots = read_labfrog_sqlite_shots(sqlite_path)
+
+    assert ["local_count" in shot for shot in shots] == [False]
+
+
 def test_reads_labfrog_nexus_shot_status_when_the_projection_has_it(tmp_path: Path):
     nexus_path = tmp_path / "labfrog.nxs"
     write_labfrog_nexus(nexus_path)

@@ -819,6 +819,9 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
                 "kafka_source",
                 "damnit_shot_key",
                 "damnit_match_quality",
+                # Schema v12 (labfrog-sqlite-tools v0.2.3); older exports
+                # lack the column and still load.
+                "local_count",
             )
             if name in columns
         ]
@@ -835,7 +838,8 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
         labfrog_time = _as_optional_string(record.get("date_time_utc")) or local_time
         # experiment_id is promoted to the top-level shot field (the single
         # location select_experiment_id reads), so it is excluded here rather
-        # than left duplicated in metadata.
+        # than left duplicated in metadata. local_count likewise rides the
+        # record itself, as the /entry/shots/labfrog_local_count column.
         metadata = {
             key: value
             for key, value in record.items()
@@ -865,6 +869,7 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
                 "target_gas_species",
                 "target_gas_pressure_value",
                 "target_gas_pressure_unit",
+                "local_count",
             }
             and value is not None
             and value != ""
@@ -885,6 +890,12 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
         experiment_id = _as_optional_string(record.get("experiment_id"))
         if experiment_id is not None:
             shot_record["experiment_id"] = experiment_id
+        # The experimenters' Count (LabFrog local-counter reset): a user aid,
+        # never the governed shot_number. Absent when the export has no
+        # column (pre-v12) or no active reset covers the shot.
+        local_count = _as_optional_int(record.get("local_count"))
+        if local_count is not None:
+            shot_record["local_count"] = local_count
         shots.append(shot_record)
     _mark_superseded_labfrog_rows(shots)
     return shots
@@ -2014,7 +2025,13 @@ def write_nexus_laser_group(
 # bumped to match. See hzdr/docs/nxhzdr-target-profile.md (target map) and
 # hzdr/docs/nexus-semantic-maps.md (laser/vacuum/diagnostic maps).
 HZDR_TARGET_PROFILE_VERSION = "0.10"
-HZDR_BRIDGE_PROFILE_VERSION = "hzdr-canonical-shot-v4"
+HZDR_BRIDGE_PROFILE_VERSION = "hzdr-canonical-shot-v5"
+LABFROG_LOCAL_COUNT_DESCRIPTION = (
+    "The experimenters' shot count from LabFrog's local-counter reset (the "
+    "Count written on the Shotsheet). A user aid for finding a shot, not an "
+    "identifier: shot_number is the governed shot identity. -1 where LabFrog "
+    "has no count for the shot."
+)
 
 # All 118 IUPAC element symbols, for the conservative formula check below.
 _ELEMENTS = (
@@ -2974,7 +2991,7 @@ def _canonical_from_labfrog(
         message = "LabFrog shot rows must contain shot_number"
         raise ValueError(message)
     shot_date = _as_optional_string(record.get("shot_date"))
-    return {
+    canonical: dict[str, Any] = {
         "source_key": source_key,
         "shot_number": int(shot_number),
         "fired_at": _as_optional_string(record.get("labfrog_date_time")) or "",
@@ -2999,6 +3016,12 @@ def _canonical_from_labfrog(
         "events": [],
         "data_products": [],
     }
+    # Bridge profile v5: carried only when LabFrog has a count, so a shot
+    # without one has no value invented for it (the column writes -1).
+    local_count = _as_optional_int(record.get("local_count"))
+    if local_count is not None:
+        canonical["labfrog_local_count"] = local_count
+    return canonical
 
 
 def _labfrog_source_event(shot: dict[str, Any], experiment_id: str) -> dict[str, Any]:
@@ -3635,9 +3658,22 @@ def _write_shot_bridge_columns(
         "experiment_id_source": [
             shot.get("experiment_id_source") or "" for shot in shots
         ],
+        # Bridge profile v5: LabFrog's local_count, -1 where there is none
+        # (the integer sentinel /entry/source_events/shot_number uses). Named
+        # so it can never be read as the governed shot_number (aligner G8).
+        "labfrog_local_count": np.asarray(
+            [
+                -1
+                if shot.get("labfrog_local_count") is None
+                else int(shot["labfrog_local_count"])
+                for shot in shots
+            ],
+            dtype=np.int64,
+        ),
     }
     for name, values in columns.items():
         _replace_dataset(group, name, values)
+    group["labfrog_local_count"].attrs["description"] = LABFROG_LOCAL_COUNT_DESCRIPTION
     group.attrs["damnit_bridge_profile"] = HZDR_BRIDGE_PROFILE_VERSION
     group.attrs["stable_key"] = "shot_key"
 

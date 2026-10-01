@@ -65,6 +65,7 @@ most important thing a projection plan has to get right.
 | `/entry/shots/match_status`, `match_quality`, `match_time_delta_s` | reconciliation evidence |
 | `/entry/shots/target_metadata_json` | per-shot LabFrog target context (JSON text) |
 | `/entry/shots/record_id`, `shot_date`, `date_time`, `labfrog_date_time` | LabFrog record identity |
+| `/entry/shots/labfrog_local_count` | experimenters' Count from LabFrog (bridge v5, added 2026-10-01); a user aid, never an identifier, `-1` when absent |
 | `/entry/instrument/laser/shot_series/<key>` | numeric `metadata.laser.*` series, NaN where a shot lacks the key |
 | `/entry/instrument/<diagnostic>/data` | numeric `metadata.diagnostic.*` series (`NXdetector`) |
 | `/entry/derived/<name>` | shot-indexed LabFrog products preserved from the export |

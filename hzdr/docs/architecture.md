@@ -280,8 +280,20 @@ and catalogued like any other shot. A trigger-only shot has no LabFrog record,
 so it has no `shot_status`. In the NeXus file the value rides the LabFrog
 `shotsheet.row` event's `/entry/source_events/metadata_json` (joined on
 `shot_key`), and `/entry/shots/shot_status` when a preserved LabFrog projection
-has it; no bridge column is added, so the profile stays
-`hzdr-canonical-shot-v4`.
+has it; `shot_status` adds no bridge column.
+
+**The experimenters' Count.** labfrog-sqlite-tools schema v12 also exports
+`shots.local_count`: the Count on the Shotsheet, derived from LabFrog's
+local-counter resets. DAMNIT reads it when the column exists (an older export
+still loads) and writes it beside each shot as
+`/entry/shots/labfrog_local_count` (bridge profile v5), so someone holding the
+Shotsheet can find a shot by the number they wrote down. It is a user aid, not
+an identifier: matching and building never read it, the governed
+`shot_number` is unchanged, the name never starts with `shot_number` (the shot
+aligner's rule G8), and the dataset's `description` attribute says all of
+this. `-1` means LabFrog has no count for the shot: no active reset covers it,
+the export predates v12, the LabFrog source is a NeXus projection, or the shot
+is trigger-only.
 
 ## Canonical Outputs
 
@@ -291,7 +303,7 @@ The LabFrog NeXus structure is preserved and DAMNIT adds:
 /entry/definition                    NXhzdr_target application-definition declaration
 /entry/experiment_identifier         campaign id (standard NXentry field)
 /entry/shots                         canonical shot rows, match provenance, per-shot target JSON,
-                                     experiment_id_source (bridge v4)
+                                     experiment_id_source (bridge v4), labfrog_local_count (v5)
 /entry/source_events                 normalized events, including unmatched events;
                                      producer_instance_id (v3), instrument_id (v4) columns
 /entry/data_products                 files and internal dataset references

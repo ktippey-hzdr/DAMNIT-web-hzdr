@@ -4,6 +4,7 @@ import json
 import sqlite3
 import sys
 from pathlib import Path
+from typing import cast
 
 import h5py
 import numpy as np
@@ -512,11 +513,17 @@ def test_flat_hzdr_event_v1_trigger_matches_shot(tmp_path: Path):
 
 
 def write_labfrog_sqlite_export(
-    path: Path, rows: list[tuple], *, with_shot_status: bool = True
+    path: Path,
+    rows: list[tuple],
+    *,
+    with_shot_status: bool = True,
+    local_counts: list[int | None] | None = None,
 ) -> None:
     """A curated LabFrog SQLite export shaped like labfrog-sqlite-tools v12.
 
     `with_shot_status=False` is an export written before the column existed.
+    `local_counts` adds the v12 `shots.local_count` column, one value per row;
+    without it the export has no such column, like one written before v12.
     """
     columns = [
         "mongo_id TEXT PRIMARY KEY",
@@ -530,12 +537,16 @@ def write_labfrog_sqlite_export(
     ]
     if with_shot_status:
         columns.append("shot_status TEXT")
+    rows = [row if with_shot_status else row[:-1] for row in rows]
+    if local_counts is not None:
+        columns.append("local_count INTEGER")
+        rows = [(*row, count) for row, count in zip(rows, local_counts, strict=True)]
     with sqlite3.connect(path) as connection:
         connection.execute(f"CREATE TABLE shots ({', '.join(columns)})")
         placeholders = ", ".join("?" for _ in columns)
         connection.executemany(
             f"INSERT INTO shots VALUES ({placeholders})",  # noqa: S608
-            [row if with_shot_status else row[:-1] for row in rows],
+            rows,
         )
 
 
@@ -605,7 +616,7 @@ def test_labfrog_misfire_is_built_as_a_flagged_shot_not_dropped(tmp_path: Path):
     with h5py.File(built_nexus, "r") as handle:
         assert sorted(handle["entry/shots/shot_number"][...].tolist()) == [1, 2, 3, 4]  # pyright: ignore[reportAttributeAccessIssue, reportIndexIssue]
         assert handle["entry/shots"].attrs["damnit_bridge_profile"] == (
-            "hzdr-canonical-shot-v4"
+            "hzdr-canonical-shot-v5"
         ), "shot_status must not change the bridge layout"
         events = handle["entry/source_events"]
         labfrog_status = {
@@ -657,3 +668,82 @@ def test_labfrog_export_without_shot_status_reads_every_shot_as_a_shot(
     ).get_source(SOURCE_KEY)
     assert source is not None
     assert [shot.metadata["shot_status"] for shot in source.shots] == ["shot", "shot"]
+
+
+def test_labfrog_local_count_rides_beside_each_shot_as_a_user_field(tmp_path: Path):
+    """Bridge v5: LabFrog's local_count lands in /entry/shots/labfrog_local_count.
+
+    It is the experimenters' Count, never the governed shot_number: the shot
+    numbers are untouched, no other dataset name starts with `shot_number`
+    (the aligner's G8 rule), and a shot without a count gets -1, not a guess.
+    """
+    labfrog_sqlite = tmp_path / "campaign.sqlite"
+    write_labfrog_sqlite_export(
+        labfrog_sqlite,
+        [
+            _labfrog_row(1, 0, "shot"),
+            _labfrog_row(2, 1, "shot"),
+            # No active local-counter reset covers this shot.
+            _labfrog_row(3, 2, "shot"),
+        ],
+        local_counts=[7, 8, None],
+    )
+    trigger_only = tmp_path / "trigger-4.jsonl"
+    write_trigger_event_v1(
+        trigger_only,
+        event_id="evt-draco-trigger-only",
+        shot_number=4,
+        timestamp="2025-01-16T10:00:00Z",
+    )
+
+    built_nexus, built_sources = hzdr_hdf5_builder.build(
+        sqlite_build_args(
+            labfrog_sqlite=labfrog_sqlite,
+            trigger_jsonl=[trigger_only],
+            tmp_path=tmp_path,
+        )
+    )
+
+    with h5py.File(built_nexus, "r") as handle:
+        shots = cast("h5py.Group", handle["entry/shots"])
+        assert shots.attrs["damnit_bridge_profile"] == "hzdr-canonical-shot-v5"
+        column = cast("h5py.Dataset", shots["labfrog_local_count"])
+        assert column.dtype.kind == "i"
+        description = str(column.attrs["description"])
+        assert "local-counter reset" in description
+        assert "not an identifier" in description
+        numbers = cast("h5py.Dataset", shots["shot_number"])[...].tolist()
+        counts = column[...].tolist()
+        assert dict(zip(numbers, counts, strict=True)) == {1: 7, 2: 8, 3: -1, 4: -1}
+        names = [str(name) for name in shots]
+        assert [name for name in names if name.startswith("shot_number")] == [
+            "shot_number"
+        ]
+
+    catalog = json.loads(built_sources.read_text(encoding="utf-8"))
+    by_number = {shot["shot_number"]: shot for shot in catalog["sources"][0]["shots"]}
+    assert by_number[1]["labfrog_local_count"] == 7
+    assert by_number[2]["labfrog_local_count"] == 8
+    assert "local_count" not in by_number[1]["metadata"]
+    # No count is carried where LabFrog has none, and none is invented for a
+    # trigger-only shot.
+    assert "labfrog_local_count" not in by_number[3]
+    assert "labfrog_local_count" not in by_number[4]
+
+
+def test_labfrog_export_without_local_count_still_builds(tmp_path: Path):
+    """An export written before schema v12 has no local_count column."""
+    labfrog_sqlite = tmp_path / "campaign.sqlite"
+    write_labfrog_sqlite_export(
+        labfrog_sqlite, [_labfrog_row(1, 0, "shot"), _labfrog_row(2, 1, "shot")]
+    )
+
+    built_nexus, _ = hzdr_hdf5_builder.build(
+        sqlite_build_args(
+            labfrog_sqlite=labfrog_sqlite, trigger_jsonl=[], tmp_path=tmp_path
+        )
+    )
+
+    with h5py.File(built_nexus, "r") as handle:
+        assert handle["entry/shots/shot_number"][...].tolist() == [1, 2]  # pyright: ignore[reportAttributeAccessIssue, reportIndexIssue]
+        assert handle["entry/shots/labfrog_local_count"][...].tolist() == [-1, -1]  # pyright: ignore[reportAttributeAccessIssue, reportIndexIssue]
