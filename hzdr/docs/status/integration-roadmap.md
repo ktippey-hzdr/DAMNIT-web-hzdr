@@ -10,7 +10,7 @@ state.
 **2026-09-30 update:** The downstream shot-number path now uses the persistent
 shot authority in `planet-watchdog`, fed by shotcounter's current ZMQ stream.
 Its server unit is deployed, while the code update, restart check and consumer
-connections remain on the combo root's `CHECK_FWKT.md`. Older "blocked on
+connections remain on the combo root's `planning/CHECK_FWKT.md`. Older "blocked on
 shotcounter merge" rows below are historical; the branch merge and live broker
 smoke test remain their own open gates.
 

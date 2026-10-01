@@ -10,7 +10,7 @@ state.
 **2026-09-30 shot-number update:** `planet-watchdog` now has a persistent shot
 authority that stamps the shotcounter's existing ZMQ stream. The maintainer
 reports its server unit deployed, but it still needs the current code, restart
-check, and consumer connections described in the combo root's `CHECK_FWKT.md`.
+check, and consumer connections described in the combo root's `planning/CHECK_FWKT.md`.
 The older rows below describe the 2026-09-15 assessment; their claim that
 watchdog and LabFrog must wait for the shotcounter branch merge is superseded.
 The shotcounter merge and its deployment-broker smoke test remain separate open
