@@ -193,7 +193,7 @@ honest and does not have to predict which.
 | `on_pending` | `reference_only` | reference good, bytes not local yet |
 | `require_checksum` | `false` | opt-in; not every producer publishes one |
 
-The numbers are measured, not guessed. PLANET Watchdog products across the
+The numbers are measured, not guessed. DAQ File Watchdog products across the
 reference campaigns run from a 3 KB beam-profiler CSV to a 2.8 MB spectrometer
 frame (median ~234 KB, p90 ~1.2 MB), so 16 MiB clears every observed product
 with room to spare while still stopping a runaway pull. ASAPO payloads reach

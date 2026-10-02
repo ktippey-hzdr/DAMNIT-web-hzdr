@@ -329,7 +329,7 @@ species.
 **Since 2026-08-31** the `producer.*` namespace is registered (bridge profile
 v3). It is the only namespace the NeXus writer promotes to a *column* rather
 than to a value: `metadata.producer.instance_id` becomes
-`/entry/source_events/producer_instance_id`, so two PLANET Watchdog PCs
+`/entry/source_events/producer_instance_id`, so two DAQ File Watchdog PCs
 publishing the same `kind` and the same local filename can be told apart from a
 projection rule. It is descriptive only — `event_id` remains the discriminator,
 and a producer that never sets it writes `""`.
