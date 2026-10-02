@@ -41,8 +41,8 @@ See the [roadmap](status/integration-roadmap.md) and short
 
 The first four plans were reviewed on 2026-07-23 and remain active because
 each has open human, deployment, producer, or upstreaming gates; the openPMD
-projection plan was added 2026-08-31 with its Phase 2 delivered and Phases 3-5
-open.
+projection plan was added 2026-08-31; Phases 1-4 are merged (2026-09-04) and
+only Phase 5 (deployment evidence) remains.
 
 | Document | Purpose |
 | --- | --- |

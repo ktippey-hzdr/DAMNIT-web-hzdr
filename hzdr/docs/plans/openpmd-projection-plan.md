@@ -307,7 +307,7 @@ against this fixture, so a path change on either side fails here. It skips when
 the sibling repo is absent, as the ASAPO harness test already does. Run
 nexus-design-studio's own suite too when the plan model or schema changes.
 
-## Next
+## Next (historical; Phases 1-4 are merged, see the status line above)
 
 1. Decide the producer-instance canonical path (above) — cross-repo.
 2. `asapo-for-hzdr-damnit/OPENPMD_PROJECTION_PLAN.md` plus a local scenario

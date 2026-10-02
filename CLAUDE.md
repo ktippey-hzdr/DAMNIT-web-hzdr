@@ -164,7 +164,10 @@ Consumers spool
 `unassigned` events to a shared `<spool>/_unassigned/` file that every
 campaign's build reads.
 Structured JSON logging turns on when `DW_API_DEBUG=false`.
-`hzdr/scripts/damnit-api.service` is the systemd unit (`Restart=on-failure`).
+`hzdr/scripts/damnit-api.service` is the systemd unit for an `/opt` install;
+`hzdr/scripts/damnit-api-checkout.service.example` is the one in use on
+fwkt-webapps (runs from `~/DAMNIT-web-hzdr`, settings in `api/.env`; update with
+`git pull --ff-only`, `uv sync --locked` in `api/`, restart).
 
 ## Event schema contract (`hzdr-event-v1`)
 The `HZDREventV1` Pydantic model in `api/src/damnit_api/metadata/hzdr_event.py` is the

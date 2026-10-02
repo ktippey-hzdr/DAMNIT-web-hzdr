@@ -250,7 +250,8 @@ and fallback:
    original committed offset and never rewrite or renumber it. If a topic is
    ever recreated/compacted so offsets are reused, drop to `kafka_event_id`
    identity matching (step 1) instead.
-3. Same local date and TANGO/shotcounter `shot_number`.
+3. Same local date and authoritative `shot_number` (from the shot authority,
+   `planet-watchdog-shot-authority`).
    3a. By default (time auto-assignment off): the same `shot_number` on any
    day, when exactly one shot holds it (match quality `shot_number`).
 4. Same local date and `shot_number`, resolved by unique nearest timestamp when

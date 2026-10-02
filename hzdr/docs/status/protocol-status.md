@@ -14,7 +14,8 @@ check, and consumer connections described in the combo root's `planning/CHECK_FW
 The older rows below describe the 2026-09-15 assessment; their claim that
 watchdog and LabFrog must wait for the shotcounter branch merge is superseded.
 The shotcounter merge and its deployment-broker smoke test remain separate open
-gates.
+gates. **2026-10-02:** the shot authority has been running since today; governed
+`shot_number` comes only from it.
 
 Per-source, per-repo implementation status for the HZDR DAMNIT pipeline data-transfer
 protocols. See `integration-roadmap.md` for the full work-order history; see

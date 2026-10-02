@@ -14,6 +14,8 @@ connections remain on the combo root's `planning/CHECK_FWKT.md`. Older "blocked 
 shotcounter merge" rows below are historical; the branch merge and live broker
 smoke test remain their own open gates.
 
+**2026-10-02 update:** the shot authority (`planet-watchdog-shot-authority`) has been running since 2026-10-02 and publishes `draco.trigger`; governed `shot_number` comes only from it, not from shotcounter directly or TANGO. DAMNIT's Kafka spool is still not switched on.
+
 **2026-07-23 review:** local code and documentation were reconciled without
 restructuring this historical roadmap. The DAMNIT API suite passed with
 `346 passed, 5 skipped`; the HZDR-focused subset passed with
@@ -323,7 +325,9 @@ effort:
    `ShotNumber` as the preferred live shot number when it is present, but keep
    DAMNIT's timestamp matcher for missing, duplicated, or delayed shot numbers.
    Exact curated `kafka_event_id`/transport-position matches outrank both.
-   Chosen for the pilot.
+   Chosen for the pilot, but since superseded: the governed number now comes only
+   from the persistent shot authority in `planet-watchdog` (2026-10-02), and
+   DAMNIT no longer time-matches by default (`TIME_MATCH_AUTOASSIGN=false`).
 
 2. **labfrog-sqlite-tools stamps the number at export time** — reads the
    LabFrog Mongo shot count (already the operator-facing truth) and writes it
