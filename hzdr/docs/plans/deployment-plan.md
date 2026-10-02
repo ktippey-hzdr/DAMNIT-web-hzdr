@@ -132,6 +132,12 @@ DW_API_HZDR_KAFKA_SPOOL__FILENAME=trigger.jsonl
 DW_API_HZDR_HEALTH__KAFKA_BOOTSTRAP=149.220.77.19:9092
 ```
 
+`CAMPAIGN` is the fallback and the campaign the builder builds: each message is
+spooled under the campaign its own `experiment_id` names, `unassigned` messages
+go to the shared `_unassigned/` file and are resolved from LabFrog at build
+time, and only a message with no `experiment_id` uses `CAMPAIGN` (since
+2026-10-02).
+
 The broker runs on this VM but listens **only** on `149.220.77.19:9092`
 (advertised as `fwkt-webapps.fz-rossendorf.de`); `localhost:9092` reaches
 nothing there (found 2026-10-02, when the shot authority failed on it).

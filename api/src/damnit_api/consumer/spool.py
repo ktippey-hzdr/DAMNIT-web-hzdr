@@ -22,6 +22,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from abc import ABC, abstractmethod
 from collections.abc import Callable  # noqa: TC003
 from dataclasses import dataclass, field
@@ -95,6 +96,20 @@ def _append_event_durable(path: Path, message: dict[str, Any]) -> None:
 # events that arrive as experiment_id "unassigned".
 UNASSIGNED_SPOOL_DIR = "_unassigned"
 
+_UNSAFE_SLUG_CHARS = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def _campaign_slug(campaign: str | None) -> str:
+    """Directory name for a campaign: spaces become ``_`` as before, and
+    anything that could leave the spool directory (``/``, ``..``) is
+    neutralised, because the name now comes from the message."""
+    if not campaign:
+        return "default"
+    slug = _UNSAFE_SLUG_CHARS.sub("_", campaign.strip().replace(" ", "_")).strip("._")
+    if not slug or slug == UNASSIGNED_SPOOL_DIR:
+        return "default"
+    return slug
+
 
 @dataclass
 class SpoolConfig:
@@ -116,8 +131,7 @@ class SpoolConfig:
         ``filename`` (e.g. ``trigger.jsonl``) so the builder can be pointed at it
         via ``--trigger-jsonl`` independently of the normalized event spool.
         """
-        slug = self.campaign.replace(" ", "_") if self.campaign else "default"
-        return self.spool_dir / slug / self.filename
+        return self.spool_dir / _campaign_slug(self.campaign) / self.filename
 
     @property
     def unassigned_jsonl(self) -> Path:
@@ -130,11 +144,35 @@ class SpoolConfig:
         """
         return self.spool_dir / UNASSIGNED_SPOOL_DIR / self.filename
 
+    def campaign_jsonl(self, campaign: str) -> Path:
+        """Path to the spool file for ``campaign`` (any campaign, not only ours)."""
+        return self.spool_dir / _campaign_slug(campaign) / self.filename
+
     def path_for(self, message: dict[str, Any]) -> Path:
-        """The spool file one message belongs in."""
-        if message.get("experiment_id") == UNASSIGNED_EXPERIMENT_ID:
+        """The spool file one message belongs in.
+
+        The campaign is whatever the message says (maintainer ruling,
+        2026-10-02), not the configured one: a message naming another
+        campaign is spooled under that campaign. ``unassigned`` keeps going to
+        the shared file (decision D1) and is resolved from LabFrog at build
+        time. A message with no ``experiment_id`` falls back to the configured
+        campaign. The builder still builds the configured campaign only; other
+        campaigns' files wait until a builder is pointed at them.
+        """
+        experiment_id = message.get("experiment_id")
+        if experiment_id == UNASSIGNED_EXPERIMENT_ID:
             return self.unassigned_jsonl
+        if (
+            isinstance(experiment_id, str)
+            and _campaign_slug(experiment_id) != "default"
+        ):
+            return self.campaign_jsonl(experiment_id)
         return self.events_jsonl
+
+    def all_spool_files(self) -> list[Path]:
+        """Every spool file of this consumer, across campaigns (for dedup)."""
+        found = set(self.spool_dir.glob(f"*/{self.filename}"))
+        return sorted(found | {self.events_jsonl, self.unassigned_jsonl})
 
 
 class HZDRSpoolConsumer(ABC):
@@ -153,9 +191,9 @@ class HZDRSpoolConsumer(ABC):
 
     def _ensure_loaded(self) -> None:
         if not self._loaded:
-            self._staged = _load_staged_identities(
-                self.config.events_jsonl
-            ) | _load_staged_identities(self.config.unassigned_jsonl)
+            self._staged = set()
+            for path in self.config.all_spool_files():
+                self._staged |= _load_staged_identities(path)
             self._loaded = True
 
     def consume_one(self, message: dict[str, Any]) -> Path | None:

@@ -187,6 +187,43 @@ def test_consume_one_dedup_survives_restart(tmp_path):
     assert _ConcreteConsumer(cfg).consume_one(_make_event("event-persist")) is None
 
 
+def test_message_naming_another_campaign_is_spooled_under_that_campaign(tmp_path):
+    """The campaign is whatever the message says (ruling 2026-10-02)."""
+    cfg = SpoolConfig(campaign="campaign-a", consumer_group="g", spool_dir=tmp_path)
+    path = _ConcreteConsumer(cfg).consume_one(_make_event("event-b", "campaign-b"))
+
+    assert path == tmp_path / "campaign-b" / cfg.filename
+    assert not cfg.events_jsonl.exists()
+
+
+def test_unassigned_and_missing_campaigns_keep_their_routes(tmp_path):
+    cfg = SpoolConfig(campaign="campaign-a", consumer_group="g", spool_dir=tmp_path)
+    consumer = _ConcreteConsumer(cfg)
+    assert (
+        consumer.consume_one(_make_event("event-u", "unassigned"))
+        == cfg.unassigned_jsonl
+    )
+    no_campaign = _make_event("event-none")
+    del no_campaign["experiment_id"]
+    assert consumer.consume_one(no_campaign) == cfg.events_jsonl
+
+
+def test_campaign_from_a_message_cannot_leave_the_spool_dir(tmp_path):
+    cfg = SpoolConfig(campaign="campaign-a", consumer_group="g", spool_dir=tmp_path)
+    for hostile in ("../../etc", "a/../../b", "..", "_unassigned"):
+        with_hostile = cfg.path_for({"experiment_id": hostile})
+        assert with_hostile.resolve().is_relative_to(tmp_path.resolve()), hostile
+        assert with_hostile != cfg.unassigned_jsonl or hostile == "unassigned"
+
+
+def test_dedup_after_restart_covers_other_campaigns(tmp_path):
+    cfg = SpoolConfig(campaign="campaign-a", consumer_group="g", spool_dir=tmp_path)
+    _ConcreteConsumer(cfg).consume_one(_make_event("event-b", "campaign-b"))
+    assert (
+        _ConcreteConsumer(cfg).consume_one(_make_event("event-b", "campaign-b")) is None
+    )
+
+
 # ---------------------------------------------------------------------------
 # Integration tests (live local broker)
 # ---------------------------------------------------------------------------
