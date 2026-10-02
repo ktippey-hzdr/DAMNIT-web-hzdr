@@ -18,14 +18,15 @@ open, so this plan is not ready for `plans/done/`.
   record of which integration gates have passed (broker smoke test,
   restart/replay, ops config, SciCat PID). Entries there are re-proved or
   carry a dated attestation; this plan does not keep a second copy.
-- **Not yet done:** Kafka and ASAPO spool consumers disabled; real-broker
+- **Not yet done:** the Kafka spool consumer is disabled (the ASAPO one is optional, see Step 2); real-broker
   restart/replay gate (Step 3) not run against the production broker; nginx
   config for `fwkt-damnit` not yet recorded in the fwkt-webapps hub.
 - **Broker (decided 2026-07-02):** Kafka runs on this same VM
-  (`fwkt-webapps.fz-rossendorf.de:9092` externally) — `.env` uses
-  `localhost:9092`.
-- **Sidecar (decided 2026-07-02):** the `asapo-for-hzdr-damnit` sidecar will
-  also run on this VM, writing `/data/damnit/hzdr/spool/asapo/` locally.
+  (`fwkt-webapps.fz-rossendorf.de:9092`, i.e. `149.220.77.19:9092`). It does
+  not listen on localhost, so `.env` uses `149.220.77.19:9092` too (corrected
+  2026-10-02; it used to say `localhost:9092`).
+- **Sidecar (optional; placement decided 2026-07-02):** if ASAPO is used, the
+  `asapo-for-hzdr-damnit` sidecar runs on this VM, writing `/data/damnit/hzdr/spool/asapo/` locally.
 - **Blocked on:** shotcounter branch merge (the broker is deployed and
   reachable on this VM as of 2026-09-15)
   (see `fwkt-webapps/docs/operations/deployment-plan.md`, Phases 1–2).
@@ -33,7 +34,7 @@ open, so this plan is not ready for `plans/done/`.
   the broker is now deployed, so this is unblocked, (2) run the go-live gate (Step 3) and pilot capture with
   dedup counts, (3) enable the builder auto-trigger + (optional) SciCat
   registration per campaign (Step 2b — landed 2026-07-04, replaces the manual
-  per-campaign builder run), (4) enable the ASAPO path only when the LaserData
+  per-campaign builder run), (4) optionally, the ASAPO path, only when the LaserData
   sidecar is live (Step 2 stays harness-only until then).
 - **Demo mode:** local `hzdr/scripts/hzdr-launch.ps1|.sh` with anonymized fixtures
   and the flow monitor; the GitHub Pages demo build (`build-demo.yml`) stays
@@ -42,7 +43,7 @@ open, so this plan is not ready for `plans/done/`.
 - **Campaign (decided 2026-07-02):** pilot runs as `Pilot_Verification_07.2026`;
   switch to the real campaign slug at the first production campaign via the
   campaign-rotation procedure.
-- **Pilot config exists:** `api/.env.pilot.example` (Kafka on/localhost:9092/pilot
+- **Pilot config exists:** `api/.env.pilot.example` (Kafka on/`149.220.77.19:9092`/pilot
   slug; ASAPO off).
 - **Tests:** `hzdr/scripts/test-pilot-package.ps1 -NoCoverage` passed locally on 2026-07-03; broker-backed restart/replay checks still need to run against the deployment Kafka broker.
 
@@ -108,8 +109,11 @@ The Kafka consumer reads `draco.trigger` (shotcounter) and `planet.watchdog.even
 
 ### 1a. Create the spool directory
 
+Create it as the user the unit runs as (on fwkt-webapps the checkout unit runs
+as `tippey`, not a `damnit` user):
+
 ```bash
-sudo -u damnit mkdir -p /data/damnit/hzdr/spool/kafka
+sudo install -d -o tippey -g tippey /data/damnit/hzdr/spool/kafka
 ```
 
 ### 1b. Edit `.env`
@@ -117,7 +121,7 @@ sudo -u damnit mkdir -p /data/damnit/hzdr/spool/kafka
 ```ini
 # Kafka spool consumer
 DW_API_HZDR_KAFKA_SPOOL__ENABLED=true
-DW_API_HZDR_KAFKA_SPOOL__BOOTSTRAP_SERVERS=localhost:9092   # broker runs on this VM
+DW_API_HZDR_KAFKA_SPOOL__BOOTSTRAP_SERVERS=149.220.77.19:9092   # this VM's broker; NOT localhost, see below
 DW_API_HZDR_KAFKA_SPOOL__TOPICS=["draco.trigger","planet.watchdog.events"]
 DW_API_HZDR_KAFKA_SPOOL__CAMPAIGN=<canonical-campaign-slug>   # e.g. Solenoid_Beamline_Tests_01.2025 (illustrative only; pilot value is Pilot_Verification_07.2026)
 DW_API_HZDR_KAFKA_SPOOL__CONSUMER_GROUP=damnit-kafka
@@ -125,8 +129,12 @@ DW_API_HZDR_KAFKA_SPOOL__SPOOL_DIR=/data/damnit/hzdr/spool/kafka
 DW_API_HZDR_KAFKA_SPOOL__FILENAME=trigger.jsonl
 
 # Health probe — Kafka reachability
-DW_API_HZDR_HEALTH__KAFKA_BOOTSTRAP=localhost:9092
+DW_API_HZDR_HEALTH__KAFKA_BOOTSTRAP=149.220.77.19:9092
 ```
+
+The broker runs on this VM but listens **only** on `149.220.77.19:9092`
+(advertised as `fwkt-webapps.fz-rossendorf.de`); `localhost:9092` reaches
+nothing there (found 2026-10-02, when the shot authority failed on it).
 
 ### 1c. Restart and verify
 
@@ -161,7 +169,12 @@ python api/scripts/hzdr-hdf5-builder.py \
 
 ---
 
-## Step 2: Enable the ASAPO HTTP harness spool consumer
+## Step 2 (optional): Enable the ASAPO HTTP harness spool consumer
+
+> ASAPO is **optional** (maintainer, 2026-10-02): the deployment is complete with Kafka alone.
+> Skip this step unless LaserData is to flow through ASAPO. Without it
+> `/config/health` reports `asapo.reachable: false`, which is expected and
+> does not affect the Kafka path, the builder or SciCat.
 
 The current DAMNIT ASAPO consumer reads from the local HTTP harness API and writes to
 a separate JSONL spool. This is useful for deterministic development and contract
@@ -181,7 +194,7 @@ that runtime boundary explicit:
 ### 2a. Create the spool directory
 
 ```bash
-sudo -u damnit mkdir -p /data/damnit/hzdr/spool/asapo
+sudo install -d -o tippey -g tippey /data/damnit/hzdr/spool/asapo   # the unit's user
 ```
 
 ### 2b. Edit `.env`
@@ -272,7 +285,7 @@ Kafka go-live gate: it verifies the consumer restart/replay semantics against th
 broker that will carry `draco.trigger` and `planet.watchdog.events`.
 
 ```powershell
-$env:KAFKA_TEST_BROKER = "fwkt-webapps.fz-rossendorf.de:9092"   # or localhost:9092 when run on the VM
+$env:KAFKA_TEST_BROKER = "fwkt-webapps.fz-rossendorf.de:9092"   # also on the VM itself: the broker does not listen on localhost
 pwsh hzdr/scripts/test-all.ps1 -DockerTests
 ```
 
