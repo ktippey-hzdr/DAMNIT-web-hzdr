@@ -518,6 +518,12 @@ export function ShotDetailPanel({
               </Text>
               <Text size="sm">{shot.labfrog_date_time ?? '-'}</Text>
             </Stack>
+            <Stack gap={2}>
+              <Text size="xs" c="dimmed">
+                LabFrog local count
+              </Text>
+              <Text size="sm">{shot.labfrog_local_count ?? '-'}</Text>
+            </Stack>
           </SimpleGrid>
           <Divider />
           <Stack gap={4}>

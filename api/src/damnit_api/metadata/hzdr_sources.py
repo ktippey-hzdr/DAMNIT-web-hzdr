@@ -178,6 +178,10 @@ class HZDRShot(BaseModel):
     shot_date: str | None = None
     labfrog_record_id: str | None = None
     labfrog_date_time: str | None = None
+    # The experimenters' Count from LabFrog's local-counter reset (bridge v5,
+    # /entry/shots/labfrog_local_count). A user aid, not an identifier: the
+    # governed number is ``shot_number``. None where LabFrog has no count.
+    labfrog_local_count: int | None = None
     match_status: str | None = None
     match_quality: str | None = None
     match_time_delta_s: float | None = None
@@ -198,6 +202,17 @@ class HZDRShot(BaseModel):
     def target_wiki_page(self) -> str | None:
         """MediaWiki page title for the selected target, if captured."""
         return _target_string_field(self.metadata, "wiki_page")
+
+
+def _optional_count(value: Any) -> int | None:
+    """A whole-number count, or None; a bool or a negative sentinel is not one."""
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number >= 0 else None
 
 
 def _target_string_field(metadata: dict[str, Any], field: str) -> str | None:
@@ -492,6 +507,7 @@ def _map_mongo_shot(
         "shot_date",
         "labfrog_record_id",
         "labfrog_date_time",
+        "labfrog_local_count",
         "match_status",
         "match_quality",
         "match_time_delta_s",
@@ -509,6 +525,7 @@ def _map_mongo_shot(
         shot_date=record.get("shot_date"),
         labfrog_record_id=record.get("labfrog_record_id"),
         labfrog_date_time=record.get("labfrog_date_time", record.get("date_time")),
+        labfrog_local_count=_optional_count(record.get("labfrog_local_count")),
         match_status=record.get("match_status"),
         match_quality=record.get("match_quality"),
         match_time_delta_s=record.get("match_time_delta_s"),

@@ -23,6 +23,8 @@ export type HZDRShot = {
   shot_date?: string
   labfrog_record_id?: string
   labfrog_date_time?: string
+  /** The experimenters' Count from LabFrog's local-counter reset: a user aid, not the shot number. */
+  labfrog_local_count?: number | null
   match_status?: string
   match_quality?: string
   match_time_delta_s?: number

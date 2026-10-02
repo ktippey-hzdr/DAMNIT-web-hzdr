@@ -8,6 +8,7 @@ import pytest
 from damnit_api.metadata.hzdr_event import lint_metadata_keys
 from damnit_api.metadata.hzdr_routers import append_emulated_shot
 from damnit_api.metadata.hzdr_sources import (
+    HZDRShot,
     HZDRSourceProvider,
     _map_mongo_shot,
     list_hdf5_datasets,
@@ -274,6 +275,45 @@ def test_local_provider_can_lookup_shot_by_date_scoped_key(tmp_path: Path):
 
     assert detail is not None
     assert detail.shot.fired_at == "2026-05-06T08:15:00Z"
+
+
+def test_labfrog_local_count_is_a_shot_field_not_metadata():
+    """Bridge v5: the catalog's labfrog_local_count reaches HZDRShot as a field."""
+    record = {
+        "shot_number": 5,
+        "fired_at": "2026-10-01T10:00:00Z",
+        "labfrog_local_count": 7,
+    }
+    shot = _map_mongo_shot(
+        record, "hzdr-local", shot_number_field="shot_number", fired_at_field="fired_at"
+    )
+    assert shot is not None
+    assert shot.labfrog_local_count == 7
+    assert "labfrog_local_count" not in shot.metadata
+    assert shot.shot_number == 5  # the governed number is untouched
+
+    for missing in (
+        {},
+        {"labfrog_local_count": None},
+        {"labfrog_local_count": -1},
+        {"labfrog_local_count": True},
+    ):
+        other = _map_mongo_shot(
+            {"shot_number": 6, "fired_at": "x", **missing},
+            "hzdr-local",
+            shot_number_field="shot_number",
+            fired_at_field="fired_at",
+        )
+        assert other is not None
+        assert other.labfrog_local_count is None
+
+    validated = HZDRShot.model_validate({
+        "source_key": "s",
+        "shot_number": 1,
+        "fired_at": "x",
+        "labfrog_local_count": 8,
+    })
+    assert validated.labfrog_local_count == 8
 
 
 def test_map_mongo_shot_supports_shot_alias_fields():
