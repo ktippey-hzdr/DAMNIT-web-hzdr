@@ -1,8 +1,13 @@
+import asyncio
+import sys
+import time
+import types
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from damnit_api.main import create_app
+from damnit_api.shared import routers
 from damnit_api.shared.settings import Settings, settings
 
 
@@ -139,3 +144,66 @@ def test_flow_monitor_producer_options_overridable_via_env(monkeypatch):
     assert flow_monitor.producers.mongo.updates_damnit_sqlite is True
     # Producer settings not mentioned in the environment keep their defaults.
     assert flow_monitor.producers.laser_data.enabled is True
+
+
+def test_health_first_call_reports_reachable_kafka_despite_slow_mongo_setup(
+    monkeypatch,
+):
+    """A slow, blocking Mongo client set-up must not starve the Kafka probe.
+
+    On fwkt-webapps (2026-10-02) the first /config/health after a restart said
+    Kafka was unreachable and the second said it was fine: the Mongo probe's
+    synchronous first-time work (importing motor, building the client) ran on
+    the event loop and outlasted the concurrent Kafka probe's timeout.
+    """
+    probe_timeout = 0.3
+
+    class SlowClient:
+        def __init__(self, uri, **kwargs):
+            time.sleep(probe_timeout * 3)  # blocking, like a cold import
+            self.admin = self
+
+        async def command(self, name):
+            return {"ok": 1}
+
+        def close(self):
+            pass
+
+    fake_motor = types.ModuleType("motor")
+    fake_motor_asyncio = types.ModuleType("motor.motor_asyncio")
+    fake_motor_asyncio.AsyncIOMotorClient = SlowClient
+    fake_motor.motor_asyncio = fake_motor_asyncio
+    monkeypatch.setitem(sys.modules, "motor", fake_motor)
+    monkeypatch.setitem(sys.modules, "motor.motor_asyncio", fake_motor_asyncio)
+
+    async def fake_asapo(url, probe_timeout):
+        await asyncio.sleep(0)
+        return routers.ServiceHealth(reachable=True, latency_ms=0)
+
+    monkeypatch.setattr(routers, "_probe_asapo", fake_asapo)
+
+    async def run():
+        server = await asyncio.start_server(
+            lambda reader, writer: writer.close(), "127.0.0.1", 0
+        )
+        port = server.sockets[0].getsockname()[1]
+        monkeypatch.setattr(
+            settings,
+            "hzdr_health",
+            types.SimpleNamespace(
+                asapo_status_url="http://unused",
+                kafka_bootstrap=f"127.0.0.1:{port}",
+                mongo_uri="mongodb://unused",
+                timeout=probe_timeout,
+            ),
+        )
+        try:
+            return await routers.get_flow_monitor_health()
+        finally:
+            server.close()
+            await server.wait_closed()
+
+    health = asyncio.run(run())
+
+    assert health.kafka.reachable is True, health.kafka.detail
+    assert health.mongo.reachable is True

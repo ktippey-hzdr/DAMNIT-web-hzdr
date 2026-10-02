@@ -117,15 +117,25 @@ async def _probe_kafka(bootstrap: str, probe_timeout: float) -> ServiceHealth:
         return ServiceHealth(reachable=False, detail=str(exc)[:120])
 
 
+def _make_mongo_client(uri: str, timeout_ms: int) -> Any:
+    import motor.motor_asyncio as motor  # type: ignore[import-untyped]
+
+    return motor.AsyncIOMotorClient(uri, serverSelectionTimeoutMS=timeout_ms)
+
+
 async def _probe_mongo(uri: str, probe_timeout: float) -> ServiceHealth:
     t0 = time.monotonic()
     try:
-        import motor.motor_asyncio as motor  # type: ignore[import-untyped]
-
+        # The first call imports motor/pymongo and builds a client, both
+        # synchronous. Run on the event loop, that blocked the concurrent
+        # Kafka and ASAPO probes past their own timeouts, so the first
+        # /config/health after a restart reported Kafka unreachable. The
+        # client binds to the event loop only on first use, so building it
+        # in a worker thread is safe; close() is synchronous too.
         timeout_ms = int(probe_timeout * 1000)
-        client: Any = motor.AsyncIOMotorClient(uri, serverSelectionTimeoutMS=timeout_ms)
+        client: Any = await asyncio.to_thread(_make_mongo_client, uri, timeout_ms)
         await client.admin.command("ping")
-        client.close()
+        await asyncio.to_thread(client.close)
         ms = int((time.monotonic() - t0) * 1000)
         return ServiceHealth(reachable=True, latency_ms=ms)
     except ImportError:
