@@ -291,8 +291,9 @@ ways in:
 
 The API + frontend are live at
 [https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/),
-deployed via `api/scripts/damnit-api-deploy.sh`/`.ps1` from an
-`.env.production.example`-derived config, served behind the `frontend/nginx`
+run by systemd from the git checkout `~/DAMNIT-web-hzdr` on fwkt-webapps
+(`hzdr/scripts/damnit-api-checkout.service.example`; there is no `/opt` tree)
+with an `.env.production.example`-derived `api/.env`, served behind the `frontend/nginx`
 proxy templates, with LDAP auth against `ldap.fz-rossendorf.de`. It receives
 no events yet: the Kafka and ASAPO spool consumers are not enabled there
 (confirmed 2026-09-30). The real ASAPO SDK client

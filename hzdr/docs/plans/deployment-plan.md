@@ -61,11 +61,22 @@ consumer starts as a FastAPI lifespan background task.
 - **State:** deployed and running, receiving no events yet (confirmed by the
   maintainer, 2026-09-30). Enabling the Kafka spool (Step 1) is the next step.
 
-- **Updating the code is not documented.** This plan covers editing `.env` and
-  restarting; there is no recorded procedure for bringing `/opt/damnit-web-hzdr`
-  to a new commit (a `git pull` there, or `damnit-api-deploy.sh`) or for
-  rebuilding the frontend under `/var/www/damnit-web`. Write it here the next
-  time it is done.
+- **Layout (found 2026-10-02): the checkout unit, no `/opt`.** `damnit-api`
+  runs from the git checkout `~/DAMNIT-web-hzdr` (user `tippey`), as in
+  `hzdr/scripts/damnit-api-checkout.service.example`, with its settings in
+  `~/DAMNIT-web-hzdr/api/.env`. There is no `/opt/damnit-web-hzdr` tree on
+  fwkt-webapps; `hzdr/scripts/damnit-api.service` is the `/opt` alternative,
+  not what this host runs. Updating the API:
+
+  ```bash
+  cd ~/DAMNIT-web-hzdr && git pull --ff-only
+  cd api && uv sync --locked
+  sudo systemctl restart damnit-api
+  ```
+
+  (`~/fwkt-webapps/pull-all-repos.sh` pulls every checkout on the host at once;
+  it never syncs or restarts.) How the frontend is served and rebuilt is still
+  unrecorded; write it here the next time it is done.
 - **Ruling A7 (`730c99ab`):** `DW_API_HZDR_BUILDER__TIME_MATCH_AUTOASSIGN` now
   defaults to `false`. An `.env` copied from the old example still says `true`
   and keeps the old behaviour -- a numbered trigger attached to a neighbouring
@@ -81,8 +92,9 @@ Before enabling any consumer, verify:
 - [ ] The systemd unit is running: `systemctl status damnit-api`
 - [ ] The data root exists and is writable by the `damnit` user:
   `ls -la /data/damnit/hzdr`
-- [ ] The `.env` file at `/opt/damnit-web-hzdr/api/.env` exists and was
-  copied from `.env.production.example`
+- [ ] The `.env` file at `~/DAMNIT-web-hzdr/api/.env` (on an `/opt` deploy,
+  `/opt/damnit-web-hzdr/api/.env`) exists and was copied from
+  `.env.production.example`
 - [ ] `GET /config/health` returns 200 (even with all consumers off):
   `curl -s http://localhost:8000/config/health | python3 -m json.tool`
 - [ ] Local pilot package gate passed via `hzdr/scripts/test-pilot-package.ps1 -NoCoverage`.
