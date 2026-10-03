@@ -31,6 +31,7 @@ import type {
   HZDRSortState,
 } from '../types'
 import { AppHeader } from '../components/AppHeader'
+import { CampaignCards } from '../components/CampaignCards'
 import {
   SortableHeader,
   SelectedCellPanel,
@@ -445,6 +446,10 @@ export function HZDRShotPage() {
                 <Code>{source?.damnit_path ?? '-'}</Code>
               </Group>
             </Card>
+
+            {source_key && source_key !== '_unassigned' ? (
+              <CampaignCards sourceKey={source_key} />
+            ) : null}
 
             <Grid gutter="md">
               <Grid.Col span={{ base: 12, lg: 9 }}>
