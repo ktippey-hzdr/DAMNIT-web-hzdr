@@ -1755,7 +1755,9 @@ def write_nexus_bridge(
     unless `seed_from_output` is False. Multi-campaign builds pass False: their
     shot lists shrink and reorder as rulings and LabFrog rows move shots
     between campaigns, which a seeded shot table (only ever extended) refuses;
-    unseeded, every build is written like the first one.
+    unseeded, every build is written like the first one. A previous output
+    whose shot table DAMNIT wrote itself (`SHOT_IDENTITY_ATTR`) is not seeded
+    either: only a LabFrog-owned table has rows other groups refer to.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = output_path.with_name(f"{output_path.name}.{uuid.uuid4().hex}.tmp.nxs")
@@ -1903,9 +1905,28 @@ def _stage_bridge_temp_file(
     """Seed `temp_path` with prior bridge content before it is opened for writing."""
     if source_nexus is not None and source_nexus.resolve() != output_path.resolve():
         shutil.copy2(source_nexus, temp_path)
-    elif output_path.exists() and (seed_from_output or source_nexus is not None):
+    elif output_path.exists() and (
+        source_nexus is not None
+        or (seed_from_output and not _owns_shot_identity(output_path))
+    ):
         # Preserve existing LabFrog + bridge content across incremental rebuilds.
         shutil.copy2(output_path, temp_path)
+
+
+def _owns_shot_identity(path: Path) -> bool:
+    """True when DAMNIT wrote this file's `/entry/shots` rows from scratch.
+
+    Such a table preserves nothing: every build regenerates it, so a shot list
+    that shrinks or reorders (single-campaign mode, C6) is simply rewritten.
+    """
+    try:
+        with h5py.File(path, "r") as handle:
+            shots = handle.get("entry/shots")
+            return isinstance(shots, h5py.Group) and bool(
+                shots.attrs.get(SHOT_IDENTITY_ATTR, False)
+            )
+    except OSError:
+        return False
 
 
 def _fill_default_product_paths(
@@ -2172,6 +2193,8 @@ LABFROG_LOCAL_COUNT_DESCRIPTION = (
     "identifier: shot_number is the governed shot identity. -1 where LabFrog "
     "has no count for the shot."
 )
+# On /entry/shots when DAMNIT wrote its identity rows itself, not LabFrog.
+SHOT_IDENTITY_ATTR = "damnit_shot_identity"
 
 # All 118 IUPAC element symbols, for the conservative formula check below.
 _ELEMENTS = (
@@ -3839,6 +3862,7 @@ def _write_shot_bridge_columns(
     group: h5py.Group, shots: list[dict[str, Any]], *, write_identity: bool
 ) -> None:
     if write_identity:
+        group.attrs[SHOT_IDENTITY_ATTR] = True
         _replace_dataset(group, "shot_index", list(range(len(shots))))
         _replace_dataset(
             group,

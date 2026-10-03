@@ -34,6 +34,7 @@ from damnit_api.consumer.campaign_builds import (
 )
 from damnit_api.metadata.hzdr_event import UNASSIGNED_EXPERIMENT_ID
 from damnit_api.metadata.hzdr_nexus import (
+    SHOT_IDENTITY_ATTR,
     BuilderAlreadyRunningError,
     append_experiment_ruling,
     catalog_write_lock,
@@ -313,33 +314,62 @@ def test_output_root_refuses_single_campaign_inputs(tmp_path, monkeypatch, capsy
     assert "only apply with --output-root" in capsys.readouterr().err
 
 
-def test_an_unseeded_bridge_may_shrink_a_seeded_one_may_not(tmp_path):
-    def shots_for(*numbers: int) -> list[dict[str, Any]]:
-        shots, _ = reconcile_canonical_shots(
-            [trigger(number) for number in numbers],
-            experiment_id=UNASSIGNED_EXPERIMENT_ID,
-            source_key=UNASSIGNED_EXPERIMENT_ID,
-        )
-        return shots
+def _shots_for(*numbers: int) -> list[dict[str, Any]]:
+    shots, _ = reconcile_canonical_shots(
+        [trigger(number) for number in numbers],
+        experiment_id=UNASSIGNED_EXPERIMENT_ID,
+        source_key=UNASSIGNED_EXPERIMENT_ID,
+    )
+    return shots
 
+
+def _shot_numbers(path) -> list[int]:
+    with h5py.File(path, "r") as handle:
+        return list(handle["entry/shots/shot_number"][...])
+
+
+def test_a_damnit_owned_shot_table_may_shrink_and_reorder(tmp_path):
+    # C6: single-campaign builds seed from their previous output, but a table
+    # DAMNIT wrote itself preserves nothing, so it is rewritten like the first.
     output = tmp_path / "unassigned.nxs"
     write_nexus_bridge(
-        output_path=output, experiment_id="u", shots=shots_for(3, 7), events=[]
+        output_path=output, experiment_id="u", shots=_shots_for(3, 7), events=[]
     )
-    # Single-campaign builds keep seeding from their previous output.
+    with h5py.File(output, "r") as handle:
+        assert handle["entry/shots"].attrs[SHOT_IDENTITY_ATTR]
+
+    write_nexus_bridge(
+        output_path=output, experiment_id="u", shots=_shots_for(3), events=[]
+    )
+    assert _shot_numbers(output) == [3]
+
+    write_nexus_bridge(
+        output_path=output, experiment_id="u", shots=_shots_for(9, 3), events=[]
+    )
+    assert sorted(_shot_numbers(output)) == [3, 9]
+
+
+def test_a_labfrog_owned_shot_table_still_may_not_shrink(tmp_path):
+    output = tmp_path / "campaign.nxs"
+    write_nexus_bridge(
+        output_path=output, experiment_id="u", shots=_shots_for(3, 7), events=[]
+    )
+    # A table LabFrog wrote carries no DAMNIT ownership marker; its rows are
+    # referenced by LabFrog's other groups, so seeding still guards them.
+    with h5py.File(output, "r+") as handle:
+        del handle["entry/shots"].attrs[SHOT_IDENTITY_ATTR]
     with pytest.raises(ValueError, match="does not match the preserved"):
         write_nexus_bridge(
-            output_path=output, experiment_id="u", shots=shots_for(3), events=[]
+            output_path=output, experiment_id="u", shots=_shots_for(3), events=[]
         )
     write_nexus_bridge(
         output_path=output,
         experiment_id="u",
-        shots=shots_for(3),
+        shots=_shots_for(3),
         events=[],
         seed_from_output=False,
     )
-    with h5py.File(output, "r") as handle:
-        assert list(handle["entry/shots/shot_number"][...]) == [3]
+    assert _shot_numbers(output) == [3]
 
 
 # --- layout rules ------------------------------------------------------------
