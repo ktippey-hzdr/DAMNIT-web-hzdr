@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from damnit_api.main import create_app
 from damnit_api.metadata.hzdr_nexus import (
+    load_experiment_ruling_records,
     load_experiment_rulings,
     load_review_decisions,
     review_sidecar_path,
@@ -46,6 +47,97 @@ def test_experiment_ruling_route_persists_named_decision(tmp_path: Path, monkeyp
     decision = orjson.loads(decision_line)
     assert decision["by"] == "hzdr-dev"
     assert decision["note"] == "Logbook"
+
+
+def test_review_route_lists_unassigned_shots_and_their_rulings(
+    tmp_path: Path, monkeypatch
+):
+    sources_file = write_review_fixture(tmp_path)
+    payload = orjson.loads(sources_file.read_bytes())
+    shots = payload["sources"][0]["shots"]
+    shots[0]["experiment_id_source"] = "labfrog"
+    shots.extend([
+        {
+            "source_key": SOURCE_KEY,
+            "shot_number": number,
+            "fired_at": "2026-05-05T10:00:00Z",
+            "shot_key": f"unassigned:20260505:{number:06d}",
+            "match_status": "trigger-only",
+            "experiment_id_source": "unassigned",
+            "events": [],
+            "metadata": {},
+        }
+        for number in (9, 10)
+    ])
+    sources_file.write_bytes(orjson.dumps(payload))
+    monkeypatch.setattr(settings.metadata, "provider", "local")
+    monkeypatch.setattr(settings.metadata, "sources_file", sources_file)
+    monkeypatch.setattr(settings, "auth", AuthSettings(mode="disabled"))
+
+    with TestClient(create_app()) as client:
+        before = client.get(f"/metadata/hzdr/sources/{SOURCE_KEY}/review")
+        client.post(
+            "/metadata/hzdr/experiment-rulings",
+            json={"shot_number": 9, "experiment_id": "Pilot_2026", "note": "Logbook"},
+        )
+        # A ruling for a shot that is not unassigned here is not listed.
+        client.post(
+            "/metadata/hzdr/experiment-rulings",
+            json={"shot_number": 1, "experiment_id": "Pilot_2026"},
+        )
+        after = client.get(f"/metadata/hzdr/sources/{SOURCE_KEY}/review")
+        missing = client.get("/metadata/hzdr/sources/no-such-source/review")
+
+    assert before.status_code == 200
+    body = before.json()
+    assert [event["event_id"] for event in body["review_events"]] == [
+        "evt-ambiguous-1",
+        "evt-unmatched-1",
+    ]
+    assert [shot["shot_number"] for shot in body["unassigned_shots"]] == [9, 10]
+    assert body["unassigned_shots"][0]["experiment_id_source"] == "unassigned"
+    assert body["experiment_rulings"] == []
+
+    rulings = after.json()["experiment_rulings"]
+    assert len(rulings) == 1
+    assert rulings[0]["shot_number"] == 9
+    assert rulings[0]["experiment_id"] == "Pilot_2026"
+    assert rulings[0]["by"] == "hzdr-dev"
+    assert rulings[0]["note"] == "Logbook"
+    assert rulings[0]["at"]
+    assert missing.status_code == 404
+
+
+def test_ruling_records_keep_the_winning_ruling_with_who_and_when(tmp_path: Path):
+    sidecar = tmp_path / "hzdr_sources.review.jsonl"
+    lines = [
+        {"action": "confirm", "event_id": "evt-1", "source_key": SOURCE_KEY},
+        {
+            "action": "assign_experiment",
+            "shot_number": 9,
+            "experiment_id": "A_2026",
+            "review_level": "VERIFIED",
+            "by": "kim",
+            "at": "2026-10-03T08:00:00+00:00",
+        },
+        {
+            "action": "assign_experiment",
+            "shot_number": 9,
+            "experiment_id": "B_2026",
+            "review_level": "REVIEWED",
+            "by": "lee",
+            "at": "2026-10-03T09:00:00+00:00",
+        },
+        {"action": "assign_experiment", "shot_number": None, "experiment_id": "C"},
+    ]
+    sidecar.write_bytes(b"\n".join(orjson.dumps(line) for line in lines) + b"\n")
+
+    records = load_experiment_ruling_records([sidecar, tmp_path / "absent.jsonl"])
+
+    assert list(records) == [9]
+    assert records[9]["experiment_id"] == "A_2026"
+    assert records[9]["by"] == "kim"
+    assert load_experiment_rulings([sidecar]) == {9: "A_2026"}
 
 
 def write_review_fixture(tmp_path: Path) -> Path:

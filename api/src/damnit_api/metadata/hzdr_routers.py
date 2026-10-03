@@ -27,6 +27,8 @@ from .hzdr_nexus import (
     REVIEW_LEVELS,
     append_experiment_ruling,
     append_review_decision,
+    load_experiment_ruling_records,
+    review_sidecar_path,
     write_json_atomic,
 )
 from .hzdr_sources import (
@@ -105,11 +107,30 @@ class HZDRSavedView(BaseModel):
     updated_at: str
 
 
+class HZDRExperimentRuling(BaseModel):
+    """A recorded campaign ruling for one shot number, waiting for a rebuild."""
+
+    shot_number: int
+    experiment_id: str
+    by: str | None = None
+    at: str | None = None
+    note: str | None = None
+    review_level: str | None = None
+
+
 class HZDRReviewResponse(BaseModel):
-    """Events awaiting review plus the matched/ambiguous/unmatched summary."""
+    """Everything in one source that waits for a person.
+
+    ``review_events`` are the ambiguous/unmatched events; ``unassigned_shots``
+    are shots no LabFrog record, schedule window or ruling placed in a campaign
+    (``experiment_id_source == "unassigned"``); ``experiment_rulings`` are the
+    rulings already recorded for those shots, which apply at the next rebuild.
+    """
 
     match_summary: HZDRMatchSummary
     review_events: list[HZDRReviewEvent]
+    unassigned_shots: list[HZDRShot] = Field(default_factory=list)
+    experiment_rulings: list[HZDRExperimentRuling] = Field(default_factory=list)
 
 
 class HZDRConfirmMatchRequest(BaseModel):
@@ -608,13 +629,38 @@ async def update_hzdr_shot_metadata(
 
 @hzdr_router.get("/hzdr/sources/{source_key}/review")
 async def get_hzdr_review(source_key: str) -> HZDRReviewResponse:
-    """Get ambiguous/unmatched events and the match-status summary for one source."""
+    """Get what waits for a reviewer in one source, with the match summary."""
     source = HZDRSourceProvider(settings.metadata).get_source(source_key)
     if source is None:
         raise HTTPException(status_code=404, detail="HZDR source not found.")
+    unassigned_shots = [
+        shot for shot in source.shots if shot.experiment_id_source == "unassigned"
+    ]
     return HZDRReviewResponse(
-        match_summary=source.match_summary, review_events=source.review_events
+        match_summary=source.match_summary,
+        review_events=source.review_events,
+        unassigned_shots=unassigned_shots,
+        experiment_rulings=_pending_experiment_rulings({
+            shot.shot_number for shot in unassigned_shots
+        }),
     )
+
+
+def _pending_experiment_rulings(shot_numbers: set[int]) -> list[HZDRExperimentRuling]:
+    """Rulings recorded beside the served catalog for these shot numbers.
+
+    Rulings are written to the sidecar of the configured ``sources_file`` (see
+    ``assign_hzdr_experiment``), so that is the one sidecar read here.
+    """
+    sources_file = settings.metadata.sources_file
+    if settings.metadata.provider != "local" or sources_file is None:
+        return []
+    records = load_experiment_ruling_records([review_sidecar_path(sources_file)])
+    return [
+        HZDRExperimentRuling.model_validate(records[number])
+        for number in sorted(shot_numbers)
+        if number in records
+    ]
 
 
 @hzdr_router.post("/hzdr/experiment-rulings", status_code=202)

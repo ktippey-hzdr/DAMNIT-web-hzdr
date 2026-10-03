@@ -306,8 +306,8 @@ def append_experiment_ruling(
     rolling-backup discipline) as ``append_review_decision``. The builder reads
     rulings back through ``load_experiment_rulings`` on every rebuild, so a
     ruling routes the shot's unassigned events into ``experiment_id`` from then
-    on. There is no REST/UI surface for writing one yet; this function is the
-    one writer.
+    on. It is the one writer, behind ``POST /metadata/hzdr/experiment-rulings``
+    (the frontend's Review matches page).
     """
     if review_level not in _REVIEW_LEVEL_RANK:
         message = f"review_level must be one of {REVIEW_LEVELS}"
@@ -340,7 +340,21 @@ def load_experiment_rulings(sidecars: Iterable[Path]) -> dict[int, str]:
     per shot number, ties go to the latest entry. Missing files are skipped, so
     a build can always pass its own sidecar path. Non-ruling lines are ignored.
     """
-    rulings: dict[int, tuple[int, str]] = {}
+    return {
+        number: str(record["experiment_id"])
+        for number, record in load_experiment_ruling_records(sidecars).items()
+    }
+
+
+def load_experiment_ruling_records(
+    sidecars: Iterable[Path],
+) -> dict[int, dict[str, Any]]:
+    """The winning ruling record per shot number, with who/when/note.
+
+    The same selection as ``load_experiment_rulings`` (which is built on it),
+    for the review page to show a ruling that is waiting for a rebuild.
+    """
+    rulings: dict[int, tuple[int, dict[str, Any]]] = {}
     for sidecar in sidecars:
         if not sidecar.exists():
             continue
@@ -363,8 +377,15 @@ def load_experiment_rulings(sidecars: Iterable[Path]) -> dict[int, str]:
             rank = _REVIEW_LEVEL_RANK.get(record.get("review_level", ""), -1)
             existing = rulings.get(shot_number)
             if existing is None or rank >= existing[0]:
-                rulings[shot_number] = (rank, experiment_id)
-    return {number: ruling for number, (_, ruling) in rulings.items()}
+                rulings[shot_number] = (
+                    rank,
+                    {
+                        **record,
+                        "shot_number": shot_number,
+                        "experiment_id": experiment_id,
+                    },
+                )
+    return {number: record for number, (_, record) in rulings.items()}
 
 
 def _apply_review_decisions(

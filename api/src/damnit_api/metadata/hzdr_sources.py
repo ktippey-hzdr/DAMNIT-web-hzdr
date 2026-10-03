@@ -185,6 +185,10 @@ class HZDRShot(BaseModel):
     match_status: str | None = None
     match_quality: str | None = None
     match_time_delta_s: float | None = None
+    # Why the shot is in this campaign (bridge v4, /entry/shots/
+    # experiment_id_source): labfrog / schedule / ruling / producer /
+    # unassigned. "unassigned" shots wait for a reviewer's ruling.
+    experiment_id_source: str | None = None
     hdf5_path: Path | None = None
     nexus_entry: str = "/entry"
     metadata: dict[str, Any] = Field(default_factory=dict)
