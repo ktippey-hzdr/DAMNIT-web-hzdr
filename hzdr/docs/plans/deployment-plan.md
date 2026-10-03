@@ -338,22 +338,31 @@ A best-effort builder post-step that registers the campaign NeXus file as a cita
 SciCat dataset (path + metadata only — never file contents) and stamps
 `scicat_pid`/`version_hash` back into `hzdr_sources.json`. It is **off the go-live
 critical path** — the pipeline builds and serves without it — and never fails a
-build. The SciCat URL/token live in the plugin's own env; DAMNIT only knows the
-plugin URL.
+build. The SciCat URL and credentials live in the plugin's own env
+(`/etc/fwkt-webapps/scicatplugin.env` on fwkt-webapps, documented on the hub's
+scicat-plugin page); DAMNIT only knows the plugin URL.
+
+Enabled on fwkt-webapps since 2026-10-03, against the internal SciCat
+`vlsscicat.fz-rossendorf.de` (not `scicat.hzdr.de`, a separate instance):
 
 ```ini
 DW_API_HZDR_SCICAT__ENABLED=true
-DW_API_HZDR_SCICAT__PLUGIN_URL=http://scicat-plugin.hzdr.de:5001
+DW_API_HZDR_SCICAT__PLUGIN_URL=http://127.0.0.1:5001   # the plugin runs on the same host
 DW_API_HZDR_SCICAT__ENDPOINT=from-json          # or "push" for rebuild dedup via version_hash
-DW_API_HZDR_SCICAT__INSTRUMENT_ID=<scicat-instrument-id>
-DW_API_HZDR_SCICAT__OWNER_GROUP=<scicat-owner-group>
-DW_API_HZDR_SCICAT__FRONTEND_URL=https://scicat.hzdr.de   # for the dataset link in the UI
+DW_API_HZDR_SCICAT__INSTRUMENT_ID=DRACO         # the facility, one value for every campaign
+DW_API_HZDR_SCICAT__OWNER_GROUP=fwkt_ingestor
+DW_API_HZDR_SCICAT__FRONTEND_URL=https://vlsscicat.fz-rossendorf.de   # for the dataset link in the UI
 ```
 
+The registration body carries `instrumentId` and `proposalId` (the campaign)
+in `meta`; the plugin (`0c8917a` and later) also writes them to SciCat's own
+`instrumentId`/`proposalId` fields, and its `SOURCE_FOLDER_PUBLISH_MAP` records
+`/bigdata/HPLexp/nexus/...` instead of the host's `~/mnt/bigdata` mount point.
+
 Verify: after a build, `GET /metadata/hzdr/sources/<key>/scicat` returns the stored
-`scicat_pid`. (The SciCat card left the UI with the Link Records page on
-2026-10-03; the endpoint is the check.) A byte-identical rebuild
-skips the re-POST (sha256 short-circuit).
+`scicat_pid`, and the campaign page's SciCat card links the dataset. A
+byte-identical rebuild skips the re-POST (sha256 short-circuit). The first
+dataset, radbio 2026, is `HZDR/5993c5ae-6295-47af-8912-e16b3d89c264`.
 
 ---
 
