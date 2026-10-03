@@ -59,8 +59,11 @@ consumer starts as a FastAPI lifespan background task.
 
 ## Open on the deployed host (2026-09-30)
 
-- **State:** deployed and running, receiving no events yet (confirmed by the
-  maintainer, 2026-09-30). Enabling the Kafka spool (Step 1) is the next step.
+- **State (2026-10-03):** the checkout unit is active; Kafka intake is enabled
+  in its `.env` with radbio as the fallback, and Kafka health is reachable.
+  Confirm the consumer startup log and a received spool entry before claiming
+  live intake. The C5 authority-number code has been pushed but still needs
+  pulling on the server before enabling the builder.
 
 - **Layout (found 2026-10-02): the checkout unit, no `/opt`.** `damnit-api`
   runs from the git checkout `~/DAMNIT-web-hzdr` (user `tippey`), as in
@@ -243,7 +246,8 @@ With this on, the API reruns `hzdr-hdf5-builder.py` as a debounced subprocess af
 each batch of new spool events — no cron/systemd timer or manual Step 1d run needed.
 It is a single global trigger (one build per campaign at a time), so the builder's
 single-writer PID lock is never contended. The settings mirror the builder CLI;
-`OUTPUT_NEXUS` is **required** when `ENABLED=true`.
+Either `OUTPUT_NEXUS` (one campaign) or `OUTPUT_ROOT` (every campaign) is
+**required** when `ENABLED=true`.
 
 ```ini
 DW_API_HZDR_BUILDER__ENABLED=true
@@ -269,13 +273,13 @@ the `_unassigned` bucket, and a second campaign needs its own build. Set
 
 ```ini
 DW_API_HZDR_BUILDER__ENABLED=true
-DW_API_HZDR_BUILDER__OUTPUT_ROOT=/data/damnit/hzdr
+DW_API_HZDR_BUILDER__OUTPUT_ROOT=/home/tippey/mnt/bigdata/HPLexp/nexus
 DW_API_HZDR_BUILDER__CURATED_ROOT=/home/tippey/labfrog-sqlite-tools-repo/curated_files
-DW_API_HZDR_BUILDER__CAMPAIGNS=["<campaign-slug>"]
+DW_API_HZDR_BUILDER__CAMPAIGNS=["Beamline_radbio_2026"]
 DW_API_HZDR_BUILDER__CAMPAIGN_TIMEZONE=Europe/Berlin
 # The API must serve the shared catalog the builds write:
 DW_API_METADATA__PROVIDER=local
-DW_API_METADATA__SOURCES_FILE=/data/damnit/hzdr/hzdr_sources.json
+DW_API_METADATA__SOURCES_FILE=/home/tippey/mnt/bigdata/HPLexp/nexus/hzdr_sources.json
 ```
 
 | Setting | Default | Meaning |
@@ -292,11 +296,18 @@ and the `_unassigned` bucket. Each campaign's source key in the catalog is its
 `experiment_id` (`unassigned` for the bucket). Each output keeps its own
 single-writer lock, and a failed campaign does not stop the others.
 
-Why `CAMPAIGNS` and not every export under `CURATED_ROOT`: LabFrog numbers
-restart in every campaign (an old export also holds shots 1..N), so if all
-exports took part, every authoritative shot number would be claimed by several
-campaigns and none would resolve. List a campaign while it takes shots; remove
-it when it ends (its catalog entry and files stay).
+Why `CAMPAIGNS` and not every export under `CURATED_ROOT`: only an active
+campaign should claim an `unassigned` trigger through its schema-v13
+`authority_shot_number`. Typed `shot_number` values and pre-v13 exports never
+claim one. List a campaign while it takes shots; remove it when it ends (its
+catalog entry and files stay). If active campaigns claim the same authority
+number, the event stays unassigned for review.
+
+An optional `labfrog-campaign-schedule-v1` file can resolve an unassigned
+trigger when no LabFrog row carries its authority number. Export it with
+LabFrog's `scripts/export_campaign_schedule.py`, then set
+`DW_API_HZDR_BUILDER__CAMPAIGN_SCHEDULE` to its absolute path. The wiki may be
+unavailable, so the schedule is a fallback, not a prerequisite for intake.
 
 `OUTPUT_ROOT` is refused together with `OUTPUT_NEXUS`, `EXPERIMENT_ID` or
 `LABFROG_*`, which it derives per campaign; `SOURCE_KEY` is ignored. If the API
@@ -308,9 +319,9 @@ so the shot moves without waiting for the next event.
 By hand, the same run is:
 
 ```bash
-python api/scripts/hzdr-hdf5-builder.py --output-root /data/damnit/hzdr \
+python api/scripts/hzdr-hdf5-builder.py --output-root /home/tippey/mnt/bigdata/HPLexp/nexus \
     --curated-root ~/labfrog-sqlite-tools-repo/curated_files \
-    --campaign <campaign-slug> \
+    --campaign Beamline_radbio_2026 \
     --trigger-spool /data/damnit/hzdr/spool/kafka trigger.jsonl \
     --campaign-timezone Europe/Berlin
 ```
