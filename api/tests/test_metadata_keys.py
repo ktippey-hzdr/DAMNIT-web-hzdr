@@ -206,6 +206,7 @@ EXPECTED_UNWRITTEN_KEYS: dict[str, str] = {
             "attribution.candidates",
             "acquisition.time",
             "acquisition.time_source",
+            "acquisition.laserdata_counter",
         ),
         "retained in metadata_json; not yet routed (plan W3/W6.3), audit only",
     ),

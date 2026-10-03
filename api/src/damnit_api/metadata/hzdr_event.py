@@ -297,6 +297,12 @@ METADATA_KEY_REGISTRY: dict[str, str | None] = {
     "attribution.candidates": None,
     "acquisition.time": None,
     "acquisition.time_source": None,
+    # LaserData's own row counter (registered 2026-10-03, maintainer ruling
+    # 2026-10-02, change class additive-metadata). An integer, provenance only:
+    # LaserData rows reach a shot through the shot authority, so this is never
+    # a shot_number and never builds a shot_id. Named so it cannot be read as
+    # one (aligner G8).
+    "acquisition.laserdata_counter": None,
 }
 
 

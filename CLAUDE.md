@@ -398,6 +398,7 @@ know the campaign (`UNASSIGNED_EXPERIMENT_ID`); see
 | `attribution.*` | `candidates` | — (list of shot numbers) |
 | `acquisition.*` | `time` | — (ISO-8601 UTC string) |
 | `acquisition.*` | `time_source` | — (string enum: `filename`, `first_seen`, `mtime`, `none`) |
+| `acquisition.*` | `laserdata_counter` | — (integer; LaserData's own row counter, provenance only, never a shot number) |
 
 See [hzdr/docs/target-ontology.md §5](hzdr/docs/target-ontology.md#5-units-convention) and
 [hzdr/docs/standards-alignment.md §3.3/§3.5](hzdr/docs/standards-alignment.md#33-laser-parameters)
