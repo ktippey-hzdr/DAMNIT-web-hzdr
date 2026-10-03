@@ -103,6 +103,7 @@ Open `http://127.0.0.1:5173/home` or the flow monitor at
 ## HZDR documentation
 
 - [Documentation index](hzdr/docs/README.md)
+- [User guide: campaigns, shots, and match review](hzdr/docs/guides/user-guide.md)
 - [Screenshots of the UI](hzdr/docs/screenshots.md)
 - [System overview](hzdr/docs/system-overview.md)
 - [Architecture and identity rules](hzdr/docs/architecture.md)

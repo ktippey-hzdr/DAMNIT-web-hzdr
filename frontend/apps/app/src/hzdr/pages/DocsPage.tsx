@@ -69,6 +69,36 @@ export function HZDRDocsPage() {
               </Button>
             </Group>
             <Stack gap="sm">
+              <DetailsSection title="Find and review your campaign" open>
+                <Stack gap="xs">
+                  <Text size="sm">
+                    Open Workspace, then choose your campaign under Sources. Its
+                    source page shows the shot table, SciCat dataset, campaign
+                    wiki, and producer status. Select a shot for its events,
+                    target wiki link, and data previews.
+                  </Text>
+                  <Text size="sm">
+                    An unassigned shot has no reliable campaign yet. In Review
+                    matches, choose the campaign it belongs to. For an ambiguous
+                    trigger, compare its number and time with the candidate
+                    shots, then confirm only when the evidence fits. You can
+                    leave a case unresolved. Acknowledging an unmatched event
+                    records that no shot should be attached.
+                  </Text>
+                  <Group>
+                    <Button component={Link} to="/home" variant="light">
+                      Find a campaign
+                    </Button>
+                    <Button
+                      component={Link}
+                      to="/review-matches"
+                      variant="light"
+                    >
+                      Review matches
+                    </Button>
+                  </Group>
+                </Stack>
+              </DetailsSection>
               <DetailsSection title="Quick start" open>
                 <Stack gap="xs">
                   <Text size="sm">

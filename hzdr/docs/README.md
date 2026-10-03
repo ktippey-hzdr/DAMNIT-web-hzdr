@@ -24,6 +24,7 @@ See the [roadmap](status/integration-roadmap.md) and short
 | [System overview](system-overview.md) | All seven repositories, the end-to-end data flow, shared contracts, and the end products |
 | [Architecture](architecture.md) | Canonical identity, event model, NeXus layout, and system boundaries |
 | [Screenshots](screenshots.md) | Current UI: home, shot table, context builder, review matches (stale capture), in-app docs, flow monitor |
+| [User guide](guides/user-guide.md) | Find a campaign, inspect shots, and resolve review cases |
 
 ## Reference — data model & standards
 
@@ -76,5 +77,6 @@ Shipped features, kept for the design rationale and history.
 | Document | Purpose |
 | --- | --- |
 | [Local development](guides/local-development.md) | Minimal build, test, and launch commands |
+| [User guide](guides/user-guide.md) | Short operator path through the live campaign pages |
 
 Package-specific reference remains in `api/docs` and `frontend/README.md`.
