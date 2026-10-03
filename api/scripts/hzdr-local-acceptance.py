@@ -56,6 +56,14 @@ def write_minimal_labfrog_sqlite(path: Path) -> None:
     ambiguous case to put in front of Confirm Matches, plus one clean
     shot_number=2 that should match without review.
 
+    Schema 13: every row carries the shot authority's number it claimed
+    (``authority_shot_number``), and under readiness ruling R3 an event's
+    ``shot_number`` matches rows on that number alone. The collision is
+    therefore two active rows claiming the *same* authority shot - a
+    duplicated record, as real exports contain - which the matcher cannot
+    resolve by itself. A row whose number was only typed would never be a
+    candidate at all, and the shot-1 event would come out unmatched.
+
     Both shot-1 rows must be `active`: an archived+active pair is a version
     supersession the matcher correctly collapses (see
     hzdr_nexus._mark_superseded_labfrog_rows), which is *not* ambiguous.
@@ -77,11 +85,12 @@ def write_minimal_labfrog_sqlite(path: Path) -> None:
                 target_thickness_unit TEXT,
                 target_notes TEXT,
                 target_source TEXT,
-                target_series_sample TEXT
+                target_series_sample TEXT,
+                authority_shot_number INTEGER
             )
         """)
         connection.executemany(
-            "INSERT INTO shots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO shots VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
                 # Two distinct *active* records, same day, same shot_number: a
                 # shot-numbering collision the matcher cannot auto-resolve. Both
@@ -104,6 +113,7 @@ def write_minimal_labfrog_sqlite(path: Path) -> None:
                     "Synthetic acceptance fixture; not facility data",
                     "operator",
                     "SYN-01",
+                    1,
                 ),
                 (
                     "acc-shot-1b",
@@ -120,6 +130,7 @@ def write_minimal_labfrog_sqlite(path: Path) -> None:
                     "Synthetic acceptance fixture; not facility data",
                     "operator",
                     "SYN-01",
+                    1,
                 ),
                 # One unambiguous shot.
                 (
@@ -137,6 +148,7 @@ def write_minimal_labfrog_sqlite(path: Path) -> None:
                     "Synthetic acceptance fixture; not facility data",
                     "operator",
                     "SYN-01",
+                    2,
                 ),
             ],
         )
