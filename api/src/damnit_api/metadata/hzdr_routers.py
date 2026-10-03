@@ -21,6 +21,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from ..auth.dependencies import OAuthUserInfo
+from ..consumer.builder_trigger import request_rebuild
 from ..shared.hzdr_settings import HZDRWikiSettings
 from ..shared.settings import settings
 from .hzdr_nexus import (
@@ -694,11 +695,14 @@ async def assign_hzdr_experiment(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    # Rulings change no spool file, so ask for the rebuild that applies them
+    # rather than wait for the next event.
     return {
         "shot_number": payload.shot_number,
         "experiment_id": payload.experiment_id,
         "review_level": payload.review_level,
         "status": "pending_rebuild",
+        "rebuild_requested": request_rebuild(),
     }
 
 

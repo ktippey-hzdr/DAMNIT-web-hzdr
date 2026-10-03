@@ -50,6 +50,9 @@ async def spool_lifespan(settings: Settings, logger: Any) -> AsyncIterator[None]
     # every campaign's build reads so it can route those events itself.
     unassigned_events_jsonl = []
     unassigned_trigger_jsonl = []
+    # ...and, for the multi-campaign builder, each spool's root and file name.
+    events_spools = []
+    trigger_spools = []
     if settings.hzdr_spool.enabled:
         from .asapo import AsapoSpoolConsumer
 
@@ -57,6 +60,10 @@ async def spool_lifespan(settings: Settings, logger: Any) -> AsyncIterator[None]
         spool_consumers.append(asapo_consumer)
         builder_events_jsonl.append(asapo_consumer.config.events_jsonl)
         unassigned_events_jsonl.append(asapo_consumer.config.unassigned_jsonl)
+        events_spools.append((
+            asapo_consumer.config.spool_dir,
+            asapo_consumer.config.filename,
+        ))
         spool_tasks.append(asyncio.create_task(asapo_consumer.run(spool_stop)))
         logger.info(
             "ASAPO spool consumer started",
@@ -75,6 +82,10 @@ async def spool_lifespan(settings: Settings, logger: Any) -> AsyncIterator[None]
         spool_consumers.append(kafka_consumer)
         builder_trigger_jsonl.append(kafka_consumer.config.events_jsonl)
         unassigned_trigger_jsonl.append(kafka_consumer.config.unassigned_jsonl)
+        trigger_spools.append((
+            kafka_consumer.config.spool_dir,
+            kafka_consumer.config.filename,
+        ))
         spool_tasks.append(asyncio.create_task(kafka_consumer.run(spool_stop)))
         logger.info(
             "Kafka spool consumer started",
@@ -92,15 +103,13 @@ async def spool_lifespan(settings: Settings, logger: Any) -> AsyncIterator[None]
             trigger_jsonl=builder_trigger_jsonl,
             unassigned_events_jsonl=unassigned_events_jsonl,
             unassigned_trigger_jsonl=unassigned_trigger_jsonl,
+            events_spools=events_spools,
+            trigger_spools=trigger_spools,
         )
         for consumer in spool_consumers:
             consumer.on_new_events_hook = builder_trigger.notify
         spool_tasks.append(asyncio.create_task(builder_trigger.run(spool_stop)))
-        logger.info(
-            "Builder auto-trigger started",
-            output_nexus=str(settings.hzdr_builder.output_nexus),
-            debounce_seconds=settings.hzdr_builder.debounce_seconds,
-        )
+        _log_builder_started(settings, logger)
     elif settings.hzdr_builder.enabled:
         logger.warning(
             "DW_API_HZDR_BUILDER__ENABLED=true but no spool consumer is "
@@ -119,3 +128,47 @@ async def spool_lifespan(settings: Settings, logger: Any) -> AsyncIterator[None]
                     await task
         for consumer in spool_consumers:
             await consumer.aclose()
+
+
+def _log_builder_started(settings: Settings, logger: Any) -> None:
+    builder = settings.hzdr_builder
+    if not builder.multi_campaign:
+        logger.info(
+            "Builder auto-trigger started",
+            output_nexus=str(builder.output_nexus),
+            debounce_seconds=builder.debounce_seconds,
+        )
+        return
+    logger.info(
+        "Builder auto-trigger started",
+        output_root=str(builder.output_root),
+        sources_file=str(builder.catalog_file),
+        campaigns=builder.campaigns,
+        debounce_seconds=builder.debounce_seconds,
+    )
+    _warn_if_catalog_not_served(settings, logger)
+
+
+def _warn_if_catalog_not_served(settings: Settings, logger: Any) -> None:
+    """The shared catalog only reaches the UI if the API reads that same file.
+
+    It is also where Review matches records rulings, so a mismatch means the
+    builds never see them.
+    """
+    built = settings.hzdr_builder.catalog_file
+    served = settings.metadata.sources_file
+    if built is None:
+        return
+    if (
+        settings.metadata.provider == "local"
+        and served is not None
+        and served.resolve() == built.resolve()
+    ):
+        return
+    logger.warning(
+        "The multi-campaign builder writes a catalog the API does not serve; "
+        "set DW_API_METADATA__PROVIDER=local and "
+        "DW_API_METADATA__SOURCES_FILE to it",
+        built=str(built),
+        served=str(served),
+    )

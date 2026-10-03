@@ -5,11 +5,26 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import sys
+import traceback
 from pathlib import Path
 from typing import Any
 
 os.environ.setdefault("DW_API_DAMNIT_PATH", str(Path.cwd()))
 
+from damnit_api.consumer.campaign_builds import (
+    CATALOG_FILENAME,
+    UNASSIGNED_SOURCE_TITLE,
+    CampaignInputs,
+    SpoolRoot,
+    campaign_labfrog_export,
+    campaign_output_nexus,
+    campaigns_for_unassigned,
+    discover_spool_campaigns,
+    foreign_experiment_ids,
+    stamp_campaign,
+    unassigned_spool_files,
+)
 from damnit_api.metadata.hzdr_event import UNASSIGNED_EXPERIMENT_ID
 from damnit_api.metadata.hzdr_nexus import (
     discover_labfrog_data_products,
@@ -131,18 +146,35 @@ def select_experiment_id(
     raise ValueError(message)
 
 
-def build(args: argparse.Namespace) -> tuple[Path, Path]:
-    """Run one reconciliation and NeXus bridge build."""
+def build(
+    args: argparse.Namespace,
+    *,
+    labfrog_shots: list[dict[str, Any]] | None = None,
+    resolution_labfrog_shots: list[dict[str, Any]] | None = None,
+    experiment_rulings: dict[int, str] | None = None,
+    merge_catalog: bool = False,
+    catalog_title: str | None = None,
+    register_scicat: bool = True,
+) -> tuple[Path, Path]:
+    """Run one reconciliation and NeXus bridge build.
+
+    The keyword arguments are for ``build_all``: records and rulings it has
+    already loaded once for every campaign of the run, and the shared-catalog
+    merge. Called with ``args`` alone, it is the single-campaign build.
+    """
     event_paths = [*(args.events_jsonl or []), *(args.event_json or [])]
     events = load_normalized_events(event_paths)
-    nexus_shots = (
-        read_labfrog_nexus_shots(args.labfrog_nexus) if args.labfrog_nexus else []
-    )
-    sqlite_shots = (
-        read_labfrog_sqlite_shots(args.labfrog_sqlite) if args.labfrog_sqlite else []
-    )
-    mongo_shots = load_mongo_shots(args)
-    labfrog_shots = merge_labfrog_shots(nexus_shots, sqlite_shots, mongo_shots)
+    if labfrog_shots is None:
+        nexus_shots = (
+            read_labfrog_nexus_shots(args.labfrog_nexus) if args.labfrog_nexus else []
+        )
+        sqlite_shots = (
+            read_labfrog_sqlite_shots(args.labfrog_sqlite)
+            if args.labfrog_sqlite
+            else []
+        )
+        mongo_shots = load_mongo_shots(args)
+        labfrog_shots = merge_labfrog_shots(nexus_shots, sqlite_shots, mongo_shots)
     if args.watchdog_jsonl:
         watchdog_experiment = select_experiment_id(
             args.experiment_id, events, labfrog_shots, args.labfrog_nexus
@@ -176,10 +208,14 @@ def build(args: argparse.Namespace) -> tuple[Path, Path]:
     # review sidecar plus any shared sidecars named on the command line - the
     # ``_unassigned`` bucket build needs the latter to see a ruling written by
     # the campaign it assigned the shot to.
-    rulings = load_experiment_rulings([
-        review_sidecar_path(sources_file),
-        *(getattr(args, "experiment_rulings", None) or []),
-    ])
+    rulings = (
+        experiment_rulings
+        if experiment_rulings is not None
+        else load_experiment_rulings([
+            review_sidecar_path(sources_file),
+            *(getattr(args, "experiment_rulings", None) or []),
+        ])
+    )
     shots, normalized_events = reconcile_canonical_shots(
         events,
         experiment_id=experiment_id,
@@ -191,6 +227,7 @@ def build(args: argparse.Namespace) -> tuple[Path, Path]:
         experiment_rulings=rulings,
         time_match_autoassign=getattr(args, "time_match_autoassign", False),
         include_trigger_only=True,
+        resolution_labfrog_shots=resolution_labfrog_shots,
     )
 
     if args.labfrog_nexus:
@@ -213,9 +250,16 @@ def build(args: argparse.Namespace) -> tuple[Path, Path]:
             events=normalized_events,
             source_nexus=args.labfrog_nexus,
             laser_config=_laser_config(),
+            # A shared-catalog build's shots move between campaigns; see
+            # write_nexus_bridge. The single-campaign build is unchanged.
+            seed_from_output=not merge_catalog,
         )
-        scicat = _register_scicat(
-            output_nexus, sources_file, experiment_id, args.source_key, shots
+        scicat = (
+            _register_scicat(
+                output_nexus, sources_file, experiment_id, args.source_key, shots
+            )
+            if register_scicat
+            else None
         )
         write_sources_catalog(
             sources_file=sources_file,
@@ -225,8 +269,148 @@ def build(args: argparse.Namespace) -> tuple[Path, Path]:
             shots=shots,
             events=normalized_events,
             scicat=scicat,
+            merge=merge_catalog,
+            title=catalog_title,
         )
     return output_nexus, sources_file
+
+
+# Per-campaign inputs that --output-root derives itself; naming one as well
+# would leave it unclear which campaign it belongs to.
+_SINGLE_CAMPAIGN_FLAGS = (
+    ("experiment_id", "--experiment-id"),
+    ("labfrog_nexus", "--labfrog-nexus"),
+    ("labfrog_sqlite", "--labfrog-sqlite"),
+    ("mongo_uri", "--mongo-uri"),
+    ("events_jsonl", "--events-jsonl"),
+    ("event_json", "--event-json"),
+    ("watchdog_jsonl", "--watchdog-jsonl"),
+    ("trigger_jsonl", "--trigger-jsonl"),
+)
+
+
+def _spool_roots(pairs: list[list[str]] | None) -> list[SpoolRoot]:
+    return [SpoolRoot(Path(directory), filename) for directory, filename in pairs or []]
+
+
+def _load_unassigned_events(
+    events_files: list[Path], trigger_files: list[Path]
+) -> list[dict[str, Any]]:
+    """The shared ``_unassigned`` spools, loaded the way each build loads them."""
+    events = load_normalized_events(events_files)
+    events.extend(
+        normalize_processed_trigger_message(document)
+        for document in load_json_records(trigger_files)
+    )
+    return events
+
+
+def build_all(args: argparse.Namespace) -> int:
+    """Build every campaign that receives events, plus the ``_unassigned`` bucket.
+
+    Readiness plan C2; the rules are in ``damnit_api.consumer.campaign_builds``.
+    Each campaign is a full single-campaign ``build`` (its own output and
+    single-writer lock) whose entry is merged into one shared catalog. A failed
+    campaign does not stop the others. Returns the number of failed builds.
+    """
+    output_root: Path = args.output_root.resolve()
+    curated_root: Path | None = args.curated_root
+    sources_file = (
+        args.sources_file.resolve()
+        if args.sources_file
+        else output_root / CATALOG_FILENAME
+    )
+    events_spools = _spool_roots(args.events_spool)
+    trigger_spools = _spool_roots(args.trigger_spool)
+    spooled = discover_spool_campaigns(events_spools, trigger_spools)
+    unassigned_events_files = unassigned_spool_files(events_spools)
+    unassigned_trigger_files = unassigned_spool_files(trigger_spools)
+
+    # The campaigns taking shots: their LabFrog records decide resolution step 1
+    # in every build of this run.
+    active = list(dict.fromkeys([*(args.campaign or []), *sorted(spooled)]))
+    exports: dict[str, list[dict[str, Any]]] = {}
+    resolution_shots: list[dict[str, Any]] = []
+    for campaign in active:
+        exports[campaign] = _campaign_export_records(curated_root, campaign)
+        resolution_shots.extend(stamp_campaign(exports[campaign], campaign))
+
+    schedule = (
+        load_campaign_schedule(args.campaign_schedule) if args.campaign_schedule else []
+    )
+    rulings = load_experiment_rulings([
+        review_sidecar_path(sources_file),
+        *(args.experiment_rulings or []),
+    ])
+    resolved = campaigns_for_unassigned(
+        _load_unassigned_events(unassigned_events_files, unassigned_trigger_files),
+        labfrog_shots=resolution_shots,
+        campaign_schedule=schedule,
+        experiment_rulings=rulings,
+        campaign_timezone=args.campaign_timezone,
+    )
+    campaigns = [*active, *sorted(set(resolved) - set(active))]
+
+    failures = 0
+    for campaign in [*campaigns, UNASSIGNED_EXPERIMENT_ID]:
+        inputs = spooled.get(campaign) or CampaignInputs(campaign)
+        is_bucket = campaign == UNASSIGNED_EXPERIMENT_ID
+        campaign_args = argparse.Namespace(**{
+            **vars(args),
+            "events_jsonl": [*inputs.events_jsonl, *unassigned_events_files],
+            "event_json": None,
+            "watchdog_jsonl": None,
+            "trigger_jsonl": [*inputs.trigger_jsonl, *unassigned_trigger_files],
+            "labfrog_nexus": None,
+            "labfrog_sqlite": None,
+            "mongo_uri": None,
+            "experiment_id": campaign,
+            "source_key": campaign,
+            "output_nexus": campaign_output_nexus(output_root, campaign),
+            "sources_file": sources_file,
+        })
+        try:
+            labfrog_shots = exports.get(campaign)
+            if labfrog_shots is None:
+                labfrog_shots = _campaign_export_records(curated_root, campaign)
+            output_nexus, _ = build(
+                campaign_args,
+                labfrog_shots=labfrog_shots,
+                resolution_labfrog_shots=resolution_shots,
+                experiment_rulings=rulings,
+                merge_catalog=True,
+                catalog_title=UNASSIGNED_SOURCE_TITLE if is_bucket else None,
+                # The bucket is not a campaign, so not a SciCat dataset.
+                register_scicat=not is_bucket,
+            )
+        except Exception:
+            failures += 1
+            print(f"Build failed for campaign {campaign}:", file=sys.stderr)
+            traceback.print_exc()
+            continue
+        print(f"Canonical NeXus ({campaign}): {output_nexus}")
+    print(f"DAMNIT source catalog: {sources_file}")
+    return failures
+
+
+def _campaign_export_records(
+    curated_root: Path | None, campaign: str
+) -> list[dict[str, Any]]:
+    """The campaign's LabFrog export records; none when it has no export."""
+    export = campaign_labfrog_export(curated_root, campaign)
+    if export is None:
+        if curated_root is not None and campaign != UNASSIGNED_EXPERIMENT_ID:
+            print(f"No LabFrog export for {campaign}; building from its events")
+        return []
+    records = read_labfrog_sqlite_shots(export)
+    foreign = foreign_experiment_ids(records, campaign)
+    if foreign:
+        print(
+            f"Warning: {export} has rows naming {', '.join(sorted(foreign))}, "
+            f"not {campaign}; they resolve to the campaign they name",
+            file=sys.stderr,
+        )
+    return records
 
 
 def _laser_config() -> dict[str, Any]:
@@ -321,12 +505,60 @@ def main() -> None:
     parser.add_argument("--mongo-query-json", default="")
     parser.add_argument("--experiment-id")
     parser.add_argument("--source-key", default="hzdr-labfrog")
-    parser.add_argument(
+    outputs = parser.add_mutually_exclusive_group(required=True)
+    outputs.add_argument(
         "--output-nexus",
         "--output-hdf5",
         dest="output_nexus",
         type=Path,
-        required=True,
+    )
+    outputs.add_argument(
+        "--output-root",
+        type=Path,
+        help=(
+            "Multi-campaign mode: build every campaign with spool data (and "
+            "every --campaign) to <root>/<campaign>/<campaign>.nxs, plus the "
+            "_unassigned bucket, into one shared catalog (default "
+            "<root>/hzdr_sources.json). Replaces --output-nexus, "
+            "--experiment-id and the LabFrog/event inputs."
+        ),
+    )
+    parser.add_argument(
+        "--curated-root",
+        type=Path,
+        help=(
+            "With --output-root: where each campaign's LabFrog export is "
+            "found, as <root>/<campaign>/<campaign>.sqlite."
+        ),
+    )
+    parser.add_argument(
+        "--campaign",
+        action="append",
+        help=(
+            "With --output-root: a campaign taking shots now. It is built even "
+            "before an event names it, and its LabFrog export may claim "
+            "'unassigned' triggers. Repeat as needed."
+        ),
+    )
+    parser.add_argument(
+        "--events-spool",
+        action="append",
+        nargs=2,
+        metavar=("DIR", "FILENAME"),
+        help=(
+            "With --output-root: a normalized-event spool laid out as "
+            "DIR/<campaign>/FILENAME (the ASAPO consumer's); repeatable."
+        ),
+    )
+    parser.add_argument(
+        "--trigger-spool",
+        action="append",
+        nargs=2,
+        metavar=("DIR", "FILENAME"),
+        help=(
+            "With --output-root: a trigger spool laid out as "
+            "DIR/<campaign>/FILENAME (the Kafka consumer's); repeatable."
+        ),
     )
     parser.add_argument("--sources-file", type=Path)
     parser.add_argument("--match-tolerance-s", type=float, default=120.0)
@@ -369,6 +601,28 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.output_root is not None:
+        conflicting = [
+            flag for name, flag in _SINGLE_CAMPAIGN_FLAGS if getattr(args, name)
+        ]
+        if conflicting:
+            parser.error(
+                "--output-root derives each campaign's inputs; drop "
+                + ", ".join(conflicting)
+            )
+        sys.exit(1 if build_all(args) else 0)
+    multi_only = [
+        flag
+        for name, flag in (
+            ("curated_root", "--curated-root"),
+            ("campaign", "--campaign"),
+            ("events_spool", "--events-spool"),
+            ("trigger_spool", "--trigger-spool"),
+        )
+        if getattr(args, name)
+    ]
+    if multi_only:
+        parser.error(", ".join(multi_only) + " only apply with --output-root")
     output_nexus, sources_file = build(args)
     print(f"Canonical NeXus: {output_nexus}")
     print(f"DAMNIT source catalog: {sources_file}")

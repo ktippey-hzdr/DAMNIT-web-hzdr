@@ -10,6 +10,7 @@ import os
 import re
 import shutil
 import sqlite3
+import time
 import uuid
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
@@ -781,7 +782,9 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
             "previous run may have crashed before the atomic rename completed."
         )
         raise ValueError(message)
-    with sqlite3.connect(path) as connection:
+    # closing(): sqlite3's own context manager only ends the transaction, and a
+    # multi-campaign build reads several exports LabFrog may be replacing.
+    with contextlib.closing(sqlite3.connect(path)) as connection:
         columns = {
             str(row[1]) for row in connection.execute("PRAGMA table_info(shots)")
         }
@@ -1377,12 +1380,17 @@ def reconcile_canonical_shots(  # noqa: C901
     experiment_rulings: Mapping[int, str] | None = None,
     time_match_autoassign: bool = False,
     include_trigger_only: bool = True,
+    resolution_labfrog_shots: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     """Link normalized source events to canonical shots.
 
     Resolution comes first: ``unassigned`` events are routed to a campaign by
     ``resolve_event_experiments`` and only then filtered to ``experiment_id``
     (pass ``experiment_id="unassigned"`` to build the ``_unassigned`` bucket).
+    Its LabFrog step reads ``labfrog_shots`` unless ``resolution_labfrog_shots``
+    is given: a multi-campaign build passes every active campaign's records
+    there, each naming its campaign, so all builds of one run route an
+    ``unassigned`` event to the same single campaign.
 
     With LabFrog records, the canonical shots are the union (plan W6.1) of the
     LabFrog records and, when ``include_trigger_only``, the trigger-only shots
@@ -1396,7 +1404,11 @@ def reconcile_canonical_shots(  # noqa: C901
     trigger_only_keys: set[str] = set()
     resolved_events = resolve_event_experiments(
         events,
-        labfrog_shots=labfrog_shots,
+        labfrog_shots=(
+            labfrog_shots
+            if resolution_labfrog_shots is None
+            else resolution_labfrog_shots
+        ),
         labfrog_experiment_id=experiment_id,
         campaign_schedule=campaign_schedule,
         experiment_rulings=experiment_rulings,
@@ -1635,6 +1647,7 @@ def write_nexus_bridge(
     events: list[dict[str, Any]],
     source_nexus: Path | None = None,
     laser_config: dict[str, Any] | None = None,
+    seed_from_output: bool = True,
 ) -> list[dict[str, Any]]:
     """Preserve a LabFrog NeXus file and add the DAMNIT bridge tables.
 
@@ -1646,11 +1659,22 @@ def write_nexus_bridge(
     `laser_config` carries the deployment's fixed laser-system constants
     (`DW_API_HZDR_LASER__*`, bare `metadata.laser.*` keys) that no per-shot
     event supplies; see `_merge_laser_config()`.
+
+    Without a `source_nexus`, the previous `output_path` seeds the new file
+    unless `seed_from_output` is False. Multi-campaign builds pass False: their
+    shot lists shrink and reorder as rulings and LabFrog rows move shots
+    between campaigns, which a seeded shot table (only ever extended) refuses;
+    unseeded, every build is written like the first one.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = output_path.with_name(f"{output_path.name}.{uuid.uuid4().hex}.tmp.nxs")
     try:
-        _stage_bridge_temp_file(output_path, temp_path, source_nexus)
+        _stage_bridge_temp_file(
+            output_path,
+            temp_path,
+            source_nexus,
+            seed_from_output=seed_from_output,
+        )
 
         mode = "r+" if temp_path.exists() else "w"
         with h5py.File(temp_path, mode) as handle:
@@ -1779,12 +1803,16 @@ def _write_semantic_metadata_groups(
 
 
 def _stage_bridge_temp_file(
-    output_path: Path, temp_path: Path, source_nexus: Path | None
+    output_path: Path,
+    temp_path: Path,
+    source_nexus: Path | None,
+    *,
+    seed_from_output: bool = True,
 ) -> None:
     """Seed `temp_path` with prior bridge content before it is opened for writing."""
     if source_nexus is not None and source_nexus.resolve() != output_path.resolve():
         shutil.copy2(source_nexus, temp_path)
-    elif output_path.exists():
+    elif output_path.exists() and (seed_from_output or source_nexus is not None):
         # Preserve existing LabFrog + bridge content across incremental rebuilds.
         shutil.copy2(output_path, temp_path)
 
@@ -2501,6 +2529,8 @@ def write_sources_catalog(
     shots: list[dict[str, Any]],
     events: list[dict[str, Any]] | None = None,
     scicat: dict[str, Any] | None = None,
+    merge: bool = False,
+    title: str | None = None,
 ) -> None:
     """Write DAMNIT-web's compact source catalog from canonical shots.
 
@@ -2510,6 +2540,11 @@ def write_sources_catalog(
     unmatched ones as `review_events`, plus a `match_summary` count, since
     otherwise they are only ever written to the NeXus file's `source_events`
     group and have no API/frontend visibility at all.
+
+    By default the file holds this one source. With ``merge`` (multi-campaign
+    builds, which share one catalog) only the entry with ``source_key`` is
+    replaced and every other source is kept, under ``catalog_write_lock`` so
+    two builders cannot drop each other's entry.
     """
     current_shots = [
         dict(shot)
@@ -2540,28 +2575,85 @@ def write_sources_catalog(
     # payload_ref.scicat_pid via the NeXus bridge target reader.
     if scicat:
         source_metadata.update(scicat)
-    payload = {
-        "sources": [
+    source = {
+        "key": source_key,
+        "title": title or f"HZDR canonical campaign ({experiment_id})",
+        "damnit_path": str(sources_file.parent / "damnit" / source_key),
+        "data_paths": [str(nexus_path)],
+        "metadata": source_metadata,
+        "shots": [
             {
-                "key": source_key,
-                "title": f"HZDR canonical campaign ({experiment_id})",
-                "damnit_path": str(sources_file.parent / "damnit" / source_key),
-                "data_paths": [str(nexus_path)],
-                "metadata": source_metadata,
-                "shots": [
-                    {
-                        **shot,
-                        "hdf5_path": str(nexus_path),
-                        "nexus_entry": "/entry",
-                    }
-                    for shot in current_shots
-                ],
-                "review_events": review_events,
-                "match_summary": match_summary,
+                **shot,
+                "hdf5_path": str(nexus_path),
+                "nexus_entry": "/entry",
             }
-        ]
+            for shot in current_shots
+        ],
+        "review_events": review_events,
+        "match_summary": match_summary,
     }
-    write_json_atomic(sources_file, payload)
+    if not merge:
+        write_json_atomic(sources_file, {"sources": [source]})
+        return
+    with catalog_write_lock(sources_file):
+        write_json_atomic(sources_file, _merged_catalog(sources_file, source))
+
+
+def _merged_catalog(sources_file: Path, source: dict[str, Any]) -> dict[str, Any]:
+    """The catalog on disk with ``source`` put in place of its old entry.
+
+    A catalog that cannot be read is replaced, with a warning: every
+    multi-campaign run rebuilds each campaign, so the other entries return
+    within that run.
+    """
+    payload: dict[str, Any] = {}
+    records: list[Any] = []
+    if sources_file.exists():
+        try:
+            existing = json.loads(sources_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            logger.warning("Replacing unreadable catalog %s: %s", sources_file, exc)
+            existing = {}
+        if isinstance(existing, dict):
+            payload = existing
+            records = list(existing.get("sources") or [])
+        elif isinstance(existing, list):
+            records = existing
+    merged: list[Any] = []
+    placed = False
+    for record in records:
+        if isinstance(record, dict) and record.get("key") == source["key"]:
+            if not placed:
+                merged.append(source)
+                placed = True
+            continue
+        merged.append(record)
+    if not placed:
+        merged.append(source)
+    return {**payload, "sources": merged}
+
+
+@contextlib.contextmanager
+def catalog_write_lock(
+    sources_file: Path, *, timeout_s: float = 60.0, poll_s: float = 0.2
+) -> Iterator[None]:
+    """Serialise read-merge-write updates of one shared catalog.
+
+    The same PID-stamped lock file as ``single_writer_lock`` (next to the
+    catalog), but a second builder waits for it instead of failing: a merge
+    holds it only for one read and one atomic write.
+    """
+    deadline = time.monotonic() + timeout_s
+    with contextlib.ExitStack() as stack:
+        while True:
+            try:
+                stack.enter_context(single_writer_lock(sources_file))
+                break
+            except BuilderAlreadyRunningError:
+                if time.monotonic() >= deadline:
+                    raise
+                time.sleep(poll_s)
+        yield
 
 
 def _review_event_api_record(event: dict[str, Any]) -> dict[str, Any]:

@@ -222,11 +222,31 @@ class HZDRBuilderSettings(BaseModel):
 
     ``output_nexus`` is required when ``enabled=True``.  Event/trigger JSONL inputs
     are derived from the running consumers' spool paths, not configured here.
+
+    **Multi-campaign mode** (readiness plan C2) replaces ``output_nexus`` with
+    ``output_root``: each run builds every campaign with spool data, every
+    entry of ``campaigns``, every campaign an ``unassigned`` event resolves
+    to, and the ``_unassigned`` bucket, each to
+    ``<output_root>/<campaign>/<campaign>.nxs`` with its LabFrog export found
+    as ``<curated_root>/<campaign>/<campaign>.sqlite``. All of them share one
+    catalog, ``sources_file`` or ``<output_root>/hzdr_sources.json``, which
+    ``DW_API_METADATA__SOURCES_FILE`` should name so the API serves every
+    campaign and its rulings reach every build. The per-campaign settings
+    (``output_nexus``, ``experiment_id``, ``labfrog_*``) do not apply there and
+    are refused alongside it.
     """
 
     enabled: bool = False
     debounce_seconds: float = 10.0
     output_nexus: Path | None = None
+    # Multi-campaign mode; all three default off (single-campaign mode).
+    output_root: Path | None = None
+    curated_root: Path | None = None
+    # Campaigns taking shots now: built before any event names them, and the
+    # only exports (with those of campaigns that have spool folders) whose
+    # LabFrog records may claim "unassigned" triggers. LabFrog numbers repeat
+    # across campaigns, so old exports must not take part.
+    campaigns: list[str] = Field(default_factory=list)
     experiment_id: str = ""
     source_key: str = "hzdr-labfrog"
     campaign_timezone: str = "UTC"
@@ -249,12 +269,47 @@ class HZDRBuilderSettings(BaseModel):
     script_path: Path | None = None
     extra_args: list[str] = Field(default_factory=list)
 
+    @property
+    def multi_campaign(self) -> bool:
+        return self.output_root is not None
+
+    @property
+    def catalog_file(self) -> Path | None:
+        """The catalog the builds write (multi-campaign mode's shared one)."""
+        if self.sources_file is not None or self.output_root is None:
+            return self.sources_file
+        return self.output_root / "hzdr_sources.json"
+
     @model_validator(mode="after")
     def _require_output_when_enabled(self) -> "HZDRBuilderSettings":
-        if self.enabled and self.output_nexus is None:
+        if self.output_root is not None:
+            single = [
+                f"DW_API_HZDR_BUILDER__{name.upper()}"
+                for name in (
+                    "output_nexus",
+                    "experiment_id",
+                    "labfrog_nexus",
+                    "labfrog_sqlite",
+                )
+                if getattr(self, name)
+            ]
+            if single:
+                msg = (
+                    "DW_API_HZDR_BUILDER__OUTPUT_ROOT builds every campaign and "
+                    "derives each one's inputs; remove " + ", ".join(single) + "."
+                )
+                raise ValueError(msg)
+        elif self.curated_root is not None or self.campaigns:
             msg = (
-                "DW_API_HZDR_BUILDER__OUTPUT_NEXUS must be set when "
-                "DW_API_HZDR_BUILDER__ENABLED=true."
+                "DW_API_HZDR_BUILDER__CURATED_ROOT and __CAMPAIGNS only apply "
+                "with DW_API_HZDR_BUILDER__OUTPUT_ROOT."
+            )
+            raise ValueError(msg)
+        if self.enabled and self.output_nexus is None and self.output_root is None:
+            msg = (
+                "DW_API_HZDR_BUILDER__OUTPUT_NEXUS (one campaign) or "
+                "DW_API_HZDR_BUILDER__OUTPUT_ROOT (every campaign) must be set "
+                "when DW_API_HZDR_BUILDER__ENABLED=true."
             )
             raise ValueError(msg)
         return self

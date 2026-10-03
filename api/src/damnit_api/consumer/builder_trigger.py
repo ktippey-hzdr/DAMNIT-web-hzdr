@@ -39,6 +39,23 @@ _DEFAULT_SCRIPT = (
 # large traceback cannot flood the structured logs.
 _MAX_LOGGED_OUTPUT = 2000
 
+# The trigger whose run() loop is live, so the API can ask it for a rebuild.
+_RUNNING: dict[str, BuilderTrigger] = {}
+
+
+def request_rebuild() -> bool:
+    """Ask the running auto-trigger for a debounced rebuild.
+
+    For inputs that change outside the spool, such as a reviewer's campaign
+    ruling: without this it would wait for the next spooled event. Returns
+    False when no trigger is running (auto-build off).
+    """
+    trigger = _RUNNING.get("trigger")
+    if trigger is None:
+        return False
+    trigger.notify()
+    return True
+
 
 class BuilderTrigger:
     """Coalesce spool events into debounced builder subprocess runs."""
@@ -51,6 +68,8 @@ class BuilderTrigger:
         runner: BuilderRunner | None = None,
         unassigned_events_jsonl: Sequence[Path] = (),
         unassigned_trigger_jsonl: Sequence[Path] = (),
+        events_spools: Sequence[tuple[Path, str]] = (),
+        trigger_spools: Sequence[tuple[Path, str]] = (),
     ) -> None:
         self._settings = settings
         self._events_jsonl = list(events_jsonl)
@@ -60,6 +79,10 @@ class BuilderTrigger:
         # passed only once they exist, since a campaign may never see one.
         self._unassigned_events_jsonl = list(unassigned_events_jsonl)
         self._unassigned_trigger_jsonl = list(unassigned_trigger_jsonl)
+        # Multi-campaign mode: each consumer's (spool_dir, filename), from which
+        # the builder finds every campaign folder and the _unassigned one.
+        self._events_spools = list(events_spools)
+        self._trigger_spools = list(trigger_spools)
         self._runner = runner or self._run_subprocess
         self._wake = asyncio.Event()
 
@@ -72,7 +95,14 @@ class BuilderTrigger:
         s = self._settings
         python = s.python_executable or sys.executable
         script = s.script_path or _DEFAULT_SCRIPT
-        cmd = [python, str(script)]
+        if s.output_root is not None:
+            return [python, str(script), *self._multi_campaign_args()]
+        return [python, str(script), *self._single_campaign_args()]
+
+    def _single_campaign_args(self) -> list[str]:
+        """The one configured campaign (``OUTPUT_NEXUS``), as before plan C2."""
+        s = self._settings
+        cmd: list[str] = []
         for path in self._events_jsonl:
             cmd += ["--events-jsonl", str(path)]
         for path in self._trigger_jsonl:
@@ -96,6 +126,28 @@ class BuilderTrigger:
         cmd += self._resolution_args()
         cmd += list(s.extra_args)
         return cmd
+
+    def _multi_campaign_args(self) -> list[str]:
+        """``--output-root`` mode: one run builds every campaign (plan C2)."""
+        s = self._settings
+        args = ["--output-root", str(s.output_root)]
+        if s.catalog_file is not None:
+            args += ["--sources-file", str(s.catalog_file)]
+        if s.curated_root is not None:
+            args += ["--curated-root", str(s.curated_root)]
+        for campaign in s.campaigns:
+            args += ["--campaign", campaign]
+        for flag, spools in (
+            ("--events-spool", self._events_spools),
+            ("--trigger-spool", self._trigger_spools),
+        ):
+            for directory, filename in spools:
+                args += [flag, str(directory), filename]
+        if s.campaign_timezone:
+            args += ["--campaign-timezone", s.campaign_timezone]
+        args += ["--match-tolerance-s", str(s.match_tolerance_s)]
+        args += self._resolution_args()
+        return args + list(s.extra_args)
 
     def _unassigned_args(self) -> list[str]:
         """Inputs from the shared ``_unassigned`` spools that exist so far."""
@@ -162,16 +214,21 @@ class BuilderTrigger:
             "Builder auto-trigger started (debounce=%.1fs)",
             self._settings.debounce_seconds,
         )
-        while not stop.is_set():
-            if not await self._wait_for_wake(stop):
-                break
-            self._wake.clear()
-            # Coalesce a burst: sleep the debounce window, absorbing further
-            # notifies, then clear once more so mid-build events queue exactly
-            # one follow-up rebuild rather than one per event.
-            await asyncio.sleep(self._settings.debounce_seconds)
-            self._wake.clear()
-            await self._run_builder_once()
+        _RUNNING["trigger"] = self
+        try:
+            while not stop.is_set():
+                if not await self._wait_for_wake(stop):
+                    break
+                self._wake.clear()
+                # Coalesce a burst: sleep the debounce window, absorbing further
+                # notifies, then clear once more so mid-build events queue
+                # exactly one follow-up rebuild rather than one per event.
+                await asyncio.sleep(self._settings.debounce_seconds)
+                self._wake.clear()
+                await self._run_builder_once()
+        finally:
+            if _RUNNING.get("trigger") is self:
+                del _RUNNING["trigger"]
         logger.info("Builder auto-trigger stopped")
 
     async def _wait_for_wake(self, stop: asyncio.Event) -> bool:

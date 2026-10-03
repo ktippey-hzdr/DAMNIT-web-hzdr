@@ -37,6 +37,8 @@ class _FakeConsumer:
         self.config = SimpleNamespace(
             events_jsonl=Path(spool_root) / f"{name}.jsonl",
             unassigned_jsonl=Path(spool_root) / "_unassigned" / f"{name}.jsonl",
+            spool_dir=Path(spool_root),
+            filename=f"{name}.jsonl",
         )
         self.on_new_events_hook = None
         self.stop_seen = None
@@ -73,8 +75,12 @@ class _FakeBuilderTrigger:
         trigger_jsonl=(),
         unassigned_events_jsonl=(),
         unassigned_trigger_jsonl=(),
+        events_spools=(),
+        trigger_spools=(),
     ) -> None:
         self.settings = settings
+        self.events_spools = list(events_spools)
+        self.trigger_spools = list(trigger_spools)
         self.events_jsonl = list(events_jsonl)
         self.trigger_jsonl = list(trigger_jsonl)
         self.unassigned_events_jsonl = list(unassigned_events_jsonl)
@@ -137,6 +143,7 @@ def _settings(tmp_path, *, asapo=False, kafka=False, builder=False) -> Any:
             enabled=builder,
             output_nexus=tmp_path / "campaign.nxs",
             debounce_seconds=0.05,
+            multi_campaign=False,
         ),
     )
 
@@ -193,6 +200,44 @@ async def test_both_consumers_wire_the_builder_trigger(tmp_path, wired):
     for c in wired.consumers:
         assert c.closed is True
     assert "Builder auto-trigger started" in [m for m, _ in logger.info_calls]
+
+
+def _multi_campaign_settings(tmp_path, served: Path | None) -> Any:
+    settings = _settings(tmp_path, asapo=True, kafka=True, builder=True)
+    settings.hzdr_builder = SimpleNamespace(
+        enabled=True,
+        multi_campaign=True,
+        output_root=tmp_path / "hzdr",
+        catalog_file=tmp_path / "hzdr" / "hzdr_sources.json",
+        campaigns=["radbio"],
+        debounce_seconds=0.05,
+    )
+    settings.metadata = SimpleNamespace(provider="local", sources_file=served)
+    return settings
+
+
+@pytest.mark.asyncio
+async def test_multi_campaign_builder_gets_every_spool_root(tmp_path, wired):
+    logger = _RecordingLogger()
+    served = tmp_path / "hzdr" / "hzdr_sources.json"
+    async with bootstrap.spool_lifespan(
+        _multi_campaign_settings(tmp_path, served), logger
+    ):
+        trigger = wired.builders[0]
+        assert trigger.events_spools == [(tmp_path, "asapo.jsonl")]
+        assert trigger.trigger_spools == [(tmp_path, "kafka.jsonl")]
+    started = dict(logger.info_calls)["Builder auto-trigger started"]
+    assert started["campaigns"] == ["radbio"]
+    assert logger.warning_calls == []
+
+
+@pytest.mark.asyncio
+async def test_multi_campaign_catalog_the_api_does_not_serve_warns(tmp_path, wired):
+    logger = _RecordingLogger()
+    settings = _multi_campaign_settings(tmp_path, tmp_path / "elsewhere.json")
+    async with bootstrap.spool_lifespan(settings, logger):
+        pass
+    assert any("does not serve" in m for m, _ in logger.warning_calls)
 
 
 @pytest.mark.asyncio

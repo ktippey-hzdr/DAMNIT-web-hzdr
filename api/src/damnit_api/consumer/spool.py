@@ -156,8 +156,9 @@ class SpoolConfig:
         campaign is spooled under that campaign. ``unassigned`` keeps going to
         the shared file (decision D1) and is resolved from LabFrog at build
         time. A message with no ``experiment_id`` falls back to the configured
-        campaign. The builder still builds the configured campaign only; other
-        campaigns' files wait until a builder is pointed at them.
+        campaign. A single-campaign builder (``OUTPUT_NEXUS``) builds the
+        configured campaign only; the multi-campaign one (``OUTPUT_ROOT``,
+        ``campaign_builds.py``) builds every campaign folder found here.
         """
         experiment_id = message.get("experiment_id")
         if experiment_id == UNASSIGNED_EXPERIMENT_ID:

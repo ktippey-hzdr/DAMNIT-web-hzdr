@@ -39,6 +39,7 @@ def test_experiment_ruling_route_persists_named_decision(tmp_path: Path, monkeyp
 
     assert response.status_code == 202
     assert response.json()["status"] == "pending_rebuild"
+    assert response.json()["rebuild_requested"] is False  # no auto-trigger here
     assert invalid.status_code == 422
     assert load_experiment_rulings([review_sidecar_path(sources_file)]) == {
         9: "Pilot_2026"
