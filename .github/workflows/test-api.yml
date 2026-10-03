@@ -52,7 +52,7 @@ jobs:
         run: uv run --no-sync ruff format --check .
 
       - name: Pytest
-        run: uv run --no-sync pytest
+        run: uv run --no-sync pytest --cov=damnit_api --cov-fail-under=77
         env:
           DW_API_AUTH__CLIENT_ID: test
           DW_API_AUTH__CLIENT_SECRET: test
