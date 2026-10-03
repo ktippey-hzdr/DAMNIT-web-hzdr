@@ -150,7 +150,15 @@ consumer settings. The builder auto-trigger is a single global block,
 rest of the builder CLI as settings) — *not* per-consumer flags — because there
 is one builder per campaign; `OUTPUT_NEXUS` is required when `ENABLED=true`, and
 the event/trigger JSONL inputs are auto-derived from the running consumers' spool
-paths rather than reconfigured here. SciCat registration of the built NeXus file
+paths rather than reconfigured here. **Multi-campaign mode** (readiness plan C2,
+`consumer/campaign_builds.py`, builder `--output-root`) replaces `OUTPUT_NEXUS`
+with `OUTPUT_ROOT` (+ `CURATED_ROOT`, `CAMPAIGNS`; all default off): one run
+builds every listed or spooled campaign, every campaign an `unassigned` event
+resolves to, and the `_unassigned` bucket, each to `<root>/<campaign>/<campaign>.nxs`
+with its export found as `<curated_root>/<campaign>/<campaign>.sqlite`, merged
+into one shared catalog (source key = `experiment_id`) that the API must serve.
+Only the listed and spooled campaigns' exports take part in resolution step 1
+(LabFrog numbers restart per campaign). SciCat registration of the built NeXus file
 is the separate `DW_API_HZDR_SCICAT__*` block (best-effort, off by default).
 `DW_API_HZDR_LASER__*` (`SYSTEM`, `WAVELENGTH`, `REPETITION_RATE`, `POLARIZATION`)
 states the deployment's *fixed* laser-system constants — the `metadata.laser.*`
@@ -167,7 +175,8 @@ one shot attaches on the number alone; `true` restores the earlier ladder,
 which attached a numbered trigger to a neighbouring LabFrog shot by time).
 Consumers spool
 `unassigned` events to a shared `<spool>/_unassigned/` file that every
-campaign's build reads.
+campaign's build reads. A ruling posted from Review matches asks the running
+auto-trigger for a rebuild (`builder_trigger.request_rebuild`).
 Structured JSON logging turns on when `DW_API_DEBUG=false`.
 `hzdr/scripts/damnit-api.service` is the systemd unit for an `/opt` install;
 `hzdr/scripts/damnit-api-checkout.service.example` is the one in use on

@@ -76,7 +76,10 @@ DAMNIT resolves the campaign before it filters a build's events to one
    (`append_experiment_ruling`: `{"action": "assign_experiment", "shot_number",
    "experiment_id", "review_level", ...}` in `<catalog>.review.jsonl`, highest
    review level wins) -> `ruling`. A build reads its own sidecar plus any passed
-   with `--experiment-rulings`. There is no REST/UI writer for rulings yet.
+   with `--experiment-rulings`. The writer is Review matches
+   (`POST /metadata/hzdr/experiment-rulings`), beside the catalog the API
+   serves; the multi-campaign builder shares that catalog, so every build reads
+   the same rulings.
 4. Otherwise the event stays `unassigned`. It is still built: a build with
    `--experiment-id unassigned` is the `_unassigned` bucket, and review lists
    it there. Nothing is dropped.
@@ -88,6 +91,17 @@ exists, so rebuilding after a ruling or a schedule update re-routes them. The
 builder's `--experiment-id` override never rewrites the sentinel on a trigger
 envelope, and the sentinel never counts as a second campaign when the builder
 infers the experiment id.
+
+**Every campaign in one run** (`--output-root`, setting
+`DW_API_HZDR_BUILDER__OUTPUT_ROOT`; `consumer/campaign_builds.py`). The builder
+builds every campaign listed in `CAMPAIGNS` or with a spool folder, every
+campaign the chain routes an `unassigned` event to, and the `_unassigned`
+bucket, into one shared catalog. Step 1 then reads the exports of the listed
+and spooled campaigns only, the same records in every build of the run, each
+record naming its campaign, so every build routes an event to the same single
+campaign and no shot is counted in two. Older exports stay out because LabFrog
+numbers restart per campaign. Settings and layout:
+[deployment plan, Step 2b](plans/deployment-plan.md#every-campaign-at-once-output_root-recommended).
 
 Each canonical shot records the outcome in `/entry/shots/experiment_id_source`
 (bridge profile v4): `labfrog` for every LabFrog-backed shot, otherwise the

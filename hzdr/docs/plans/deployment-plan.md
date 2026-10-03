@@ -132,11 +132,11 @@ DW_API_HZDR_KAFKA_SPOOL__FILENAME=trigger.jsonl
 DW_API_HZDR_HEALTH__KAFKA_BOOTSTRAP=149.220.77.19:9092
 ```
 
-`CAMPAIGN` is the fallback and the campaign the builder builds: each message is
-spooled under the campaign its own `experiment_id` names, `unassigned` messages
-go to the shared `_unassigned/` file and are resolved from LabFrog at build
-time, and only a message with no `experiment_id` uses `CAMPAIGN` (since
-2026-10-02).
+`CAMPAIGN` is only the fallback: each message is spooled under the campaign its
+own `experiment_id` names, `unassigned` messages go to the shared
+`_unassigned/` file and are resolved from LabFrog at build time, and only a
+message with no `experiment_id` uses `CAMPAIGN` (since 2026-10-02). Which
+campaigns get built is the builder's setting (Step 2b).
 
 The broker runs on this VM but listens **only** on `149.220.77.19:9092`
 (advertised as `fwkt-webapps.fz-rossendorf.de`); `localhost:9092` reaches
@@ -260,6 +260,61 @@ paths of whichever consumers are running, so it stays in sync with Steps 1–2.
 Restart and watch for `Builder auto-trigger started`. If `ENABLED=true` but no spool
 consumer is enabled, the API logs a warning and nothing triggers the builder.
 
+#### Every campaign at once (`OUTPUT_ROOT`, recommended)
+
+The block above builds **one** campaign. Since the shot authority sends every
+trigger as `experiment_id: "unassigned"`, the shots no rule assigns are built in
+the `_unassigned` bucket, and a second campaign needs its own build. Set
+`OUTPUT_ROOT` instead of `OUTPUT_NEXUS` and one debounced run builds them all:
+
+```ini
+DW_API_HZDR_BUILDER__ENABLED=true
+DW_API_HZDR_BUILDER__OUTPUT_ROOT=/data/damnit/hzdr
+DW_API_HZDR_BUILDER__CURATED_ROOT=/home/tippey/labfrog-sqlite-tools-repo/curated_files
+DW_API_HZDR_BUILDER__CAMPAIGNS=["<campaign-slug>"]
+DW_API_HZDR_BUILDER__CAMPAIGN_TIMEZONE=Europe/Berlin
+# The API must serve the shared catalog the builds write:
+DW_API_METADATA__PROVIDER=local
+DW_API_METADATA__SOURCES_FILE=/data/damnit/hzdr/hzdr_sources.json
+```
+
+| Setting | Default | Meaning |
+| --- | --- | --- |
+| `OUTPUT_ROOT` | unset (single-campaign mode) | Each campaign goes to `<root>/<campaign>/<campaign>.nxs`, the bucket to `<root>/_unassigned/unassigned.nxs` |
+| `CURATED_ROOT` | unset (no LabFrog) | Each campaign's export is `<root>/<campaign>/<campaign>.sqlite`, the layout labfrog-sqlite-tools writes. A campaign without one is built from its triggers alone (trigger-only shots) |
+| `CAMPAIGNS` | `[]` | Campaigns taking shots now. They are built before any event names them, and only their exports (plus those of campaigns with a spool folder) may claim `unassigned` triggers by shot number |
+| `SOURCES_FILE` | `<OUTPUT_ROOT>/hzdr_sources.json` | The one catalog every build merges its entry into |
+
+Which campaigns a run builds: those in `CAMPAIGNS`, every campaign with a spool
+folder (`<spool>/<campaign>/`, i.e. some message named it), every campaign an
+`unassigned` trigger resolves to through the schedule or a reviewer's ruling,
+and the `_unassigned` bucket. Each campaign's source key in the catalog is its
+`experiment_id` (`unassigned` for the bucket). Each output keeps its own
+single-writer lock, and a failed campaign does not stop the others.
+
+Why `CAMPAIGNS` and not every export under `CURATED_ROOT`: LabFrog numbers
+restart in every campaign (an old export also holds shots 1..N), so if all
+exports took part, every authoritative shot number would be claimed by several
+campaigns and none would resolve. List a campaign while it takes shots; remove
+it when it ends (its catalog entry and files stay).
+
+`OUTPUT_ROOT` is refused together with `OUTPUT_NEXUS`, `EXPERIMENT_ID` or
+`LABFROG_*`, which it derives per campaign; `SOURCE_KEY` is ignored. If the API
+serves a different catalog, the start-up log warns: rulings recorded in Review
+matches are written beside the served catalog, and only reach the builds when
+that is the shared one. A ruling also asks the running trigger for a rebuild,
+so the shot moves without waiting for the next event.
+
+By hand, the same run is:
+
+```bash
+python api/scripts/hzdr-hdf5-builder.py --output-root /data/damnit/hzdr \
+    --curated-root ~/labfrog-sqlite-tools-repo/curated_files \
+    --campaign <campaign-slug> \
+    --trigger-spool /data/damnit/hzdr/spool/kafka trigger.jsonl \
+    --campaign-timezone Europe/Berlin
+```
+
 ### SciCat registration
 
 A best-effort builder post-step that registers the campaign NeXus file as a citable
@@ -319,7 +374,12 @@ No manual offset reset or spool file manipulation is needed for a clean restart.
 
 ## Campaign rotation
 
-When a new campaign starts:
+With the multi-campaign builder (`OUTPUT_ROOT`, Step 2b), a new campaign only
+needs its slug added to `DW_API_HZDR_BUILDER__CAMPAIGNS` (and the old one
+removed once it ends) and a restart; its LabFrog export is found by name. Messages
+spool under the campaign they name, so nothing else changes.
+
+With the single-campaign builder (`OUTPUT_NEXUS`), when a new campaign starts:
 1. Update `DW_API_HZDR_KAFKA_SPOOL__CAMPAIGN` and `DW_API_HZDR_SPOOL__CAMPAIGN` in `.env`
 2. The spool consumers create a new `spool/<transport>/<new-campaign>/` directory automatically
 3. If the builder auto-trigger is on, also update `DW_API_HZDR_BUILDER__OUTPUT_NEXUS`,
