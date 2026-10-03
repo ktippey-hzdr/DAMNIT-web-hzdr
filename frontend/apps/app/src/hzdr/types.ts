@@ -241,6 +241,7 @@ export type HZDRMatchSummary = {
 export type HZDRReviewEvent = {
   event_id: string
   experiment_id: string
+  shot_number?: number | null
   source: string
   kind: string
   timestamp: string

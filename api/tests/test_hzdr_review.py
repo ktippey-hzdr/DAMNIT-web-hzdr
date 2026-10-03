@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from damnit_api.main import create_app
 from damnit_api.metadata.hzdr_nexus import (
+    _review_event_api_record,
     load_experiment_ruling_records,
     load_experiment_rulings,
     load_review_decisions,
@@ -19,6 +20,22 @@ from damnit_api.metadata.hzdr_routers import (
 from damnit_api.shared.settings import AuthSettings, settings
 
 SOURCE_KEY = "hzdr-local"
+
+
+def test_review_event_keeps_trigger_number_without_a_matched_shot():
+    record = _review_event_api_record({
+        "event_id": "evt-701",
+        "experiment_id": "exp",
+        "source": "DRACO-Trigger",
+        "kind": "draco.trigger",
+        "timestamp": "2026-05-05T08:17:00Z",
+        "shot_number": 701,
+        "match_status": "ambiguous",
+        "candidate_shot_keys": ["exp:20260505:000001"],
+    })
+
+    assert record["shot_number"] == 701
+    assert record["candidate_shot_keys"] == ["exp:20260505:000001"]
 
 
 def test_experiment_ruling_route_persists_named_decision(tmp_path: Path, monkeypatch):
@@ -95,6 +112,7 @@ def test_review_route_lists_unassigned_shots_and_their_rulings(
         "evt-ambiguous-1",
         "evt-unmatched-1",
     ]
+    assert body["review_events"][0]["shot_number"] == 701
     assert [shot["shot_number"] for shot in body["unassigned_shots"]] == [9, 10]
     assert body["unassigned_shots"][0]["experiment_id_source"] == "unassigned"
     assert body["experiment_rulings"] == []
@@ -177,6 +195,7 @@ def write_review_fixture(tmp_path: Path) -> Path:
                         {
                             "event_id": "evt-ambiguous-1",
                             "experiment_id": "exp",
+                            "shot_number": 701,
                             "source": "DRACO-Trigger",
                             "kind": "trigger.pump",
                             "timestamp": "2026-05-05T08:17:00Z",

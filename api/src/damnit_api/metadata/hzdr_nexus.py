@@ -2751,14 +2751,15 @@ def _review_event_api_record(event: dict[str, Any]) -> dict[str, Any]:
     """Build the API-facing record for one ambiguous or unmatched event.
 
     Unlike `_event_api_record` (used for events already attached to a shot),
-    this keeps `match_status`, `experiment_id`, and `candidate_shot_keys` since
-    a reviewer needs them to decide what to do with the event.
+    this keeps `match_status`, `experiment_id`, `shot_number`, and
+    `candidate_shot_keys` since a reviewer needs them to decide what to do.
     """
     return {
         key: event.get(key)
         for key in (
             "event_id",
             "experiment_id",
+            "shot_number",
             "source",
             "kind",
             "timestamp",

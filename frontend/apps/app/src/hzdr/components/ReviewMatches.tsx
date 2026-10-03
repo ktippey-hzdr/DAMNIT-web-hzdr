@@ -74,6 +74,9 @@ function EventLine({ event }: { event: HZDRReviewEvent }) {
         <Text size="sm" c="dimmed">
           at {formatFiredAt(event.timestamp)}
         </Text>
+        {event.shot_number != null ? (
+          <Badge variant="light">Trigger shot {event.shot_number}</Badge>
+        ) : null}
       </Group>
       <Text size="xs" c="dimmed">
         event <Code>{event.event_id}</Code>

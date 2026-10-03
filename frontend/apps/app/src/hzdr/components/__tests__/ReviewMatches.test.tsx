@@ -81,7 +81,7 @@ describe('AmbiguousMatchesCard', () => {
     ])
     withMantine(
       <AmbiguousMatchesCard
-        events={[makeEvent()]}
+        events={[makeEvent({ shot_number: 701 })]}
         shotsByKey={shots}
         busyKey={null}
         onConfirm={onConfirm}
@@ -89,6 +89,7 @@ describe('AmbiguousMatchesCard', () => {
     )
 
     expect(screen.getByText('Ti foil')).toBeInTheDocument()
+    expect(screen.getByText('Trigger shot 701')).toBeInTheDocument()
     expect(screen.getByText('17')).toBeInTheDocument()
     expect(screen.getByText('+2 min')).toBeInTheDocument()
     expect(screen.getByText('-3 min')).toBeInTheDocument()

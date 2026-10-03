@@ -70,13 +70,14 @@ class HZDRReviewEvent(BaseModel):
 
     This is a reconciliation-facing API shape, not the canonical HZDREventV1
     envelope itself (it adds match_status/candidate_shot_keys/acknowledged*
-    and omits shot_id/shot_number, which do not apply before a shot match
-    exists) - but payload_ref reuses HZDRPayloadRef so source traceability
-    stays one type across both models.
+    and omits shot_id, which does not apply before a shot match exists) - but
+    retains the trigger's shot_number as a review clue. payload_ref reuses
+    HZDRPayloadRef so source traceability stays one type across both models.
     """
 
     event_id: str
     experiment_id: str
+    shot_number: int | None = None
     source: str
     kind: str
     timestamp: str
