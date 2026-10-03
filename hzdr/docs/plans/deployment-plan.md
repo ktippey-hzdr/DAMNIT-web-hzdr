@@ -280,7 +280,13 @@ DW_API_HZDR_BUILDER__CAMPAIGN_TIMEZONE=Europe/Berlin
 # The API must serve the shared catalog the builds write:
 DW_API_METADATA__PROVIDER=local
 DW_API_METADATA__SOURCES_FILE=/home/tippey/mnt/bigdata/HPLexp/nexus/hzdr_sources.json
+DW_API_METADATA__LABFROG_CURATED_DIR=/home/tippey/labfrog-sqlite-tools-repo/curated_files
 ```
+
+`LABFROG_CURATED_DIR` supplies the API's campaign suggestions in Review
+matches. Point it at the same refreshed exports as `CURATED_ROOT`; the older
+`/bigdata/share/kristin/experiments/curated_files` setting would show stale
+campaign snapshots there.
 
 | Setting | Default | Meaning |
 | --- | --- | --- |
