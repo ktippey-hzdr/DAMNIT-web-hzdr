@@ -66,8 +66,8 @@ class Campaign(NamedTuple):
     base_energy: float
 
 
-# Two sources, so the source picker, the home page list, and the Link records
-# source filter all have something to choose between. The first runs over two
+# Two sources, so the source picker, the home page list, and the Review matches
+# catalog picker all have something to choose between. The first runs over two
 # days, which is what gives the Day column and the per-day shot keys content.
 CAMPAIGNS = (
     Campaign(
@@ -350,7 +350,7 @@ def _write_fixture_events(directory: Path, campaign: Campaign) -> None:
 
 
 def _write_curated_campaign(curated_dir: Path, campaign: Campaign) -> Path:
-    """Write the curated LabFrog snapshot the Link records page reads.
+    """Write the curated LabFrog snapshot the campaign endpoints read.
 
     Mirrors the `shot_summary` / `export_metadata` shape that
     labfrog-sqlite-tools exports and that `labfrog_sqlite.list_campaigns`
@@ -692,7 +692,7 @@ def _prepare_context_builder(page: Page) -> None:
 def _prepare_docs(page: Page) -> None:
     """Unfold every section of the in-app docs page.
 
-    The page is a reference: folded, the capture shows eight section titles
+    The page is a reference: folded, the capture shows nine section titles
     and nothing a reader can use.
     """
     page.evaluate(
@@ -701,22 +701,13 @@ def _prepare_docs(page: Page) -> None:
     page.wait_for_timeout(300)
 
 
-def _prepare_link_records(page: Page) -> None:
-    """Drive the page's own three steps: search, link, review.
+def _prepare_review_matches(page: Page) -> None:
+    """Wait for the first catalog's review lists to load.
 
-    Selecting a source is what fills the producer-status, wiki, and SciCat
-    cards, so the capture shows the linked state rather than four empty
-    placeholder cards.
+    The page selects the first campaign catalog itself; the cards appear only
+    once its review list and shots have arrived.
     """
-    page.get_by_role("textbox", name="Campaign").click()
-    page.get_by_role("option").first.click()
-    page.get_by_role("textbox", name="Limit to source (optional)").click()
-    page.get_by_role("option").first.click()
-    page.get_by_role("checkbox", name="Shotcounter").check()
-    page.get_by_role("button", name="Search visible records").click()
-    page.get_by_role("button", name="Build review package").click()
-    page.get_by_text("linked record(s)").first.wait_for()
-    _open_details_section(page, "Full draft JSON")
+    page.get_by_text("Ambiguous matches").first.wait_for()
 
 
 def _prepare_flow_monitor(page: Page) -> None:
@@ -760,12 +751,13 @@ SHOTS = (
         "Context builder",
         _prepare_context_builder,
     ),
+    # The file keeps its old name until the screenshot revamp recaptures it.
     Shot(
         "link-shot-records.png",
-        "/link-shot-records",
+        "/review-matches",
         "heading",
-        "Link Existing Shot Records",
-        _prepare_link_records,
+        "Review matches",
+        _prepare_review_matches,
     ),
     Shot(
         "docs.png",

@@ -38,7 +38,7 @@ rather than a single shot:
   DAMNIT-web renders: a camera-frame thumbnail, a per-shot lineout sparkline, a
   numeric column with its campaign trend, and a plain label.
 - **A curated LabFrog snapshot** per campaign, in the `shot_summary` shape
-  labfrog-sqlite-tools exports, so Link records has something to cross-reference.
+  labfrog-sqlite-tools exports, so Review matches has campaign ids to suggest.
 
 Everything lives in a temporary directory and is deleted when the capture ends.
 The values are synthetic: they are shaped like a DRACO run, but no shot in them
@@ -69,15 +69,19 @@ appended to `context.py`.
 
 ![Context builder](screenshots/context-builder.png)
 
-## Link existing shot records
+## Review matches
 
-`/link-shot-records`: pick a curated LabFrog campaign, cross-reference
-Shotcounter/Watchdog/shotsheet records, and build a review package. Shown
-with a campaign and source selected, so the curated reference, producer
-status, and built draft are all populated. MediaWiki and SciCat stay
-unconfigured — the capture talks to no external service.
+`/review-matches` (the old `/link-shot-records` path redirects there): per
+campaign catalog, the cases the builder will not guess — ambiguous events
+with their candidate shots to confirm, unmatched events to acknowledge, and
+unassigned shots to assign to a campaign — plus who resolved what, and when.
 
-![Link records](screenshots/link-shot-records.png)
+**Stale capture.** The image below still shows the page as it was before
+2026-10-03, "Link Existing Shot Records" with its campaign
+cross-reference and review-package draft, both since removed. It is kept
+until the screenshot revamp recaptures it.
+
+![Review matches (stale: the former Link records page)](screenshots/link-shot-records.png)
 
 ## In-app docs
 

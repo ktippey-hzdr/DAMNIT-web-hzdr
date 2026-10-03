@@ -121,16 +121,21 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
 ### Frontend (`frontend/`)
 `apps/app` (main UI), `apps/demo`, `apps/site`; `nginx/` for serving; Vite + pnpm
 workspace. HZDR-specific UI code lives under `apps/app/src/hzdr/`:
-- `pages/` — `ShotPage`, `LinkRecordsPage`, `FlowMonitorPage`, `ContextBuilderPage`,
+- `pages/` — `ShotPage`, `ReviewMatchesPage`, `FlowMonitorPage`, `ContextBuilderPage`,
   `DocsPage`, `SourceHome`
-- `components/` — `ShotTable`, `FlowDiagram`, `AppHeader`, `previews`
-- `utils/` — `api`, `filter`, `format`, `hdf5`, `link-records`, `metadata`, `plotly`,
+- `components/` — `ShotTable`, `ReviewMatches`, `FlowDiagram`, `AppHeader`, `previews`
+- `utils/` — `api`, `filter`, `format`, `hdf5`, `review`, `metadata`, `plotly`,
   `preview`, `context`
 - `types.ts`, `hooks.ts`, `index.ts`
 
 `ShotPage.tsx` fetches shot detail via the `by-key/{shot_key}` route when a
 `shot_key` is present (falling back to `{shot_number}`).
-The `LinkRecordsPage` (`/link-shot-records`) surfaces ambiguous/unmatched events.
+The `ReviewMatchesPage` (`/review-matches`; the old `/link-shot-records` path
+redirects there) is where a person resolves what the builder will not guess:
+ambiguous events (confirm one of `candidate_shot_keys`), unmatched events
+(acknowledge), and `unassigned` shots (assign a campaign, written as an
+experiment ruling). It reads `GET .../sources/{key}/review`, which also lists
+`unassigned_shots` and their pending `experiment_rulings`.
 Saved table views are persisted in `hzdr_sources.views.json` alongside
 `hzdr_sources.json` (same directory, same stem with `.views.json` suffix); the API
 manages them via `GET/POST/DELETE /metadata/hzdr/views`.

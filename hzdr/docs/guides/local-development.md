@@ -93,8 +93,8 @@ Point the API at the catalog:
 ```powershell
 $env:DW_API_METADATA__PROVIDER = "local"
 $env:DW_API_METADATA__SOURCES_FILE = "<hzdr_sources.json>"
-# Optional: point the Link Records campaign picker at the read-only curated
-# SQLite snapshots from labfrog-sqlite-tools (unset => no curated campaigns).
+# Optional: the read-only curated SQLite snapshots from labfrog-sqlite-tools;
+# Review matches suggests their campaign keys (unset => no suggestions).
 $env:DW_API_METADATA__LABFROG_CURATED_DIR = "<curated_files>"
 uv run -m damnit_api.main
 ```
@@ -102,7 +102,7 @@ uv run -m damnit_api.main
 Generated emulator files live under `.generated/hzdr-package-emulator`. They
 are not evidence that an event traversed a configured spool consumer.
 
-To check the local vertical slice (emulator events through Confirm Matches)
+To check the local vertical slice (emulator events through the review API that the Review matches page uses)
 without building a real pilot file, run
 `uv run python scripts/hzdr-local-acceptance.py` from `api`, or
 `hzdr/scripts/test.ps1 -WithAcceptance` from the repo root. Testing commands are

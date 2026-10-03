@@ -262,7 +262,7 @@ consumer group (full detail in
 
 | View | Endpoint(s) | Reads | Backs |
 | --- | --- | --- | --- |
-| Curated LabFrog campaigns | `GET /metadata/hzdr/campaigns`, `.../{campaign_key}/shots` | `labfrog-sqlite-tools` `curated_files/*.sqlite` (read-only), via `DW_API_METADATA__LABFROG_CURATED_DIR` | Link Records campaign picker / record reference |
+| Curated LabFrog campaigns | `GET /metadata/hzdr/campaigns`, `.../{campaign_key}/shots` | `labfrog-sqlite-tools` `curated_files/*.sqlite` (read-only), via `DW_API_METADATA__LABFROG_CURATED_DIR` | Review matches campaign suggestions (the shots preview has no UI since 2026-10-03) |
 | Producer status | `GET /metadata/hzdr/sources/{key}/producer-status` | events already on the source (no new I/O) | DAQ File Watchdog hosts + Shotcounter liveness |
 | Flow activity | `GET /config/flow-activity` | Kafka offset counts, spool JSONL line counts, optional ASAPO stream sizes | Flow Monitor **Live** mode |
 

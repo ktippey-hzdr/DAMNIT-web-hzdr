@@ -116,8 +116,9 @@ Committed and tested:
   site, plus explicit dedup-by-`event_id` and corrupt-JSONL handling.
 - Single-writer PID-stamped lock around `hzdr-hdf5-builder.py` publish step,
   with stale-lock recovery.
-- Ambiguous/unmatched events surfaced through API; real Confirm Matches UI
-  (`/link-shot-records`) backed by `GET/POST .../review`.
+- Ambiguous/unmatched events surfaced through API; the Confirm Matches UI is
+  the Review matches page (`/review-matches`, was `/link-shot-records`; built
+  2026-10-03) backed by `GET/POST .../review` and the experiment-ruling POST.
 - Local acceptance script (`api/scripts/hzdr-local-acceptance.py`): emulator
   events through Confirm Matches over a real FastAPI `TestClient`, no sibling
   repo or broker required. The committed synthetic semantic-domain event now
@@ -274,7 +275,7 @@ Branch: `main`
 | Canonical `HZDREventV1` model, atomic catalog writes, single-writer builder lock | ✅ committed |
 | Standards-aligned NeXus bridge groups (`/entry/instrument/laser` as `NXsource` + nested `NXbeam`, `/entry/sample` as `NXsample`) | ✅ committed and covered by `api/tests/test_hzdr_nexus_sample.py` / `test_hzdr_nexus.py` |
 | Target wiki links exposed in DAMNIT API/UI (`target_wiki_ref` / `target_wiki_page`, shot table/detail links) | ✅ committed; API pass-through covered in `api/tests/test_hzdr_sources.py`, frontend table/detail links wired |
-| Ambiguous/unmatched events in API; real Confirm Matches UI | ✅ committed |
+| Ambiguous/unmatched events in API; Confirm Matches UI (Review matches page) | ✅ committed (UI 2026-10-03) |
 | Local acceptance script; offline four-source integration test | ✅ committed |
 | Shared example payloads and anonymized SQLite fixture | ✅ committed |
 | Pilot package gate (`hzdr/scripts/test-pilot-package.ps1`) | ✅ committed and green locally on 2026-07-03 with `-NoCoverage`; ASAPO excluded by default; live broker `-DockerTests` still separate |
@@ -289,7 +290,7 @@ Branch: `main`
 | ASAPO SDK spool consumer wired to real broker | 🟡 `RealAsapoSpoolConsumer` implemented and selectable (`DW_API_HZDR_SPOOL__BROKER_KIND=asapo`); `.env.production.example` documents the setting. Still open: point the deployment at real broker credentials, and there is no real-broker roundtrip test for ASAPO yet (only Kafka has one) |
 | Builder auto-triggered after new spool events | ✅ committed — `consumer/builder_trigger.py` (`BuilderTrigger`): each spool consumer's `on_new_events_hook` signals a shared, debounced trigger that reruns `hzdr-hdf5-builder.py` as a subprocess (preserving its single-writer PID lock). Activated by `DW_API_HZDR_BUILDER__ENABLED=true`; starts as a lifespan background task. Events/trigger JSONL inputs derived from the running consumers' spool paths. Plan + tests in `hzdr/docs/plans/done/auto-builder-trigger-plan.md` / `tests/test_hzdr_builder_trigger.py`. A standalone systemd timer remains an optional alternative |
 | `runs.sqlite` projection for legacy table workflows | ⬜ optional; deferred |
-| Register the canonical campaign NeXus file in SciCat and back-populate `payload_ref.scicat_pid` | ✅ committed 2026-07-04 — `metadata/scicat.py` + builder post-step (`_register_scicat`) POST the NeXus path to the plugin and stamp `scicat_pid`/`version_hash`/`dataset_url` into the catalog; `GET .../scicat` endpoint + Link Records UI card. Best-effort (never fails a build); unchanged rebuilds skip the re-POST. `DW_API_HZDR_SCICAT__*`. See `hzdr/docs/plans/done/scicat-registration-plan.md` |
+| Register the canonical campaign NeXus file in SciCat and back-populate `payload_ref.scicat_pid` | ✅ committed 2026-07-04 — `metadata/scicat.py` + builder post-step (`_register_scicat`) POST the NeXus path to the plugin and stamp `scicat_pid`/`version_hash`/`dataset_url` into the catalog; `GET .../scicat` endpoint + Link Records UI card (card removed 2026-10-03). Best-effort (never fails a build); unchanged rebuilds skip the re-POST. `DW_API_HZDR_SCICAT__*`. See `hzdr/docs/plans/done/scicat-registration-plan.md` |
 
 ### `GitLab/scicat_plugin`
 
@@ -312,7 +313,7 @@ which is exactly what DAMNIT needs to register a campaign NeXus file by path.
 | Schema Builder: per-`watch_name` recurring metadata (`schema_store.json`); `"51.9MeV"` → `{value, unit}` auto-detection | ✅ exists |
 | Deterministic version hashing (`versioning.make_manifest`/`manifest_hash`) over the file-reference manifest | ✅ exists |
 | DAMNIT builder post-step registers each campaign NeXus file path and stores the returned `scicat_pid` | ✅ committed 2026-07-04 — `_register_scicat` in `hzdr-hdf5-builder.py` + `metadata/scicat.py`; runs inside the single-writer lock, best-effort |
-| Surface a SciCat dataset link in the API alongside the wiki link | ✅ committed — `GET /metadata/hzdr/sources/{key}/scicat` (`HZDRScicatInfo`) + `ScicatCard` on the Link Records page |
+| Surface a SciCat dataset link in the API alongside the wiki link | ✅ committed — `GET /metadata/hzdr/sources/{key}/scicat` (`HZDRScicatInfo`); the `ScicatCard` left the UI with the Link Records page on 2026-10-03 |
 | Re-registration detection on rebuild via stored `version_hash` | ✅ committed — DAMNIT-side sha256 skip (`scicat_source_sha256`) avoids a re-POST on byte-identical rebuilds; `version_hash` from `/scicat/push` is stored for plugin-side dedup |
 
 ## Shot Number Authority
@@ -563,8 +564,8 @@ complementary, not competing:
    `RawDataset` fields and `POST`s the NeXus path to the configured plugin.
 2. The returned `pid` and `version_hash` are persisted in the source catalog;
    byte-identical rebuilds skip re-registration.
-3. The API and Link Records UI surface the SciCat dataset link alongside the
-   wiki link.
+3. The API surfaces the SciCat dataset link alongside the wiki link (the Link
+   Records UI card was removed on 2026-10-03).
 4. Mocked HTTP tests run locally. Deployed PID back-population and unchanged-file
    replay suppression remain external verification gates.
 
@@ -638,7 +639,7 @@ shot-numbered, date-foldered file tree each device writes into.
 | `ArchivingExperimentPath` (`YYYYMMDD`) | local-date in `shot_key` `<exp_id>:<YYYYMMDD>:<NNNNNN>` | The day-folder convention *is* DAMNIT's date-scoping |
 | `ArchivingRun` | `metadata.run.*` (run index) | |
 | files under `<ExperimentPath>/…` | `HZDRDataProduct` (`payload_ref.path`) | Already organized by the (day, shot) keys DAMNIT matches on |
-| `ArchivingLastShotFailedDevices` / `ArchivingPreviousShotsFailedDevices` | new `metadata.archiving.*` QA field | "shot N archived by 8/10 devices" — surfaceable in the Confirm Matches / review UI |
+| `ArchivingLastShotFailedDevices` / `ArchivingPreviousShotsFailedDevices` | new `metadata.archiving.*` QA field | "shot N archived by 8/10 devices" — surfaceable on the Review matches page |
 
 The shot identity DAMNIT needs (`shot_number` + local date + ms timestamp) is exactly
 what this server already broadcasts, so no new matching concept is required.

@@ -47,7 +47,7 @@ class HZDRMatchSummary(BaseModel):
     """Matched/ambiguous/unmatched counts for one source, per the go-live gate.
 
     confirmed/dismissed are operator-review outcomes layered on top: confirmed
-    counts events an operator attached via the Confirm Matches UI (folded into
+    counts events an operator attached on the Review matches page (folded into
     "matched" too, since the shot really is matched now); dismissed counts
     acknowledged-without-a-shot unmatched events (excluded from "unmatched").
     Both reset to 0 on the next catalog rebuild - see

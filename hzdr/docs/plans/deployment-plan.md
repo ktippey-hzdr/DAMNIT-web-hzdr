@@ -279,7 +279,8 @@ DW_API_HZDR_SCICAT__FRONTEND_URL=https://scicat.hzdr.de   # for the dataset link
 ```
 
 Verify: after a build, `GET /metadata/hzdr/sources/<key>/scicat` returns the stored
-`scicat_pid`, and the Link Records page shows a SciCat card. A byte-identical rebuild
+`scicat_pid`. (The SciCat card left the UI with the Link Records page on
+2026-10-03; the endpoint is the check.) A byte-identical rebuild
 skips the re-POST (sha256 short-circuit).
 
 ---

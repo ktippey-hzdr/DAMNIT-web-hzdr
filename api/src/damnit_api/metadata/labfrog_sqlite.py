@@ -7,8 +7,9 @@ The sibling ``labfrog-sqlite-tools`` repo exports one SQLite file per campaign t
 extraction; DAMNIT-web only *reads* the produced files, so this module never
 opens Mongo and never writes (every connection uses a ``mode=ro`` URI).
 
-This gives the Link Records page an authoritative list of unique campaigns plus
-real per-shot records, without DAMNIT-web needing any database access.
+This gives DAMNIT-web an authoritative list of unique campaigns plus real
+per-shot records, without any database access. The Review matches page uses
+the campaign keys as suggestions when a reviewer assigns a shot to a campaign.
 """
 
 from __future__ import annotations
@@ -21,7 +22,7 @@ from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
 
-# Columns surfaced from shot_summary for the Link Records preview. Kept to the
+# Columns surfaced from shot_summary for the per-campaign shot preview. Kept to the
 # stable, campaign-agnostic columns - per-diagnostic columns vary by campaign.
 _SHOT_PREVIEW_COLUMNS = (
     "shot_id",

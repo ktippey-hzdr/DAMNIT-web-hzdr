@@ -346,8 +346,9 @@ disabled.
   per-campaign SQLite snapshots that `labfrog-sqlite-tools` writes under
   `curated_files/<Campaign>/<Campaign>.sqlite` (every connection uses a `mode=ro`
   URI). It surfaces the unique campaign list (`export_metadata` + `shot_summary`)
-  and a per-campaign shot preview for the Link Records page's campaign picker /
-  record reference, without DAMNIT needing any database access. Configured by
+  and a per-campaign shot preview, without DAMNIT needing any database access.
+  The Review matches page offers the campaign keys as suggestions when a
+  reviewer assigns an unassigned shot to a campaign. Configured by
   `DW_API_METADATA__LABFROG_CURATED_DIR` (unset → no curated campaigns).
   Endpoints: `GET /metadata/hzdr/campaigns` and
   `GET /metadata/hzdr/campaigns/{campaign_key}/shots`.
@@ -370,8 +371,8 @@ disabled.
   `DW_API_HZDR_ASAPO_ACTIVITY__*` (the token is a `SecretStr`, never serialized).
 
 **DAMNIT-owned sidecars** stored alongside `hzdr_sources.json`:
-- `hzdr_sources.review.jsonl` — durable confirm/dismiss decisions from the
-  Confirm Matches UI; survives rebuilds; merged at `VERIFIED > REVIEWED > BASE`
+- `hzdr_sources.review.jsonl` — durable confirm/dismiss decisions and campaign
+  rulings from the Review matches page (`/review-matches`); survives rebuilds; merged at `VERIFIED > REVIEWED > BASE`
   priority.
 - `hzdr_sources.views.json` — durable saved UI table views (column visibility,
   sorting, filters); owned by DAMNIT, not LabFrog; managed via the views API

@@ -115,7 +115,8 @@ These upstream files currently mix generic and HZDR changes in one diff:
 4. **`frontend/apps/app/src/app.tsx`** (was +55/-11): HZDR routes, `AppHeader`
    replacement, and `HeroPage` → `/home` redirect are fork-only. ✅ **Done
    (2026-07-06):** the five HZDR-only routes (`/docs`, `/flow-monitor`,
-   `/link-shot-records`, `/source/:source_key/context-builder`, `/source/:source_key`)
+   `/link-shot-records`, `/source/:source_key/context-builder`, `/source/:source_key`;
+   since 2026-10-03 `/review-matches`, with `/link-shot-records` a redirect to it)
    moved into `hzdr/routes.tsx` (`hzdrRoutes()`, a fragment of `<Route>` elements);
    `app.tsx` drops them in as one `{hzdrRoutes()}` line, shrinking ~48 lines. Grouping
    is behavior-preserving — react-router v7 matches by rank, not source order, and no
