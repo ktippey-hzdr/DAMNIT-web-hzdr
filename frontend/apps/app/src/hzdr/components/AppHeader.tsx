@@ -2,7 +2,7 @@ import type { ReactNode } from 'react'
 import { Group, Button } from '@mantine/core'
 import {
   IconBook,
-  IconDatabase,
+  IconListCheck,
   IconRoute,
   IconSearch,
 } from '@tabler/icons-react'
@@ -49,9 +49,9 @@ export function AppHeader() {
           label="Flow monitor"
         />
         <NavButton
-          to="/link-shot-records"
-          icon={<IconDatabase size={16} />}
-          label="Link records"
+          to="/review-matches"
+          icon={<IconListCheck size={16} />}
+          label="Review matches"
         />
         <NavButton to="/docs" icon={<IconBook size={16} />} label="Docs" />
       </Group>

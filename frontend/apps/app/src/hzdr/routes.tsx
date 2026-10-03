@@ -5,7 +5,8 @@ import {
   HZDRDocsPage,
   HZDRFlowMonitorPage,
   HZDRShotPage,
-  LinkExistingShotRecordsPage,
+  LegacyReviewMatchesRedirect,
+  ReviewMatchesPage,
 } from '.'
 
 /**
@@ -38,12 +39,17 @@ export function hzdrRoutes() {
         }
       />
       <Route
-        path="/link-shot-records"
+        path="/review-matches"
         element={
           <PrivateRoute>
-            <LinkExistingShotRecordsPage />
+            <ReviewMatchesPage />
           </PrivateRoute>
         }
+      />
+      {/* The page's old path ("Link records"), kept so links still land. */}
+      <Route
+        path="/link-shot-records"
+        element={<LegacyReviewMatchesRedirect />}
       />
       <Route
         path="/source/:source_key/context-builder"

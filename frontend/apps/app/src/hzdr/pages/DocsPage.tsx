@@ -160,6 +160,26 @@ export function HZDRDocsPage() {
                   </Text>
                 </Stack>
               </DetailsSection>
+              <DetailsSection title="Review matches">
+                <Stack gap="xs">
+                  <Text size="sm">
+                    DAMNIT never attaches an event to a shot by time alone. When
+                    it is unsure, the case waits on the Review matches page:
+                    ambiguous events with their candidate shots, events with no
+                    shot, and shots no LabFrog record or campaign schedule
+                    placed in a campaign.
+                  </Text>
+                  <Text size="sm" c="dimmed">
+                    Confirm a candidate, acknowledge an event that is not a
+                    shot, or assign a shot to its campaign. Each decision is
+                    recorded with your name and kept across rebuilds; leaving a
+                    case alone is always safe.
+                  </Text>
+                  <Button component={Link} to="/review-matches" variant="light">
+                    Open Review matches
+                  </Button>
+                </Stack>
+              </DetailsSection>
               <DetailsSection title="Verification">
                 <Stack gap="xs">
                   <Text size="sm">

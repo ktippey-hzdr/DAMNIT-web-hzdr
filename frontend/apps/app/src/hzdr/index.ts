@@ -1,6 +1,7 @@
 export { HZDRFlowMonitorPage } from './pages/FlowMonitorPage'
 export { HZDRSourceHome } from './pages/SourceHome'
 export { HZDRDocsPage } from './pages/DocsPage'
-export { LinkExistingShotRecordsPage } from './pages/LinkRecordsPage'
+export { ReviewMatchesPage } from './pages/ReviewMatchesPage'
+export { LegacyReviewMatchesRedirect } from './pages/LegacyReviewMatchesRedirect'
 export { HZDRShotPage } from './pages/ShotPage'
 export { ContextBuilderPage } from './pages/ContextBuilderPage'

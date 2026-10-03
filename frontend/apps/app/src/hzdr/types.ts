@@ -28,6 +28,8 @@ export type HZDRShot = {
   match_status?: string
   match_quality?: string
   match_time_delta_s?: number
+  /** Why the shot is in this campaign: labfrog, schedule, ruling, producer or unassigned. */
+  experiment_id_source?: string | null
   hdf5_path?: string
   nexus_entry?: string
   metadata: Record<string, unknown> & {
@@ -226,50 +228,51 @@ export type ShotcounterTKey =
   | 'draco07'
   | 'draco08'
 
-export type LinkCollectionStatus = {
-  collection: string
-  status: 'matched' | 'candidate' | 'missing'
-  detail: string
+// Mirrors the FastAPI HZDRMatchSummary.
+export type HZDRMatchSummary = {
+  matched: number
+  ambiguous: number
+  unmatched: number
+  confirmed: number
+  dismissed: number
 }
 
-export type LinkedShotRecord = {
-  source_key: string
-  source_title: string
+// Mirrors the FastAPI HZDRReviewEvent: one ambiguous or unmatched event.
+export type HZDRReviewEvent = {
+  event_id: string
+  experiment_id: string
+  source: string
+  kind: string
+  timestamp: string
+  transport?: string | null
+  payload_ref: Record<string, unknown>
+  metadata: Record<string, unknown>
+  match_status: 'ambiguous' | 'unmatched' | string
+  match_quality?: string | null
+  candidate_shot_keys: string[]
+  acknowledged: boolean
+  acknowledged_at?: string | null
+  acknowledged_by?: string | null
+  acknowledged_note?: string | null
+  review_level?: string | null
+}
+
+// Mirrors the FastAPI HZDRExperimentRuling: a ruling waiting for a rebuild.
+export type HZDRExperimentRuling = {
   shot_number: number
-  shot_id: string
-  hdf5_path: string | null
-  collections: LinkCollectionStatus[]
+  experiment_id: string
+  by?: string | null
+  at?: string | null
+  note?: string | null
+  review_level?: string | null
 }
 
-export type LinkRecordsDraft = {
-  campaign_key: string | null
-  target_source_key: string | null
-  search: {
-    collections: string[]
-    shot_number: number | null
-    searched_sources: number
-  }
-  linked_records: LinkedShotRecord[]
-  output_targets: string[]
-  review_required: boolean
-  unresolved: string[]
-}
-
-export type BuiltLinkRecordsPackage = LinkRecordsDraft & {
-  built_at: string
-  coherent_json: {
-    campaign_key: string | null
-    shots: LinkedShotRecord[]
-  }
-  hdf5_plan: {
-    source_count: number
-    row_count: number
-    mode: string
-  }
-  damnit_table_plan: {
-    columns: string[]
-    rows: number
-  }
+// Mirrors GET /metadata/hzdr/sources/{key}/review (HZDRReviewResponse).
+export type HZDRReview = {
+  match_summary: HZDRMatchSummary
+  review_events: HZDRReviewEvent[]
+  unassigned_shots: HZDRShot[]
+  experiment_rulings: HZDRExperimentRuling[]
 }
 
 export type HZDRContextResults = {
