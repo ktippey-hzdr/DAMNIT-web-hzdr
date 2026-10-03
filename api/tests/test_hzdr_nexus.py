@@ -48,6 +48,7 @@ def write_labfrog_nexus(path: Path) -> None:
             "record_id", data=np.asarray(["mongo-17", "mongo-18"], dtype=string_dtype)
         )
         shots.create_dataset("shot_number", data=[17, 18])
+        shots.create_dataset("authority_shot_number", data=[17, 18])
         shots.create_dataset(
             "shot_date",
             data=np.asarray(["2026-06-10", "2026-06-10"], dtype=string_dtype),
@@ -296,6 +297,7 @@ def test_duplicate_tango_shot_number_uses_timestamp_disambiguation():
         {
             "record_id": "a",
             "shot_number": 17,
+            "authority_shot_number": 17,
             "shot_date": "2026-06-10",
             "labfrog_date_time": "2026-06-10T12:00:20Z",
             "metadata": {},
@@ -303,6 +305,7 @@ def test_duplicate_tango_shot_number_uses_timestamp_disambiguation():
         {
             "record_id": "b",
             "shot_number": 17,
+            "authority_shot_number": 17,
             "shot_date": "2026-06-10",
             "labfrog_date_time": "2026-06-10T12:00:45Z",
             "metadata": {},
@@ -328,6 +331,7 @@ def test_ambiguous_labfrog_match_is_not_silently_assigned():
         {
             "record_id": "a",
             "shot_number": 17,
+            "authority_shot_number": 17,
             "shot_date": "2026-06-10",
             "labfrog_date_time": "2026-06-10T11:59:40Z",
             "metadata": {},
@@ -335,6 +339,7 @@ def test_ambiguous_labfrog_match_is_not_silently_assigned():
         {
             "record_id": "b",
             "shot_number": 17,
+            "authority_shot_number": 17,
             "shot_date": "2026-06-10",
             "labfrog_date_time": "2026-06-10T12:00:20Z",
             "metadata": {},
@@ -355,11 +360,41 @@ def test_ambiguous_labfrog_match_is_not_silently_assigned():
     )
 
 
+def test_typed_labfrog_number_does_not_claim_authoritative_trigger():
+    """A typed number can repeat daily; it is not a shot-authority claim."""
+    typed_row = {
+        "record_id": "typed-17",
+        "shot_number": 17,
+        "shot_date": "2026-06-10",
+        "labfrog_date_time": "2026-06-10T12:00:00Z",
+        "metadata": {},
+    }
+    trigger = normalized_event(
+        source="DRACO-Trigger",
+        kind="draco.trigger",
+        shot_number=17,
+        values=None,
+    )
+
+    shots, events = reconcile_canonical_shots(
+        [trigger],
+        experiment_id="HELPMI",
+        source_key="hzdr-labfrog",
+        labfrog_shots=[typed_row],
+    )
+
+    assert [shot["labfrog_record_id"] for shot in shots] == ["typed-17"]
+    assert shots[0]["match_status"] == "labfrog-only"
+    assert events[0]["match_status"] != "matched"
+    assert events[0]["shot_key"] == ""
+
+
 def test_naive_labfrog_time_uses_campaign_timezone_for_timestamp_match():
     labfrog_shots = [
         {
             "record_id": "local-time-shot",
             "shot_number": 1,
+            "authority_shot_number": 1,
             "shot_date": "2026-06-10",
             "labfrog_date_time": "2026-06-10T12:00:00",
             "metadata": {},
@@ -390,6 +425,7 @@ def test_repeated_shot_numbers_are_scoped_by_campaign_date():
         {
             "record_id": "day-one",
             "shot_number": 1,
+            "authority_shot_number": 1,
             "shot_date": "2026-06-10",
             "labfrog_date_time": "2026-06-10T09:00:00+02:00",
             "metadata": {},
@@ -397,6 +433,7 @@ def test_repeated_shot_numbers_are_scoped_by_campaign_date():
         {
             "record_id": "day-two",
             "shot_number": 1,
+            "authority_shot_number": 1,
             "shot_date": "2026-06-11",
             "labfrog_date_time": "2026-06-11T09:00:00+02:00",
             "metadata": {},
@@ -467,6 +504,7 @@ def test_labfrog_version_history_matches_only_current_record(tmp_path: Path):
         {
             "record_id": "old",
             "shot_number": 17,
+            "authority_shot_number": 17,
             "shot_date": "2026-06-10",
             "labfrog_date_time": "2026-06-10T12:00:10Z",
             "metadata": {"has_newer_version": True},
@@ -474,6 +512,7 @@ def test_labfrog_version_history_matches_only_current_record(tmp_path: Path):
         {
             "record_id": "current",
             "shot_number": 17,
+            "authority_shot_number": 17,
             "shot_date": "2026-06-10",
             "labfrog_date_time": "2026-06-10T12:00:20Z",
             "metadata": {"has_newer_version": False},
@@ -820,6 +859,7 @@ def test_event_target_metadata_does_not_replace_labfrog_details():
         {
             "record_id": "target-shot",
             "shot_number": 17,
+            "authority_shot_number": 17,
             "shot_date": "2026-06-10",
             "labfrog_date_time": "2026-06-10T12:00:20Z",
             "metadata": {
@@ -2210,3 +2250,15 @@ def test_reads_labfrog_nexus_shot_status_when_the_projection_has_it(tmp_path: Pa
     shots = read_labfrog_nexus_shots(nexus_path)
 
     assert [shot["metadata"]["shot_status"] for shot in shots] == ["misfire", "shot"]
+    assert [shot["authority_shot_number"] for shot in shots] == [17, 18]
+
+
+def test_old_labfrog_nexus_has_no_authority_numbers(tmp_path: Path):
+    nexus_path = tmp_path / "old-labfrog.nxs"
+    write_labfrog_nexus(nexus_path)
+    with h5py.File(nexus_path, "a") as handle:
+        del handle["entry/shots/authority_shot_number"]
+
+    shots = read_labfrog_nexus_shots(nexus_path)
+
+    assert all("authority_shot_number" not in shot for shot in shots)

@@ -89,30 +89,46 @@ def write_jsonl(path: Path, records: list[dict[str, Any]]) -> Path:
     return path
 
 
-def write_export(curated_root: Path, campaign: str, shot_numbers: list[int]) -> Path:
-    """A curated export where labfrog-sqlite-tools puts it; no experiment_id."""
+def write_export(
+    curated_root: Path,
+    campaign: str,
+    shot_numbers: list[int],
+    *,
+    claimed: bool = True,
+) -> Path:
+    """A curated export; only schema v13 claimed rows carry authority numbers."""
     folder = curated_root / campaign
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / f"{campaign}.sqlite"
     with closing(sqlite3.connect(path)) as connection, connection:
-        connection.execute(
-            "CREATE TABLE shots (mongo_id TEXT PRIMARY KEY, shot_number INTEGER, "
-            "date_time TEXT, date_time_utc TEXT, campaign TEXT, experiment_id TEXT)"
-        )
-        connection.executemany(
-            "INSERT INTO shots VALUES (?, ?, ?, ?, ?, ?)",
-            [
-                (
-                    f"{campaign}-{number}",
-                    number,
-                    f"2026-06-10T14:{number % 60:02d}:00",
-                    f"2026-06-10T12:{number % 60:02d}:00Z",
-                    campaign.replace("_", " "),
-                    None,
-                )
-                for number in shot_numbers
-            ],
-        )
+        rows = [
+            (
+                f"{campaign}-{number}",
+                number,
+                f"2026-06-10T14:{number % 60:02d}:00",
+                f"2026-06-10T12:{number % 60:02d}:00Z",
+                campaign.replace("_", " "),
+                None,
+            )
+            for number in shot_numbers
+        ]
+        if claimed:
+            connection.execute(
+                "CREATE TABLE shots (mongo_id TEXT PRIMARY KEY, shot_number INTEGER, "
+                "date_time TEXT, date_time_utc TEXT, campaign TEXT, "
+                "experiment_id TEXT, "
+                "authority_shot_number INTEGER)"
+            )
+            connection.executemany(
+                "INSERT INTO shots VALUES (?, ?, ?, ?, ?, ?, ?)",
+                [(*row, row[1]) for row in rows],
+            )
+        else:
+            connection.execute(
+                "CREATE TABLE shots (mongo_id TEXT PRIMARY KEY, shot_number INTEGER, "
+                "date_time TEXT, date_time_utc TEXT, campaign TEXT, experiment_id TEXT)"
+            )
+            connection.executemany("INSERT INTO shots VALUES (?, ?, ?, ?, ?, ?)", rows)
     return path
 
 
@@ -248,16 +264,17 @@ def test_a_ruling_reaches_the_build(tmp_path, monkeypatch):
 
 
 def test_old_exports_do_not_claim_unassigned_triggers(tmp_path, monkeypatch):
-    # LabFrog numbers restart every campaign: an old export also holds shot 1.
+    # An old export has typed numbers but no authority claim for either shot.
     site = Site(tmp_path)
-    write_export(site.curated, RADBIO, [1])
-    write_export(site.curated, OLD, [1, 2])
+    write_export(site.curated, RADBIO, [1], claimed=False)
+    write_export(site.curated, OLD, [1, 2], claimed=False)
     site.unassigned(trigger(1), trigger(2))
 
     assert run_builder(monkeypatch, site.argv(RADBIO)) == 0
 
     assert site.shots(RADBIO)[1]["experiment_id_source"] == "labfrog"
-    assert set(site.shots(UNASSIGNED_EXPERIMENT_ID)) == {2}
+    assert site.shots(RADBIO)[1]["match_status"] == "labfrog-only"
+    assert set(site.shots(UNASSIGNED_EXPERIMENT_ID)) == {1, 2}
     assert OLD not in site.sources()
 
 

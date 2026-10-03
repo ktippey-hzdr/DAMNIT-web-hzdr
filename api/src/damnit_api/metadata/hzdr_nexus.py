@@ -534,6 +534,7 @@ def read_labfrog_nexus_shots(path: Path) -> list[dict[str, Any]]:
             for name in (
                 "record_id",
                 "shot_number",
+                "authority_shot_number",
                 "shot_date",
                 "date_time",
                 "campaign",
@@ -549,7 +550,7 @@ def read_labfrog_nexus_shots(path: Path) -> list[dict[str, Any]]:
         shot_date = _as_optional_string(fields["shot_date"][index])
         if not shot_date:
             shot_date = source_date(labfrog_time)
-        shots.append({
+        shot_record = {
             "record_index": index,
             "record_id": _as_optional_string(fields["record_id"][index]),
             "shot_number": _as_optional_int(fields["shot_number"][index]),
@@ -565,7 +566,13 @@ def read_labfrog_nexus_shots(path: Path) -> list[dict[str, Any]]:
                     else {}
                 ),
             },
-        })
+        }
+        # Older compact exports have no authority column; their typed number
+        # must not become a trigger-matching number by default.
+        authority_number = _as_optional_int(fields["authority_shot_number"][index])
+        if authority_number is not None:
+            shot_record["authority_shot_number"] = authority_number
+        shots.append(shot_record)
     return shots
 
 
@@ -846,6 +853,9 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
                 # Schema v12 (labfrog-sqlite-tools v0.2.3); older exports
                 # lack the column and still load.
                 "local_count",
+                # Schema v13: the shot authority's number from the record's
+                # shot_details claim. An older export has no authority number.
+                "authority_shot_number",
             )
             if name in columns
         ]
@@ -894,6 +904,7 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
                 "target_gas_pressure_value",
                 "target_gas_pressure_unit",
                 "local_count",
+                "authority_shot_number",
             }
             and value is not None
             and value != ""
@@ -920,6 +931,13 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
         local_count = _as_optional_int(record.get("local_count"))
         if local_count is not None:
             shot_record["local_count"] = local_count
+        # The shot authority's number (schema v13), the only number an
+        # authoritative trigger is matched or resolved on (ruling R3). Absent
+        # for a typed row and on every row of an older export - never
+        # defaulted to the typed shot_number.
+        authority_number = _as_optional_int(record.get("authority_shot_number"))
+        if authority_number is not None:
+            shot_record["authority_shot_number"] = authority_number
         shots.append(shot_record)
     _mark_superseded_labfrog_rows(shots)
     return shots
@@ -1027,7 +1045,13 @@ def normalize_labfrog_mongo_shots(
         if isinstance(labfrog_time, datetime):
             labfrog_time = labfrog_time.isoformat()
         record_id = record.get("_id", record.get("record_id"))
+        authority_number = _claimed_authority_number(record.get("shot_details"))
+        if authority_number is not None:
+            authority = {"authority_shot_number": authority_number}
+        else:
+            authority = {}
         shots.append({
+            **authority,
             "record_index": index,
             "record_id": str(record_id) if record_id is not None else None,
             "shot_number": int(shot_number),
@@ -1057,6 +1081,28 @@ def normalize_labfrog_mongo_shots(
     return shots
 
 
+def _claimed_authority_number(shot_details: Any) -> int | None:
+    """The authority's number of a Mongo record that claimed exactly one shot.
+
+    The same rule labfrog-sqlite-tools applies for ``shots.authority_shot_number``
+    (schema v13): only a ``labfrog-shot-details-v1`` block with one shot and a
+    whole-number ``shot_number``; a set that claimed several, a typed record,
+    or anything else has none.
+    """
+    if (
+        not isinstance(shot_details, dict)
+        or shot_details.get("schema_version") != "labfrog-shot-details-v1"
+    ):
+        return None
+    shots = shot_details.get("shots")
+    if not isinstance(shots, list) or len(shots) != 1 or not isinstance(shots[0], dict):
+        return None
+    number = shots[0].get("shot_number")
+    if isinstance(number, bool) or not isinstance(number, int) or number < 0:
+        return None
+    return int(number)
+
+
 def merge_labfrog_shots(
     *shot_sets: Iterable[dict[str, Any]],
 ) -> list[dict[str, Any]]:
@@ -1075,6 +1121,7 @@ def merge_labfrog_shots(
             for field in (
                 "record_id",
                 "shot_number",
+                "authority_shot_number",
                 "shot_date",
                 "labfrog_date_time",
                 "campaign",
@@ -1204,17 +1251,32 @@ def _authoritative_shot_number(event: dict[str, Any]) -> int | None:
     return _as_optional_int(event.get("shot_number"))
 
 
+def _authority_number(shot: Mapping[str, Any]) -> int | None:
+    """The shot authority's number of a LabFrog row or canonical shot.
+
+    Readiness ruling R3 (2026-10-03): an authoritative trigger is matched and
+    campaign-resolved on this number only, never on LabFrog's ``shot_number``,
+    which an operator may have typed (radbio types 1-70 again every day). It
+    comes from the export's ``authority_shot_number`` (labfrog-sqlite-tools
+    schema 13); a typed row, a set that claimed several shots and every row
+    of an older export have none and are reachable only by the non-number
+    rules (identity, campaign schedule, a reviewer's ruling) or review.
+    """
+    return _as_optional_int(shot.get("authority_shot_number"))
+
+
 def _labfrog_experiment_by_shot_number(
     labfrog_shots: Iterable[dict[str, Any]], default_experiment_id: str
 ) -> dict[int, set[str]]:
-    """Map each LabFrog shot_number to the campaign(s) its records name.
+    """Map each authority shot number to the campaign(s) LabFrog records it in.
 
-    A record with no experiment_id of its own belongs to the export the builder
-    was pointed at, i.e. ``default_experiment_id``.
+    Keyed on ``authority_shot_number`` only (ruling R3): a row whose number was
+    typed takes no part. A record with no experiment_id of its own belongs to
+    the export the builder was pointed at, i.e. ``default_experiment_id``.
     """
     by_number: dict[int, set[str]] = defaultdict(set)
     for record in labfrog_shots:
-        number = _as_optional_int(record.get("shot_number"))
+        number = _authority_number(record)
         if number is None:
             continue
         metadata = record.get("metadata")
@@ -1243,8 +1305,9 @@ def resolve_event_experiments(
     campaign keeps it (source ``producer``). An ``unassigned`` event with an
     authoritative ``shot_number`` goes down the chain, first match wins:
 
-    1. a LabFrog record with that shot_number names exactly one campaign ->
-       ``labfrog``;
+    1. a LabFrog record carrying that number as its ``authority_shot_number``
+       names exactly one campaign -> ``labfrog`` (a typed ``shot_number`` is
+       never used, ruling R3);
     2. exactly one campaign-schedule window contains the event time ->
        ``schedule`` (overlapping windows are no match, never a guess);
     3. a reviewer's ruling for that shot_number -> ``ruling``;
@@ -1336,18 +1399,38 @@ def _trigger_only_shots(
     source_key: str,
     *,
     campaign_timezone: str,
+    taken_shot_keys: Container[str] = (),
 ) -> list[dict[str, Any]]:
     """Build the trigger-only half of the W6.1 union.
 
     A DRACO-Trigger event with an authoritative shot_number that no LabFrog
-    record carries, and that the matcher left unattached, founds its own shot.
-    Other unattached events with the same identity group (local date, number,
+    record carries as its authority number (``labfrog_numbers``, ruling R3),
+    and that the matcher left unattached, founds its own shot. Other
+    unattached events with the same identity group (local date, number,
     shot_id - the rule the LabFrog-less build already uses) join it. LabFrog
     columns stay null; nothing is invented for them.
+
+    A trigger whose shot_key a LabFrog row already holds (same day and the
+    same *typed* number) founds nothing: two shots cannot share a key, and
+    the typed number is not evidence that they are one shot. It stays
+    unattached for review.
     """
-    triggers = [
-        event for event in events if _is_trigger_only_candidate(event, labfrog_numbers)
-    ]
+
+    def _founded_key(event: dict[str, Any]) -> str | None:
+        group = _identity_group_key(event, campaign_timezone=campaign_timezone)
+        if group is None:
+            return None
+        shot_date, shot_number, _shot_id = group
+        return make_shot_key(experiment_id, shot_date or None, shot_number)
+
+    triggers = []
+    for event in events:
+        if not _is_trigger_only_candidate(event, labfrog_numbers):
+            continue
+        founded_key = _founded_key(event)
+        if founded_key is not None and founded_key in taken_shot_keys:
+            continue
+        triggers.append(event)
     if not triggers:
         return []
     trigger_groups = {
@@ -1468,12 +1551,20 @@ def reconcile_canonical_shots(  # noqa: C901
         for shot in canonical:
             shot["experiment_id_source"] = "labfrog"
         if include_trigger_only:
+            # The union's number set is the authority's numbers only (R3): a
+            # trigger is not absorbed by a row whose number was typed.
+            authority_numbers = {
+                number
+                for shot in canonical
+                if (number := _authority_number(shot)) is not None
+            }
             trigger_only = _trigger_only_shots(
                 normalized_events,
-                {shot["shot_number"] for shot in canonical},
+                authority_numbers,
                 experiment_id,
                 source_key,
                 campaign_timezone=campaign_timezone,
+                taken_shot_keys={shot["shot_key"] for shot in canonical},
             )
             trigger_only_keys = {shot["shot_key"] for shot in trigger_only}
             canonical.extend(trigger_only)
@@ -3134,6 +3225,10 @@ def _canonical_from_labfrog(
     local_count = _as_optional_int(record.get("local_count"))
     if local_count is not None:
         canonical["labfrog_local_count"] = local_count
+    # The only number authoritative triggers are matched on (ruling R3).
+    authority_number = _authority_number(record)
+    if authority_number is not None:
+        canonical["authority_shot_number"] = authority_number
     return canonical
 
 
@@ -3328,10 +3423,10 @@ def _match_event(
     2026-09-30) the three time-based ranks (``exact_day_shot_number_time_window``,
     ``shot_number_time_window``, ``nearest_time``) never attach: the shot(s) they
     would have picked are returned as review candidates with status
-    ``ambiguous`` instead. Numbers are then trusted as identity, so an
-    authoritative ``shot_number`` that names exactly one shot attaches on the
-    number alone (rank ``shot_number``). Before that ruling a trigger numbered 1
-    with no LabFrog shot 1 was attached by nearest time to LabFrog shot 2.
+    ``ambiguous`` instead. An authoritative ``shot_number`` that names exactly
+    one row by its ``authority_shot_number`` attaches on the number alone
+    (rank ``shot_number``). Before A7, a trigger numbered 1 with no matching
+    LabFrog shot was attached by nearest time to LabFrog shot 2.
     """
     result = _match_event_ranked(
         event,
@@ -3353,7 +3448,11 @@ def _match_event(
 def _attribution_candidate_keys(
     event: dict[str, Any], shots: list[dict[str, Any]]
 ) -> list[str]:
-    """Offer watchdog candidate numbers as review choices, never as an auto-match."""
+    """Offer watchdog candidate numbers as review choices, never as an auto-match.
+
+    The candidates are authority numbers, so they name only rows carrying
+    them as ``authority_shot_number`` (ruling R3), never a typed number.
+    """
     metadata = event.get("metadata")
     attribution = metadata.get("attribution") if isinstance(metadata, dict) else None
     numbers = attribution.get("candidates") if isinstance(attribution, dict) else None
@@ -3364,7 +3463,7 @@ def _attribution_candidate_keys(
         dict.fromkeys(
             shot["shot_key"]
             for shot in shots
-            if shot.get("shot_number") in candidate_numbers
+            if _authority_number(shot) in candidate_numbers
             and not _as_bool(shot.get("metadata", {}).get("has_newer_version"))
         )
     )
@@ -3376,10 +3475,13 @@ def _unique_number_match(
     """The one shot holding ``shot_number``, if exactly one does (plan W6.2).
 
     With unique shot numbers the number alone is the identity, on any day. A
-    number several shots hold (per-day numbering, a rebase) is not, and falls
-    through to the day and time ranks, which then only propose.
+    number several shots hold (a rebase) is not, and falls through to the day
+    and time ranks, which then only propose. Only the authority's number
+    counts (ruling R3): a row whose number was typed holds none.
     """
-    same_number = [shot for shot in candidates if shot["shot_number"] == shot_number]
+    same_number = [
+        shot for shot in candidates if _authority_number(shot) == shot_number
+    ]
     if len(same_number) != 1:
         return None
     only = same_number[0]
@@ -3449,13 +3551,15 @@ def _match_by_number_and_time(
 
     Split out of ``_match_event_ranked`` unchanged when the unique-number
     rank was added (ruling A7): it is the whole ladder when time
-    auto-assignment is on, and only proposes when it is off.
+    auto-assignment is on, and only proposes when it is off. The number ranks
+    compare the authority's number only (ruling R3); with no row carrying
+    it, a numbered event falls through to the time rank.
     """
     if shot_number is not None and event_date:
         exact = [
             shot
             for shot in candidates
-            if shot["shot_number"] == shot_number
+            if _authority_number(shot) == shot_number
             and shot.get("shot_date") == event_date
         ]
         if len(exact) == 1:
@@ -3473,7 +3577,7 @@ def _match_by_number_and_time(
 
     if shot_number is not None:
         same_number = [
-            shot for shot in candidates if shot["shot_number"] == shot_number
+            shot for shot in candidates if _authority_number(shot) == shot_number
         ]
         nearest = _unique_nearest_shot(
             same_number,

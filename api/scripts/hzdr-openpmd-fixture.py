@@ -71,6 +71,9 @@ def write_labfrog_export(path: Path) -> None:
             data=np.asarray(["lf-0001", "lf-0002", "lf-0003"], dtype=string_dtype),
         )
         shots.create_dataset("shot_number", data=[101, 102, 103])
+        # Synthetic rows represent LabFrog claims of the shot authority's
+        # numbers. Typed numbers alone must not absorb trigger events.
+        shots.create_dataset("authority_shot_number", data=[101, 102, 103])
         shots.create_dataset(
             "shot_date", data=np.asarray([SHOT_DATE] * 3, dtype=string_dtype)
         )

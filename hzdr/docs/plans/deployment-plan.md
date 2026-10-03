@@ -123,8 +123,8 @@ sudo install -d -o tippey -g tippey /data/damnit/hzdr/spool/kafka
 DW_API_HZDR_KAFKA_SPOOL__ENABLED=true
 DW_API_HZDR_KAFKA_SPOOL__BOOTSTRAP_SERVERS=149.220.77.19:9092   # this VM's broker; NOT localhost, see below
 DW_API_HZDR_KAFKA_SPOOL__TOPICS=["draco.trigger","planet.watchdog.events"]
-DW_API_HZDR_KAFKA_SPOOL__CAMPAIGN=<canonical-campaign-slug>   # e.g. Solenoid_Beamline_Tests_01.2025 (illustrative only; pilot value is Pilot_Verification_07.2026)
-DW_API_HZDR_KAFKA_SPOOL__CONSUMER_GROUP=damnit-kafka
+DW_API_HZDR_KAFKA_SPOOL__CAMPAIGN=Beamline_radbio_2026   # fallback for messages with no experiment_id
+DW_API_HZDR_KAFKA_SPOOL__CONSUMER_GROUP=damnit
 DW_API_HZDR_KAFKA_SPOOL__SPOOL_DIR=/data/damnit/hzdr/spool/kafka
 DW_API_HZDR_KAFKA_SPOOL__FILENAME=trigger.jsonl
 
@@ -146,7 +146,7 @@ nothing there (found 2026-10-02, when the shot authority failed on it).
 
 ```bash
 sudo systemctl restart damnit-api
-journalctl -u damnit-api -f --no-pager    # watch for "KafkaSpoolConsumer started"
+sudo journalctl -u damnit-api -f --no-pager    # watch for "Kafka spool consumer started"
 
 # After a minute, check the health endpoint:
 curl -s http://localhost:8000/config/health | python3 -m json.tool

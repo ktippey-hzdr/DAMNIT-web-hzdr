@@ -104,16 +104,29 @@ def watchdog(
     }
 
 
-def labfrog_record(shot_number: int, *, experiment_id: str | None = None) -> dict:
+def labfrog_record(
+    shot_number: int,
+    *,
+    experiment_id: str | None = None,
+    claimed: bool = True,
+    shot_date: str = "2026-06-10",
+) -> dict:
+    """A LabFrog row; ``claimed`` rows carry the authority's number (schema 13).
+
+    A row typed by hand (``claimed=False``) has no ``authority_shot_number``
+    and is never number-matched (ruling R3).
+    """
     record: dict[str, Any] = {
         "record_index": shot_number,
-        "record_id": f"mongo-{shot_number}",
+        "record_id": f"mongo-{shot_number}-{shot_date}",
         "shot_number": shot_number,
-        "shot_date": "2026-06-10",
-        "labfrog_date_time": "2026-06-10T12:00:00Z",
+        "shot_date": shot_date,
+        "labfrog_date_time": f"{shot_date}T12:00:00Z",
         "campaign": CAMPAIGN,
         "metadata": {},
     }
+    if claimed:
+        record["authority_shot_number"] = shot_number
     if experiment_id is not None:
         record["experiment_id"] = experiment_id
     return record
@@ -216,7 +229,7 @@ def test_trigger_only_shot_joins_labfrog_records_in_one_union():
     assert set(shots_by_number) == {17, 99}
 
     joined = shots_by_number[17]
-    assert joined["labfrog_record_id"] == "mongo-17"
+    assert joined["labfrog_record_id"] == "mongo-17-2026-06-10"
     assert joined["match_status"] == "matched"
     assert joined["experiment_id_source"] == "labfrog"
 
@@ -276,6 +289,38 @@ def test_labfrog_record_and_trigger_join_on_shot_number():
     assert shot["match_quality"] == "exact_day_shot_number"
     trigger_event = next(e for e in events if e["source"] == "DRACO-Trigger")
     assert trigger_event["shot_key"] == shot["shot_key"]
+
+
+def test_authority_number_joins_even_when_operator_number_differs():
+    record = labfrog_record(5)
+    record["authority_shot_number"] = 701
+    shots, events = reconcile_canonical_shots(
+        [trigger(701)],
+        experiment_id=CAMPAIGN,
+        source_key=SOURCE_KEY,
+        labfrog_shots=[record],
+    )
+    assert len(shots) == 1
+    assert shots[0]["shot_number"] == 5
+    assert shots[0]["authority_shot_number"] == 701
+    trigger_event = next(e for e in events if e["source"] == "DRACO-Trigger")
+    assert trigger_event["shot_key"] == shots[0]["shot_key"]
+    assert trigger_event["match_status"] == "matched"
+
+
+def test_typed_number_never_absorbs_authoritative_trigger():
+    shots, events = reconcile_canonical_shots(
+        [trigger(17)],
+        experiment_id=CAMPAIGN,
+        source_key=SOURCE_KEY,
+        labfrog_shots=[labfrog_record(17, claimed=False)],
+    )
+    assert len(shots) == 1  # a duplicate trigger-only key is not invented
+    assert shots[0]["match_status"] == "labfrog-only"
+    assert "authority_shot_number" not in shots[0]
+    trigger_event = next(e for e in events if e["source"] == "DRACO-Trigger")
+    assert trigger_event["shot_key"] == ""
+    assert trigger_event["match_status"] != "matched"
 
 
 def test_time_ranks_only_propose_by_default():
@@ -348,7 +393,7 @@ def test_a_unique_number_attaches_on_the_number_alone_across_days():
     trigger_event = next(e for e in events if e["source"] == "DRACO-Trigger")
     assert trigger_event["match_quality"] == "shot_number"
     assert trigger_event["match_status"] == "matched"
-    assert by_number(shots)[17]["labfrog_record_id"] == "mongo-17"
+    assert by_number(shots)[17]["labfrog_record_id"] == "mongo-17-2026-06-10"
 
 
 def test_a_number_held_by_two_shots_is_only_proposed():
@@ -387,7 +432,7 @@ def test_numbered_triggers_near_another_labfrog_shot_stay_their_own_shots():
     )
     shots_by_number = by_number(shots)
     assert set(shots_by_number) == {1, 2, 3}
-    assert shots_by_number[2]["labfrog_record_id"] == "mongo-2"
+    assert shots_by_number[2]["labfrog_record_id"] == "mongo-2-2026-06-10"
     assert shots_by_number[1]["labfrog_record_id"] is None
     assert shots_by_number[3]["labfrog_record_id"] is None
 

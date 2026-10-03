@@ -38,6 +38,7 @@ def write_labfrog_export(path: Path) -> None:
             data=np.asarray(["mongo-day-one", "mongo-day-two"], dtype=string_dtype),
         )
         shots.create_dataset("shot_number", data=[1, 1])
+        shots.create_dataset("authority_shot_number", data=[1, 1])
         shots.create_dataset(
             "shot_date",
             data=np.asarray(["2025-01-15", "2025-01-16"], dtype=string_dtype),
@@ -227,6 +228,7 @@ def write_labfrog_export_with_duplicate_shot_number(path: Path) -> None:
             data=np.asarray(["mongo-dup-a", "mongo-dup-b"], dtype=string_dtype),
         )
         shots.create_dataset("shot_number", data=[1, 1])
+        shots.create_dataset("authority_shot_number", data=[1, 1])
         shots.create_dataset(
             "shot_date",
             data=np.asarray(["2025-01-16", "2025-01-16"], dtype=string_dtype),
@@ -518,8 +520,9 @@ def write_labfrog_sqlite_export(
     *,
     with_shot_status: bool = True,
     local_counts: list[int | None] | None = None,
+    claimed: bool = False,
 ) -> None:
-    """A curated LabFrog SQLite export shaped like labfrog-sqlite-tools v12.
+    """A curated LabFrog SQLite export, optionally with schema v13 claims.
 
     `with_shot_status=False` is an export written before the column existed.
     `local_counts` adds the v12 `shots.local_count` column, one value per row;
@@ -541,6 +544,9 @@ def write_labfrog_sqlite_export(
     if local_counts is not None:
         columns.append("local_count INTEGER")
         rows = [(*row, count) for row, count in zip(rows, local_counts, strict=True)]
+    if claimed:
+        columns.append("authority_shot_number INTEGER")
+        rows = [(*row, row[1]) for row in rows]
     with sqlite3.connect(path) as connection:
         connection.execute(f"CREATE TABLE shots ({', '.join(columns)})")
         placeholders = ", ".join("?" for _ in columns)
@@ -588,6 +594,7 @@ def test_labfrog_misfire_is_built_as_a_flagged_shot_not_dropped(tmp_path: Path):
             # Saved before LabFrog recorded a status: NULL reads as a shot.
             _labfrog_row(3, 2, None),
         ],
+        claimed=True,
     )
     misfire_trigger = tmp_path / "trigger-2.jsonl"
     write_trigger_event_v1(
