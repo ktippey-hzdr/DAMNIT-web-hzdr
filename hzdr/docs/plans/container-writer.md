@@ -294,7 +294,9 @@ master), backgrounds (`<campaign>_backgrounds.nxs`), and an entry-level plot
   containers; an unreadable file is left for a person. A collected container
   is **moved to `shots/.trash/<name>.<unix time>`, not deleted**, and purged
   after `TRASH_GRACE_S` (7 days): a build that missed a producer for once
-  costs a reconversion from the trash's grace, never the containers. It never
+  costs a reconversion, never the containers. A shot that comes back is
+  converted again from its raw files; restoring one from `.trash` instead is
+  a manual move. It never
   touches the lock, its guard, the pending marker, the manifest, temp or
   tombstone files, or any other name. A master with no acquisition at all
   collects nothing. A file held open on Windows is retried on a later pass.

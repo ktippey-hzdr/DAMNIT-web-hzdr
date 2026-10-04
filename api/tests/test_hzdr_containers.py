@@ -1561,7 +1561,7 @@ def test_the_trash_is_purged_after_its_grace(campaign, monkeypatch):
     assert list(trash.iterdir()) == []
 
 
-def test_a_preview_reads_one_frame_of_a_stack(tmp_path):
+def test_a_preview_reads_one_frame_of_a_stack(tmp_path, monkeypatch):
     """Review B5: a stack reached through a link is not read whole."""
     from damnit_api.metadata.hzdr_sources import preview_hdf5_dataset
 
@@ -1569,9 +1569,31 @@ def test_a_preview_reads_one_frame_of_a_stack(tmp_path):
     with h5py.File(path, "w") as handle:
         handle.create_dataset("stack", data=np.arange(3 * 130 * 70).reshape(3, 130, 70))
         handle.create_dataset("line", data=np.arange(1000))
+    reads: list = []
+    real = h5py.Dataset.__getitem__
+
+    def spy(self, selection):
+        reads.append(selection)
+        return real(self, selection)
+
+    monkeypatch.setattr(h5py.Dataset, "__getitem__", spy)
     image = preview_hdf5_dataset(path, "stack")
+    # One read, of the first frame only (never `...` or the whole stack).
+    assert len(reads) == 1
+    assert reads[0][0] == 0
     assert image.preview_kind == "image"
     assert len(image.preview) <= 65
     assert image.shape == [3, 130, 70]
     line = preview_hdf5_dataset(path, "line")
     assert len(line.preview) == 200
+
+
+def test_relink_asks_for_a_build_when_the_master_cannot_be_read(campaign, monkeypatch):
+    run = hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+
+    def busy(_master):
+        message = "being replaced"
+        raise OSError(message)
+
+    monkeypatch.setattr(hc, "linked_containers", busy)
+    assert hc.relink_needed(campaign["master"], [run]) == sorted(run.written)

@@ -1216,7 +1216,13 @@ def relink_needed(master: Path, runs: Iterable[ConversionSummary]) -> list[str]:
     removed = {name for run in runs for name in run.removed}
     if not (written or removed) or not master.is_file():
         return []
-    linked = linked_containers(master)
+    try:
+        linked = linked_containers(master)
+    except OSError as error:
+        # Being replaced (Windows) or unreadable: ask for the build anyway,
+        # which is cheap and links whatever is there.
+        logger.warning("Could not read %s's links: %s", master, error)
+        return sorted(written | removed)
     return sorted(
         {n for n in written if n.removesuffix(".nxs") not in linked}
         | {n for n in removed if n.removesuffix(".nxs") in linked}
