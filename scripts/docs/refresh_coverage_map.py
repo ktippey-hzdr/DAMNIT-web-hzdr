@@ -99,6 +99,7 @@ AREAS = (
         name="HZDR diagnostic packs and shot containers",
         files=(
             f"{A}/metadata/hzdr_containers.py",
+            f"{A}/metadata/hzdr_packs/mapping_rows.py",
             f"{A}/metadata/hzdr_packs/__init__.py",
             f"{A}/metadata/hzdr_packs/_h5.py",
             f"{A}/metadata/hzdr_packs/_images.py",
@@ -113,6 +114,7 @@ AREAS = (
         ),
         tests=(
             f"{T}/test_hzdr_containers.py",
+            f"{T}/test_hzdr_mapping_rows.py",
             f"{T}/test_hzdr_packs.py",
             f"{T}/test_hzdr_pack_readers.py",
             f"{T}/test_hzdr_packs_sync.py",

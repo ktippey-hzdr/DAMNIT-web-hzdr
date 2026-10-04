@@ -136,8 +136,12 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     master is read in slices, keeping only acquisition events. A
     missing/unreadable file drops that detector and is recorded in
     `/entry/conversion_problems`; a container that fails is recorded with its
-    error and the pass goes on. Held to the reference fixture's manifest minus
-    shot-aligner's mapping rows (their own phase). **Phase 4:** the builder
+    error and the pass goes on. Held to the reference fixture's manifest, all 101 contract nodes,
+    including shot-aligner's per-instrument mapping rows (**phase 4b**,
+    `hzdr_packs/mapping_rows.py`, a port of its `mappings.apply_to`: hard links
+    to the agreed paths, derived datasets for transforms, problems noted in
+    `/entry/mapping_problems`; the mapping files vendored into
+    `hzdr_packs/vendor/mappings/` and fingerprinted per instrument). **Phase 4:** the builder
     links the container of every shot that has an acquisition in this build
     (`hzdr_nexus.is_acquisition`) and whose file is in place (it names the
     shot's `shot_key`) from the master's `/entry/shot_containers`
@@ -311,7 +315,8 @@ default, `--apply`/`-Apply` re-vendors, `SHOT_ALIGNER_ROOT` overrides
 `../shot-aligner`): `hzdr/scripts/sync-hzdr-reference.{sh,ps1}` for the reference
 fixture in `api/tests/fixtures/hzdr-reference/`, and
 `hzdr/scripts/sync-hzdr-packs.{sh,ps1}` for the vendored readers, pack
-manifests and instrument catalogue in `metadata/hzdr_packs/vendor/`. `test-all.ps1` and `test-all.sh` run all three
+manifests, instrument catalogue and per-instrument mapping rows
+(`vendor/mappings/`) in `metadata/hzdr_packs/vendor/`. `test-all.ps1` and `test-all.sh` run all three
 checks and stop on drift.
 
 ## Conventions and boundaries

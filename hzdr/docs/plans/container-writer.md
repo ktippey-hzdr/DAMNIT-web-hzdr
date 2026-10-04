@@ -96,23 +96,56 @@ exactly where the manifest has it. Each detector also gets shot-aligner's
 not this host's mount of it. `recorded_offset_removed` is 0.0 with a
 description saying DAMNIT fits no offset (the contract lists the field).
 
-## 5. Mapping rows: **out of phase 3** (confirmed by review: a phase of its own)
+## 5. Mapping rows: phase 4b, `hzdr_packs/mapping_rows.py`
 
-shot-aligner's `mappings.apply_to` (reviewed NDS rows linking pack output to
-agreed paths) is about 1,600 lines with its catalogue and profile checks, and
-20 of the 40 mappings still carry ids awaiting the maintainer. It is a tracked
-follow-up. These manifest contract nodes are therefore not produced:
+shot-aligner's `mappings.apply_to` (the reviewed and proposed NDS rows that
+link pack output to agreed paths) is ported to h5py with its rules intact:
 
-- `/entry/collection_M1_Spec_Fib_Cer` and its five links (`black_level`,
-  `chip_size_x`, `chip_size_y`, `gamma`, `image_file`);
-- in `/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer`:
-  `description` and `frame_start_number`;
-- the aliases those two create: `fabrication/model` is then not a link to
-  `description`, and `raw_data/sequence_number` not a link to
-  `frame_start_number` (both nodes are still written, by the pack).
+- **Additive.** A row hard-links the dataset the pack wrote to the agreed path
+  (shot-aligner's `NXlink`), so both names stay valid. A row with
+  `value_transform`/`convert_to_unit` writes a new dataset instead, stamped
+  `derived_from`, with the factors shot-aligner's `TRANSFORM_FACTORS` and
+  `UNIT_SCALE` hold; anything else is reported, never guessed.
+- **Reported, never forced.** A source the acquisition did not write, a target
+  another instrument already claimed, a group the build wrote, a dataset no
+  mapping wrote, or a row placed for a detector or machine this diagnostic is
+  no longer written as: each is one line in the container's own
+  `/entry/mapping_problems` note (kept apart from `conversion_problems`), and
+  the other rows are still written.
+- **Stamped.** Every linked or derived dataset carries `mapped_from`,
+  `mapping_status`, `nds_local_name`, `nds_status`, `source_path` (plus
+  `nds_confidence`, `registry_key`, the row's note as `description`).
+- **Definitions.** A mapping's application definition is recorded on its
+  detector (`nds_definition`); rows placed in `/entry/<detector>` go to an
+  `NXsubentry` carrying `definition`, whose `NXdata` is told to plot what the
+  detector plots. Without a subentry it is claimed on the entry only when the
+  container holds that one instrument.
+- **Applied last**, after every detector and the shot's own fields, as in
+  shot-aligner's build; for every detector kept, by its `instrument.id`.
+- **As shot-aligner writes them.** A link carries nexusformat's `target`
+  attribute (the original name) unless the dataset already had one;
+  `source_path` and `derived_from` have no leading slash. Attributes stamped on
+  a hard link are the pack's dataset's too, as in nexusformat. Checked against
+  shot-aligner's own build of the reference shot: the definition subentry
+  matches its manifest node for node, and `/entry/mapping_problems` holds the
+  same lines as the mapping part of its `/entry/alignment/problems`.
+- **Deliberate differences.** A row that raises costs that row only (the
+  original would fail the build); `nds_subentry` and the subentry plot are
+  set only when a row actually landed in the subentry.
+- **Listing.** A linked dataset has two names, and `visititems` reports the
+  first in name order, which can be its subentry name. Shot detail lists each
+  dataset once, under the detector's own name; a derived value (one name
+  only) is listed where the mapping wrote it.
 
-The exit test lists exactly these and fails if any other contract node is
-missing or different.
+The mapping files are vendored byte for byte from shot-aligner's
+`config/mappings/` into `hzdr_packs/vendor/mappings/` by
+`sync-hzdr-packs` (a mapping added or removed upstream is drift, and `--apply`
+brings or removes it). They are data: the conversion-code digest leaves them
+out, and each container's fingerprint carries the sha256 of the mappings of
+the instruments it holds, so changing one mapping rebuilds only the shots
+holding that instrument. The reference container now matches all 101 contract
+nodes; the definition subentries stay outside the contract, as in shot-aligner's
+fixture.
 
 ## 6. Worker
 
