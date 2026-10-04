@@ -93,6 +93,9 @@ def check(repo: Path, dest: Path = DEST) -> list[str]:
             f"{MANIFEST} lists {sorted(set(recorded['files']) ^ set(files_now))} "
             "differently from the files this script vendors"
         )
+    vendored = {f"mappings/{p.name}" for p in (dest / "mappings").glob("*.json")}
+    for stray in sorted(vendored - set(files_now)):
+        problems.append(f"{stray}: vendored but not recorded (it would be loaded)")
     for name in files_now:
         path = dest / name
         if not path.is_file():
@@ -123,6 +126,8 @@ def check(repo: Path, dest: Path = DEST) -> list[str]:
 
 
 def apply(repo: Path, force: bool, dest: Path = DEST) -> None:
+    if not (repo / _MAPPINGS).is_dir():
+        sys.exit(f"not found in {repo}: {_MAPPINGS} (refusing to drop every mapping)")
     wanted = _files(repo)
     missing = [s for s in wanted.values() if not (repo / s).is_file()]
     if missing:

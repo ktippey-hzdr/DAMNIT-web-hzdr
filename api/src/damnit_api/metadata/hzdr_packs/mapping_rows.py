@@ -432,9 +432,9 @@ def _stamp(
     for key, value in derived.items():
         stamp[key] = value
     if derived:
-        stamp["derived_from"] = f"/{source}"
+        stamp["derived_from"] = source
         stamp["NOTE"] = (
-            f"DERIVED, not a link: this value was computed from /{source} by the "
+            f"DERIVED, not a link: this value was computed from {source} by the "
             f"{decision} for {mapping.instrument}. The number there is the one the "
             "instrument reported."
         )
@@ -448,7 +448,7 @@ def _stamp(
         stamp["registry_key"] = row["registry_key"]
     if row.get("note"):
         stamp["description"] = row["note"]
-    stamp["source_path"] = f"/{source}"
+    stamp["source_path"] = source  # as shot-aligner writes it: no leading slash
 
 
 def _write_value(
@@ -463,10 +463,15 @@ def _write_value(
     parent, _, leaf = target.rpartition("/")
     if not is_derived(row):
         try:
-            handle[parent][leaf] = handle[source]  # a hard link: one object, two names
+            linked = handle[source]
+            handle[parent][leaf] = linked  # a hard link: one object, two names
         except (KeyError, OSError, ValueError, TypeError) as error:
             problems.append(f"{mapping.instrument}: could not link /{target}: {error}")
             return None
+        # What nexusformat's makelink records: the original name, so a NeXus
+        # reader sees a link and not a second field.
+        if "target" not in linked.attrs:
+            linked.attrs["target"] = f"/{source}"
         return {}
     node = handle[source]
     try:
@@ -562,10 +567,16 @@ def apply_to(
     decision = (
         "reviewed mapping" if mapping.is_reviewed else "unreviewed proposed mapping"
     )
-    in_subentry = sum(
-        _write_row(handle, row, detector_path, mapping, problems)
-        for row in mapping.written_rows
-    )
+    in_subentry = 0
+    for row in mapping.written_rows:
+        try:
+            in_subentry += _write_row(handle, row, detector_path, mapping, problems)
+        except (KeyError, OSError, ValueError, TypeError) as error:
+            # One row that cannot be written costs that row, not the others.
+            problems.append(
+                f"{mapping.instrument}: mapping row {row.get('local_name')!r} "
+                f"failed: {type(error).__name__}: {error}"
+            )
     if not mapping.definition:
         return problems
     subentry = f"entry/{subentry_name(detector_path)}"

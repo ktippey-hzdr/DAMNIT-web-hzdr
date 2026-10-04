@@ -444,18 +444,56 @@ def list_container_datasets(
         except (KeyError, OSError):
             return None, []
 
-        def collect_dataset(name, item):
-            if isinstance(item, h5py.Dataset):
-                datasets.append(
-                    HZDRHDF5Dataset(
-                        name=f"{link}/{name}",
-                        shape=[int(value) for value in item.shape],
-                        dtype=str(item.dtype),
-                    )
+        for name, item in _container_datasets(container):  # pyright: ignore[reportArgumentType]
+            datasets.append(
+                HZDRHDF5Dataset(
+                    name=f"{link}/{name}",
+                    shape=[int(value) for value in item.shape],
+                    dtype=str(item.dtype),
                 )
-
-        container.visititems(collect_dataset)  # pyright: ignore[reportAttributeAccessIssue]
+            )
     return link, datasets
+
+
+# Groups that hold second names for a detector's data: a mapping's definition
+# subentry and its collection_/process_ groups (phase 4b, hard links).
+def _is_view(group, name: str) -> bool:
+    nx_class = group.attrs.get("NX_class", "")
+    if isinstance(nx_class, bytes):
+        nx_class = nx_class.decode()
+    return nx_class == "NXsubentry" or name.startswith(("collection_", "process_"))
+
+
+def _container_datasets(entry) -> list[tuple[str, Any]]:
+    """Each dataset of a container once, under the detector's own name.
+
+    ``visititems`` reports an object once, under its first name in name order,
+    which for a dataset a mapping row linked can be its subentry name
+    (``Reflected_515_Spectrometer/...`` sorts before
+    ``Reflected_light_spectroscopy/...``). Every name is walked here and the
+    one outside a mapping's view is kept; a derived value, which has no other
+    name, is listed where the mapping wrote it.
+    """
+    import h5py
+
+    best: dict[Any, tuple[bool, str, Any]] = {}
+
+    def walk(group, prefix: str, in_view: bool, ancestors: tuple) -> None:
+        for name in sorted(group):
+            item = group.get(name)
+            if item is None:
+                continue  # a dangling link
+            here = f"{prefix}{name}"
+            if isinstance(item, h5py.Dataset):
+                key = (in_view, here)
+                if item.id not in best or key < best[item.id][:2]:
+                    best[item.id] = (in_view, here, item)
+            elif isinstance(item, h5py.Group) and item.id not in ancestors:
+                view = in_view or _is_view(item, name)
+                walk(item, f"{here}/", view, (*ancestors, item.id))
+
+    walk(entry, "", False, (entry.id,))
+    return sorted((name, item) for _, name, item in best.values())
 
 
 def preview_hdf5_dataset(path: Path, dataset_name: str) -> HZDRDatasetPreview:

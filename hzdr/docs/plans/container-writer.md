@@ -122,6 +122,20 @@ link pack output to agreed paths) is ported to h5py with its rules intact:
   container holds that one instrument.
 - **Applied last**, after every detector and the shot's own fields, as in
   shot-aligner's build; for every detector kept, by its `instrument.id`.
+- **As shot-aligner writes them.** A link carries nexusformat's `target`
+  attribute (the original name) unless the dataset already had one;
+  `source_path` and `derived_from` have no leading slash. Attributes stamped on
+  a hard link are the pack's dataset's too, as in nexusformat. Checked against
+  shot-aligner's own build of the reference shot: the definition subentry
+  matches its manifest node for node, and `/entry/mapping_problems` holds the
+  same lines as the mapping part of its `/entry/alignment/problems`.
+- **Deliberate differences.** A row that raises costs that row only (the
+  original would fail the build); `nds_subentry` and the subentry plot are
+  set only when a row actually landed in the subentry.
+- **Listing.** A linked dataset has two names, and `visititems` reports the
+  first in name order, which can be its subentry name. Shot detail lists each
+  dataset once, under the detector's own name; a derived value (one name
+  only) is listed where the mapping wrote it.
 
 The mapping files are vendored byte for byte from shot-aligner's
 `config/mappings/` into `hzdr_packs/vendor/mappings/` by

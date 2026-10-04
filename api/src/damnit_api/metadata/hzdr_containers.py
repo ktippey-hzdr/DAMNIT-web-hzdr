@@ -92,6 +92,7 @@ RESERVED_ENTRY_NAMES = frozenset({
     "data",
     "labfrog_shot",
     "conversion_problems",
+    "mapping_problems",
 })
 RESERVED_INSTRUMENT_NAMES = frozenset({"name"})
 
@@ -843,7 +844,7 @@ def _write_acquisition(
         )
         return
     result.detectors += 1
-    result.kept.append((detector.name, acquisition.instrument_id))
+    result.kept.append((detector.name or "", acquisition.instrument_id or ""))
     role = acquisition.timing_role
     _h5.field(
         detector,
@@ -1341,6 +1342,7 @@ def _record(
     if result is not None:
         record["missing"] = result.missing
         record["problems"] = len(result.problems)
+        record["mapping_problems"] = len(result.mapping_problems)
         record["detectors"] = result.detectors
         record["omitted"] = result.omitted
     return record

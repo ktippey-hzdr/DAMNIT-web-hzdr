@@ -71,7 +71,8 @@ def test_a_row_links_the_packs_dataset_under_a_second_name(handle):
     assert handle["entry/collection_Cam"].attrs["NX_class"] == "NXcollection"
     assert linked.attrs["mapped_from"] == "Cam"
     assert linked.attrs["mapping_status"] == "reviewed"
-    assert linked.attrs["source_path"] == f"/{DETECTOR}/model"
+    assert linked.attrs["source_path"] == f"{DETECTOR}/model"
+    assert linked.attrs["target"] == f"/{DETECTOR}/model"  # as makelink records
 
 
 def test_a_transformed_row_writes_a_derived_dataset(handle):
@@ -88,7 +89,8 @@ def test_a_transformed_row_writes_a_derived_dataset(handle):
     assert derived[()] == pytest.approx(2.0 * 2.354_820_045_030_949_3 * 1000)
     assert derived.attrs["units"] == "um"
     assert derived.attrs["units_converted_from"] == "mm"
-    assert derived.attrs["derived_from"] == f"/{DETECTOR}/fit/width"
+    assert derived.attrs["derived_from"] == f"{DETECTOR}/fit/width"
+    assert "target" not in derived.attrs  # derived, not a link
     assert handle[f"{DETECTOR}/fit/width"][()] == pytest.approx(2.0)  # unchanged
 
 

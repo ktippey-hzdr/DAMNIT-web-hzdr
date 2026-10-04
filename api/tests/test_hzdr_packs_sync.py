@@ -16,6 +16,8 @@ import shutil
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO = Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "hzdr" / "scripts" / "sync_hzdr_packs.py"
 
@@ -115,3 +117,21 @@ def test_a_mapping_removed_upstream_is_removed_by_apply(tmp_path):
     sync.apply(repo, force=True, dest=dest)
     assert not (dest / "mappings" / "BAM.json").exists()
     assert sync.check(repo, dest) == []
+
+
+def test_a_stray_vendored_mapping_is_drift(tmp_path):
+    dest = tmp_path / "vendor"
+    shutil.copytree(sync.DEST, dest)
+    (dest / "mappings" / "Stray.json").write_text("{}", encoding="utf-8")
+    problems = sync.check(tmp_path / "no-shot-aligner", dest)
+    assert any("Stray.json" in p for p in problems)
+
+
+def test_apply_refuses_a_checkout_without_mappings(tmp_path):
+    repo = _fake_shot_aligner(tmp_path / "repo")
+    shutil.rmtree(repo / sync._MAPPINGS)
+    dest = tmp_path / "vendor"
+    shutil.copytree(sync.DEST, dest)
+    with pytest.raises(SystemExit):
+        sync.apply(repo, force=True, dest=dest)
+    assert list((dest / "mappings").glob("*.json"))

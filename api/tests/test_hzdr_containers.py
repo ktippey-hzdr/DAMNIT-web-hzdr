@@ -184,7 +184,7 @@ def _contract_scope(path: str) -> bool:
     return not any(path == p or path.startswith(p + "/") for p in excluded)
 
 
-def test_the_excluded_nodes_are_exactly_the_mapping_rows():
+def test_the_mapping_row_nodes_are_in_the_contract():
     contract = contract_nodes(_manifest())
     assert contract_nodes(_manifest()).keys() >= MAPPING_ROW_NODES
     for alias in MAPPING_ROW_ALIASES:
@@ -281,8 +281,11 @@ def _pack_subtree(nodes: dict, detector: str) -> dict:
 
 
 def _without_row_note(written: dict, node: dict) -> tuple[dict, dict]:
-    """A row's note becomes the dataset's description (as in shot-aligner)."""
+    """A row's note becomes the dataset's description (as in shot-aligner), and
+    its link records ``target`` where the pack's dataset had none."""
     node = copy.deepcopy(node)
+    if "target" not in node.get("attrs", {}):
+        written.get("attrs", {}).pop("target", None)
     for attrs in (written.get("attrs", {}), node.get("attrs", {})):
         attrs.pop("description", None)
     for each in (written, node):
@@ -1504,6 +1507,15 @@ def test_the_shot_detail_lists_its_container_through_the_master(campaign):
     assert link == "20251201_001042"
     names = {d.name for d in datasets}
     assert names
+    # A dataset a mapping row linked into the definition subentry is listed
+    # under the detector's own name, once.
+    detector = f"{link}/Reflected_light_spectroscopy/Reflected_515_Spectrometer"
+    assert f"{detector}/count_time" in names
+    assert (
+        f"{link}/Reflected_515_Spectrometer/instrument/Reflected_515_Spectrometer"
+        "/count_time"
+    ) not in names
+    assert f"{link}/Reflected_515_Spectrometer/definition" in names  # its own
     assert all(n.startswith(link + "/") for n in names)
     # The campaign file's own listing does not descend into the link.
     assert not any(
