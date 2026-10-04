@@ -158,10 +158,16 @@ lives in `damnit_api.metadata.hzdr_containers`.
   (exit 1). The window left is a reclaim landing between a refresh and the
   rename it guards, which needs a 30-minute stall to end in those
   microseconds.
-- **The guard is shared by every user.** It is created 0666 (`umask` aside),
-  and one another user created without write access is opened read-only,
-  which `flock` and `msvcrt.locking` accept, so an operator's manual builder
-  run beside the service user's guard is serialized, not refused.
+- **The guard is shared by every user.** It is created and then chmodded
+  0666, and one another user created without write access is opened
+  read-only, which `flock` and `msvcrt.locking` accept, so an operator's
+  manual builder run beside the service user's guard is serialized, not
+  refused. On NFS, where Linux emulates `flock` with a byte-range lock that
+  refuses a read-only descriptor (`EBADF`), that run falls back to "no kernel
+  locks" (no reclaim). Guards made before this change are 0644: `chmod 0666`
+  any existing `*.lock.guard` when deploying.
+- **A worker stuck forever on a dead mount keeps its lock** (its PID is
+  alive). Kill it; the next worker reclaims the lock from the dead PID.
 - **Reclaiming a stale lock is serialized.** Every create, reclaim and release
   runs under a kernel lock on a sidecar `<lock>.guard` (`flock` on POSIX,
   `msvcrt.locking` on Windows; held for milliseconds, released by the kernel

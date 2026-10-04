@@ -1096,7 +1096,10 @@ def _clear_earlier_temps(folder: Path, nonce: str) -> None:
     """Remove temp containers no writer holding the lock now will publish."""
     for stale in folder.glob(f"*.nxs*{_TMP_SUFFIX}"):
         if not (nonce and stale.name.endswith(f".{nonce}{_TMP_SUFFIX}")):
-            stale.unlink(missing_ok=True)
+            try:
+                stale.unlink(missing_ok=True)
+            except OSError as error:  # Windows: still open by an overtaken writer
+                logger.warning("Could not remove temp file %s: %s", stale, error)
 
 
 def _checked(heartbeat: Callable[[], None] | None) -> None:

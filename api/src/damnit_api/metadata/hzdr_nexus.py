@@ -190,9 +190,12 @@ def _judge_lock(
 # How long an acquirer waits for another's create/reclaim/release step, which
 # takes milliseconds; the guard is never held while a lock is held.
 GUARD_TIMEOUT_S = 10.0
+# EBADF: Linux emulates flock on NFS as a byte-range lock, which refuses an
+# exclusive lock on a read-only descriptor (a guard another user created).
+# Treated like no kernel locks: nothing is reclaimed, a free lock is taken.
 _GUARD_UNSUPPORTED = {
     getattr(errno, name)
-    for name in ("ENOLCK", "EOPNOTSUPP", "ENOTSUP", "ENOSYS", "EINVAL")
+    for name in ("ENOLCK", "EOPNOTSUPP", "ENOTSUP", "ENOSYS", "EINVAL", "EBADF")
     if hasattr(errno, name)
 }
 
@@ -248,7 +251,7 @@ def _open_guard(guard: Path) -> int:
     """Open (creating) the guard, writable by every user; read-only if need be.
 
     The service user and an operator running the builder by hand share it, so
-    a new guard is made 0666 (``umask`` aside, errors ignored); one another
+    a new guard is chmodded 0666 (over the umask; errors ignored); one another
     user created without write access is opened read-only, which ``flock`` and
     ``msvcrt.locking`` (a read handle suffices for ``LockFile``) both accept.
     """
