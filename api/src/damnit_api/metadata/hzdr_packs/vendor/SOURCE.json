@@ -1,5 +1,5 @@
 {
-  "commit": "9f5a56d",
+  "commit": "856d814",
   "files": {
     "camera_metadata.py": {
       "from": "shot_aligner/scripts/shotalign/camera_metadata.py",
@@ -8,6 +8,10 @@
     "camera_png_csv.json": {
       "from": "shot_aligner/scripts/shotalign/diagnostics/camera_png_csv.json",
       "sha256": "3235c5f20df0c0a05bfd73bf7ae60d56e277b706d5c200c313db408c574d4951"
+    },
+    "hzdr-draco-0.2.0.json": {
+      "from": "shot_aligner/config/instrument-catalogue/hzdr-draco-0.2.0.json",
+      "sha256": "bad5d3b2d87a70dad08321e92a3ba550cfa29a2ae7478a3176c9a10369d66e8d"
     },
     "img_csv.py": {
       "from": "polina/img_csv.py",
@@ -31,5 +35,5 @@
     }
   },
   "repository": "https://codebase.helmholtz.cloud/tippey27/shot-aligner",
-  "source": "shot-aligner readers, pack helpers and pack manifests"
+  "source": "shot-aligner readers, pack helpers, pack manifests and the instrument catalogue"
 }

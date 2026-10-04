@@ -6,7 +6,8 @@
 .DESCRIPTION
     shot-aligner owns the format readers (polina/img_csv.py, polina/irr8.py),
     the helpers its packs write through (camera_metadata.py, nxwrite.py) and
-    the packs' manifests (diagnostics/<pack>.json). DAMNIT-web-hzdr vendors
+    the packs' manifests (diagnostics/<pack>.json), and pins NDS's instrument
+    catalogue (config/instrument-catalogue/). DAMNIT-web-hzdr vendors
     them byte for byte into api/src/damnit_api/metadata/hzdr_packs/vendor/,
     with SOURCE.json recording the shot-aligner commit and every file's sha256.
     The packs themselves are rewritten to h5py, not vendored.

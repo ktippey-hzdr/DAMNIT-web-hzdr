@@ -19,7 +19,11 @@ What DAMNIT uses from them:
     default plot, and DAMNIT resolves recorded paths itself.
 ``<pack>.json``
     each pack's declarative manifest (which suffixes are the measurement,
-    which scale a viewer is asked to use), read by :func:`manifest`.
+    which scale a viewer is asked to use, the file-name patterns ``claim()``
+    reads ``seq`` and ``label`` from), read by :func:`manifest`.
+``hzdr-draco-0.2.0.json``
+    NDS's DRACO instrument catalogue, the copy shot-aligner pins; the
+    container writer names its groups from it (:func:`catalogue`).
 """
 
 from __future__ import annotations
@@ -29,6 +33,7 @@ from functools import cache
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
+CATALOGUE_FILE = "hzdr-draco-0.2.0.json"
 
 
 @cache
@@ -60,3 +65,10 @@ def signal_scale_type(pack_id: str) -> str | None:
 def bmp_frame_suffixes(pack_id: str) -> tuple[str, ...]:
     """``Pack.bmp_frame_suffixes``: BMP frames, in order of preference."""
     return tuple(manifest(pack_id)["claims"].get("bmpFrameSuffixes", ()))
+
+
+@cache
+def catalogue() -> dict[str, dict]:
+    """The vendored instrument catalogue's entries, by ``instrument.id``."""
+    data = json.loads((HERE / CATALOGUE_FILE).read_text(encoding="utf-8"))
+    return {entry["id"]: entry for entry in data["entries"]}

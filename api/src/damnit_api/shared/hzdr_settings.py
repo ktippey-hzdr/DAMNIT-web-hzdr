@@ -268,6 +268,15 @@ class HZDRBuilderSettings(BaseModel):
     python_executable: str = ""
     script_path: Path | None = None
     extra_args: list[str] = Field(default_factory=list)
+    # Shot containers (campaign output plan phase 3): start
+    # ``hzdr-container-worker.py`` before and after each build, outside the
+    # campaign lock, to write <campaign folder>/shots/<date>_<number>.nxs.
+    # Off by default, so a deployment is unchanged until it opts in.
+    containers_enabled: bool = False
+    # Multi-campaign mode: also convert the _unassigned bucket. Off: its shots
+    # are converted again once a campaign claims them.
+    containers_include_unassigned: bool = False
+    container_worker_script: Path | None = None
 
     @property
     def multi_campaign(self) -> bool:

@@ -1,6 +1,11 @@
+import contextlib
 import json
 import os
+import socket
 import sqlite3
+import sys
+import threading
+import time
 from pathlib import Path
 from typing import cast
 
@@ -12,6 +17,7 @@ from damnit_api.metadata.hzdr_nexus import (
     HZDR_BRIDGE_PROFILE_VERSION,
     HZDR_TARGET_PROFILE_VERSION,
     BuilderAlreadyRunningError,
+    LockLostError,
     _first_shot_laser,
     _first_shot_target,
     _first_shot_vacuum,
@@ -25,6 +31,7 @@ from damnit_api.metadata.hzdr_nexus import (
     read_labfrog_nexus_shots,
     read_labfrog_sqlite_shots,
     reconcile_canonical_shots,
+    replace_with_retry,
     review_sidecar_backup_path,
     review_sidecar_path,
     single_writer_lock,
@@ -1869,9 +1876,372 @@ def test_single_writer_lock_reclaims_a_stale_lock_from_a_dead_pid(tmp_path: Path
     lock_path.write_text("999999999", encoding="utf-8")
 
     with single_writer_lock(output_nexus):
-        assert lock_path.read_text(encoding="utf-8").strip() == str(os.getpid())
+        host, pid, *_ = lock_path.read_text(encoding="utf-8").split(":")
+        assert (host, int(pid)) == (socket.gethostname(), os.getpid())
 
     assert not lock_path.exists()
+
+
+# --- Lock hardening: host:pid:start, empty locks, recycled PIDs, age ---
+
+
+def _age(path: Path, seconds: float) -> None:
+    now = time.time()
+    os.utime(path, (now - seconds, now - seconds))
+
+
+def test_the_lock_names_host_pid_and_process_start(tmp_path: Path):
+    with single_writer_lock(tmp_path / "c.nxs"):
+        text = (tmp_path / "c.nxs.lock").read_text(encoding="utf-8")
+    host, pid, start, nonce = text.split(":")
+    assert nonce  # unique per acquisition: a release removes only its own lock
+    assert host == socket.gethostname()
+    assert int(pid) == os.getpid()
+    if Path("/proc/self/stat").exists():
+        assert start  # Linux: the process start time, which a recycled PID lacks
+
+
+def test_an_empty_lock_being_written_is_held(tmp_path: Path):
+    """Between O_EXCL create and the PID write the file is empty: not stale."""
+    (tmp_path / "c.nxs.lock").write_text("", encoding="utf-8")
+    with (
+        pytest.raises(BuilderAlreadyRunningError),
+        single_writer_lock(tmp_path / "c.nxs"),
+    ):
+        pass  # pragma: no cover
+
+
+def test_an_empty_lock_left_by_a_crash_is_reclaimed(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    lock.write_text("", encoding="utf-8")
+    _age(lock, 60)
+    with single_writer_lock(tmp_path / "c.nxs"):
+        assert lock.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(not Path("/proc/self/stat").exists(), reason="needs /proc")
+def test_a_recycled_pid_on_this_host_is_reclaimed(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    # Our own (alive) PID, but with a start time it never had: a PID reused
+    # after the holder died, or after a reboot.
+    lock.write_text(f"{socket.gethostname()}:{os.getpid()}:1", encoding="utf-8")
+    with single_writer_lock(tmp_path / "c.nxs"):
+        pass
+
+
+def test_a_live_holder_on_this_host_is_respected(tmp_path: Path):
+    with (
+        single_writer_lock(tmp_path / "c.nxs"),
+        pytest.raises(BuilderAlreadyRunningError),
+        single_writer_lock(tmp_path / "c.nxs", stale_after=3600),
+    ):
+        pass  # pragma: no cover
+
+
+def test_a_legacy_bare_pid_lock_still_works(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    lock.write_text(str(os.getpid()), encoding="utf-8")  # alive: held
+    with (
+        pytest.raises(BuilderAlreadyRunningError),
+        single_writer_lock(tmp_path / "c.nxs"),
+    ):
+        pass  # pragma: no cover
+
+
+def test_a_foreign_hosts_lock_is_held_by_the_builder(tmp_path: Path):
+    """No way to check another host's PID: the builder never steals it."""
+    lock = tmp_path / "c.nxs.lock"
+    lock.write_text("some-other-host:1:42", encoding="utf-8")
+    _age(lock, 10 * 86400)
+    with (
+        pytest.raises(BuilderAlreadyRunningError, match="some-other-host"),
+        single_writer_lock(tmp_path / "c.nxs"),
+    ):
+        pass  # pragma: no cover
+
+
+def test_a_lock_not_refreshed_within_stale_after_is_reclaimed(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    lock.write_text("some-other-host:1:42", encoding="utf-8")
+    with (
+        pytest.raises(BuilderAlreadyRunningError),
+        single_writer_lock(tmp_path / "c.nxs", stale_after=600),
+    ):
+        pass  # pragma: no cover
+    _age(lock, 601)
+    with single_writer_lock(tmp_path / "c.nxs", stale_after=600):
+        pass
+
+
+def test_the_holder_refreshes_its_lock(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    with single_writer_lock(tmp_path / "c.nxs", stale_after=600) as held:
+        _age(lock, 500)
+        held.refresh()
+        assert time.time() - lock.stat().st_mtime < 5
+
+
+def test_a_live_holder_on_this_host_is_never_reclaimed_by_age(tmp_path: Path):
+    """A worker that stalled (a hung mount read) keeps its lock: the PID decides."""
+    lock = tmp_path / "c.nxs.lock"
+    with single_writer_lock(tmp_path / "c.nxs", stale_after=60) as held:
+        _age(lock, 3600)
+        with (
+            pytest.raises(BuilderAlreadyRunningError),
+            single_writer_lock(tmp_path / "c.nxs", stale_after=60),
+        ):
+            pass  # pragma: no cover
+        assert lock.read_text(encoding="utf-8") == held.record
+        held.refresh()
+
+
+def test_a_holder_whose_lock_was_taken_over_is_told(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    with single_writer_lock(tmp_path / "c.nxs") as held:
+        lock.write_text("other-host:1:1:theirs", encoding="utf-8")
+        with pytest.raises(LockLostError, match="taken over"):
+            held.refresh()
+        lock.unlink()
+        with pytest.raises(LockLostError, match="gone"):
+            held.refresh()
+        lock.write_text("other-host:1:1:theirs", encoding="utf-8")
+    # The release is nonce-checked: the new holder's lock stays.
+    assert lock.read_text(encoding="utf-8") == "other-host:1:1:theirs"
+
+
+def test_a_guard_another_user_made_read_only_still_serialises(
+    tmp_path: Path, monkeypatch
+):
+    """An operator's run beside the service user's guard: read-only, not an error."""
+    from damnit_api.metadata import hzdr_nexus
+
+    guard = tmp_path / "c.nxs.lock.guard"
+    guard.write_bytes(b"")
+    real_open = os.open
+    opened: list[int] = []
+
+    def no_write_access(path, flags, *args):
+        if Path(path) == guard and flags & (os.O_RDWR | os.O_WRONLY):
+            if flags & os.O_EXCL:
+                raise FileExistsError(path)
+            raise PermissionError(13, "Permission denied", str(path))
+        opened.append(flags)
+        return real_open(path, flags, *args)
+
+    monkeypatch.setattr(hzdr_nexus.os, "open", no_write_access)
+    with single_writer_lock(tmp_path / "c.nxs"):
+        assert (tmp_path / "c.nxs.lock").exists()
+    assert not (tmp_path / "c.nxs.lock").exists()
+
+
+def test_a_new_guard_is_shared_by_every_user(tmp_path: Path):
+    with single_writer_lock(tmp_path / "c.nxs"):
+        pass
+    if os.name != "nt":
+        mode = (tmp_path / "c.nxs.lock.guard").stat().st_mode & 0o777
+        assert mode == 0o666
+
+
+# --- The reclaim race: two reclaimers of one stale lock -----------------------
+
+
+def _race(tmp_path: Path, iterations: int, contenders: int = 6) -> list[int]:
+    """Holder counts, one per round of ``contenders`` reclaiming one stale lock."""
+    output = tmp_path / "c.nxs"
+    lock = tmp_path / "c.nxs.lock"
+    counts: list[int] = []
+    for _ in range(iterations):
+        lock.write_text("rebooted-host:4242:1:dead", encoding="utf-8")
+        _age(lock, 3600)
+        start = threading.Barrier(contenders)
+        finish = threading.Barrier(contenders)
+        holders: list[int] = []
+
+        def contend(start=start, finish=finish, holders=holders) -> None:
+            start.wait()
+            try:
+                with single_writer_lock(output, stale_after=60):
+                    holders.append(1)
+                    finish.wait()  # hold until every contender has tried
+                    return
+            except BuilderAlreadyRunningError:
+                pass
+            finish.wait()
+
+        threads = [threading.Thread(target=contend) for _ in range(contenders)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(timeout=30)
+        counts.append(len(holders))
+        lock.unlink(missing_ok=True)
+    return counts
+
+
+@pytest.fixture
+def wide_window(monkeypatch):
+    """Sleep between judging a lock stale and acting on it, to make races likely."""
+    from damnit_api.metadata import hzdr_nexus
+
+    real = hzdr_nexus._judge_lock
+
+    def slow(*args, **kwargs):
+        verdict = real(*args, **kwargs)
+        time.sleep(0.002)
+        return verdict
+
+    monkeypatch.setattr(hzdr_nexus, "_judge_lock", slow)
+
+
+def test_concurrent_reclaimers_of_one_stale_lock_leave_exactly_one_holder(
+    tmp_path: Path, wide_window
+):
+    assert set(_race(tmp_path, iterations=150)) == {1}
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="probabilistic: needs Linux thread scheduling"
+)
+def test_the_race_test_catches_unlink_then_create(
+    tmp_path: Path, wide_window, monkeypatch
+):
+    """Mutation: the pre-fix reclaim (no guard, unlink) lets two hold at once."""
+    from damnit_api.metadata import hzdr_nexus
+
+    monkeypatch.setattr(
+        hzdr_nexus, "_guard", lambda path, **_: contextlib.nullcontext(True)
+    )
+    monkeypatch.setattr(
+        hzdr_nexus,
+        "_reclaim",
+        lambda lock_path, judged: lock_path.unlink(missing_ok=True),
+    )
+    assert max(_race(tmp_path, iterations=40)) > 1
+
+
+def test_a_reclaim_that_moved_a_live_lock_puts_it_back(tmp_path: Path):
+    """The tombstone check (the backstop where no kernel lock is available).
+
+    The reclaimer judged one stale lock, but by the time it renamed, another
+    process had replaced it with a live one: the content differs, so the live
+    lock is restored and the reclaimer gives up.
+    """
+    from damnit_api.metadata import hzdr_nexus
+
+    lock = tmp_path / "c.nxs.lock"
+    lock.write_text("this-host:1:1:live", encoding="utf-8")
+    with pytest.raises(BuilderAlreadyRunningError):
+        hzdr_nexus._reclaim(lock, "rebooted-host:4242:1:dead")
+    assert lock.read_text(encoding="utf-8") == "this-host:1:1:live"
+    assert list(tmp_path.glob("*.stale")) == []
+
+
+def test_a_reclaim_that_lost_the_rename_steps_aside(tmp_path: Path):
+    from damnit_api.metadata import hzdr_nexus
+
+    hzdr_nexus._reclaim(tmp_path / "c.nxs.lock", "gone:1:1:x")  # no error
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_holder_whose_lock_was_reclaimed_does_not_remove_the_new_one(
+    tmp_path: Path,
+):
+    lock = tmp_path / "c.nxs.lock"
+    with single_writer_lock(tmp_path / "c.nxs", stale_after=600):
+        # A hung holder: its lock expired and another worker took it.
+        lock.write_text("worker-pc-2:7:1:theirs", encoding="utf-8")
+    assert lock.read_text(encoding="utf-8") == "worker-pc-2:7:1:theirs"
+
+
+def test_without_kernel_locks_a_stale_lock_is_not_reclaimed(
+    tmp_path: Path, monkeypatch
+):
+    """A mount with no flock/msvcrt locking (ENOLCK) fails closed.
+
+    The tombstone check alone does not exclude two reclaimers (a third process
+    can create while a moved lock is out), so nothing is reclaimed there; a
+    free lock is still taken, by O_EXCL alone, which is safe.
+    """
+    from damnit_api.metadata import hzdr_nexus
+
+    monkeypatch.setattr(hzdr_nexus, "_lock_fd", lambda fd, *_: False)
+    lock = tmp_path / "c.nxs.lock"
+    lock.write_text("rebooted-host:4242:1:dead", encoding="utf-8")
+    _age(lock, 3600)
+    with (
+        pytest.raises(BuilderAlreadyRunningError, match="no kernel locks"),
+        single_writer_lock(tmp_path / "c.nxs", stale_after=60),
+    ):
+        pass  # pragma: no cover
+    lock.unlink()
+    with single_writer_lock(tmp_path / "c.nxs", stale_after=60):
+        assert lock.read_text(encoding="utf-8").startswith(socket.gethostname())
+    assert not lock.exists()
+
+
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="probabilistic: needs Linux thread scheduling"
+)
+def test_the_tombstone_alone_does_not_close_the_race(
+    tmp_path: Path, wide_window, monkeypatch
+):
+    """Why the fallback fails closed: unguarded, the tombstone reclaim double-holds."""
+    from damnit_api.metadata import hzdr_nexus
+
+    monkeypatch.setattr(
+        hzdr_nexus, "_guard", lambda path, **_: contextlib.nullcontext(True)
+    )
+    assert max(_race(tmp_path, iterations=40)) > 1
+
+
+def test_replace_retries_a_target_held_open_then_gives_up(tmp_path: Path, monkeypatch):
+    source, target = tmp_path / "a.tmp", tmp_path / "a.nxs"
+    source.write_text("new", encoding="utf-8")
+    calls = []
+    real = Path.replace
+
+    def busy_twice(self, other):
+        calls.append(1)
+        if len(calls) <= 2:
+            message = "in use by another process"
+            raise PermissionError(message)
+        return real(self, other)
+
+    monkeypatch.setattr(Path, "replace", busy_twice)
+    replace_with_retry(source, target, attempts=5, delay=0)
+    assert target.read_text(encoding="utf-8") == "new"
+    assert len(calls) == 3
+
+    def always_busy(self, other):
+        calls.append(1)
+        message = "held"
+        raise PermissionError(message)
+
+    source.write_text("again", encoding="utf-8")
+    calls.clear()
+    monkeypatch.setattr(Path, "replace", always_busy)
+    with pytest.raises(PermissionError):
+        replace_with_retry(source, target, attempts=3, delay=0)
+    assert len(calls) == 3  # bounded
+
+
+def test_the_master_publish_retries_a_rename_refused_while_read(tmp_path, monkeypatch):
+    """Windows refuses to rename over a file open elsewhere (a reader)."""
+    from damnit_api.metadata import hzdr_nexus
+
+    seen = []
+    real = hzdr_nexus.replace_with_retry
+
+    def spy(source, target, **kwargs):
+        seen.append(target)
+        return real(source, target, **kwargs)
+
+    monkeypatch.setattr(hzdr_nexus, "replace_with_retry", spy)
+    output = tmp_path / "c.nxs"
+    hzdr_nexus.write_nexus_bridge(
+        output_path=output, experiment_id="c", shots=[], events=[]
+    )
+    assert seen == [output]
 
 
 # --- Review sidecar tests ---

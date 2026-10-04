@@ -24,6 +24,11 @@ the `Z:` share refuse, and its campaign part changes when a shot is moved.
 
 ## What changes here
 
+Phase 3, the container writer, is designed in
+[container-writer.md](container-writer.md): the converter joins
+`/entry/source_events` by `event_id` (the bridge profile is unchanged), and a
+separate worker writes the containers under its own lock.
+
 - **Conversion code arrives in `metadata/`:** readers, diagnostic packs,
   instrument mappings and the NeXus writing helpers come from shot-aligner,
   under `hzdr_` names and with a sync check (combo decision 1).
