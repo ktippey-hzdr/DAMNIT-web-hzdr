@@ -237,6 +237,22 @@ if ($Repos.Count -eq 0) {
     }
 }
 
+# -- Pack code sync check -----------------------------------------------------
+# Verifies that api/src/damnit_api/metadata/hzdr_packs/vendor/ (shot-aligner's
+# readers, pack helpers and pack manifests) is byte-identical to shot-aligner's
+# and to the hashes in its SOURCE.json. Same rule: only when every repo is
+# selected.
+if ($Repos.Count -eq 0) {
+    Write-Host ""
+    # The helper prints its own header.
+    & "$PSScriptRoot\sync-hzdr-packs.ps1"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Vendored pack code drift." -ForegroundColor Red
+        Write-Host "  Run: pwsh hzdr/scripts/sync-hzdr-packs.ps1 -Apply  to fix." -ForegroundColor Yellow
+        exit 1
+    }
+}
+
 # -- Run -----------------------------------------------------------------------
 # Restore the caller's starting folder afterward: the loop Set-Locations into
 # each repo, and PowerShell's location is process-wide.

@@ -9,6 +9,11 @@ target-version = "py313"
 
 src = ["src", "test"]
 
+# Vendored byte for byte from shot-aligner and pinned by sha256
+# (hzdr/scripts/sync-hzdr-packs.{sh,ps1}): its own lint rules apply there, and
+# a fix goes to shot-aligner, never to the copy.
+extend-exclude = ["src/damnit_api/metadata/hzdr_packs/vendor"]
+
 [lint]
 select = [
     "E",     # pycodestyle

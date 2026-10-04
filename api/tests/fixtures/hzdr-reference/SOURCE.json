@@ -1,9 +1,12 @@
 {
-  "commit": "3f50a77",
+  "commit": "750ce7c",
   "files": {
-    "README.md": "07a7da3d054c28f9b0c59fb1a0cb0bbd480cdf6c55ab7ea4cb115e6fbe88b8ec",
+    "README.md": "1da296462fab7a5a33176c448a933425f6c1a3a2f3aac5d627486e9536d02e5f",
     "events.jsonl": "8c4768b539690bd7d4e909fe51967e5fbb2f7108c8b798079db5c45751ad917f",
     "manifest.json": "5100982600d5ee047495920a907fe56e3b182797f63962beb4b09f835486ffae",
+    "packs/camera_png_csv.json": "6c9cfff4728031d81d35943417c31e8fec423c3b765f14b4c2675ddb82cfa8c8",
+    "packs/sequence_frames.json": "ae25367814c7e454fa83ca09a45d0baddd56d227570714ddc68ac286bed9b17e",
+    "packs/spectrometer_irr8.json": "8ccbb28645071a108f8a6399636495c9745919cdb09176b43f70108221a69869",
     "raw/M1_Spec_Fib_Cer/set1_2025-12-01_15h-59m-04s_2.csv": "e4e5831ccfbec465971dc6a95c4a54fbadc676d875e774c9d516439e445e7506",
     "raw/M1_Spec_Fib_Cer/set1_2025-12-01_15h-59m-04s_2_original.png": "cf4c21d9c5c0c4e7d88ca9f95385261718317a1c306ff1eca3a6ae5ec5fc6d5d",
     "raw/Probe135/20cm_6kv_00001.tif": "763002f1da21c8dc8f64b9bc38c32e0e58fd731b3a57c3f0993b05e74292a632",

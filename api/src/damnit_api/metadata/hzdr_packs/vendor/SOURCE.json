@@ -1,0 +1,35 @@
+{
+  "commit": "9f5a56d",
+  "files": {
+    "camera_metadata.py": {
+      "from": "shot_aligner/scripts/shotalign/camera_metadata.py",
+      "sha256": "7c28c2fbd0de75560eeba19c2858d1315c5da225b5f0eb5a9288648bcd9802b5"
+    },
+    "camera_png_csv.json": {
+      "from": "shot_aligner/scripts/shotalign/diagnostics/camera_png_csv.json",
+      "sha256": "3235c5f20df0c0a05bfd73bf7ae60d56e277b706d5c200c313db408c574d4951"
+    },
+    "img_csv.py": {
+      "from": "polina/img_csv.py",
+      "sha256": "efb180cc06637ea288df8274ad065d7e05ff83523a05a6c2aee32648c184b5fe"
+    },
+    "irr8.py": {
+      "from": "polina/irr8.py",
+      "sha256": "122626b1bef31fe315224919e65bc44dc3a5d438f7bf50d920fd429ad889374a"
+    },
+    "nxwrite.py": {
+      "from": "shot_aligner/scripts/shotalign/nxwrite.py",
+      "sha256": "ac7cc38f0fa53db3e9b4b796f7a3950e65093007c80bfaed5578d00a251f8473"
+    },
+    "sequence_frames.json": {
+      "from": "shot_aligner/scripts/shotalign/diagnostics/sequence_frames.json",
+      "sha256": "c0b1c7318ed844d6976da9fca398a3abecdbcd5b3b3b63451ea8f1ea31c1f6f6"
+    },
+    "spectrometer_irr8.json": {
+      "from": "shot_aligner/scripts/shotalign/diagnostics/spectrometer_irr8.json",
+      "sha256": "6e085917aea72677f021f086a4a3a6458d58add59619c8933c3e91d40f783b70"
+    }
+  },
+  "repository": "https://codebase.helmholtz.cloud/tippey27/shot-aligner",
+  "source": "shot-aligner readers, pack helpers and pack manifests"
+}

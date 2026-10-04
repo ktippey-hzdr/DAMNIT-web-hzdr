@@ -96,6 +96,31 @@ AREAS = (
         watch_next="Real SciCat and PID reconciliation, which the offline suite can only emulate",
     ),
     CoverageArea(
+        name="HZDR diagnostic packs (camera, Irr8, frame sequences)",
+        files=(
+            f"{A}/metadata/hzdr_packs/__init__.py",
+            f"{A}/metadata/hzdr_packs/_h5.py",
+            f"{A}/metadata/hzdr_packs/_images.py",
+            f"{A}/metadata/hzdr_packs/camera_png_csv.py",
+            f"{A}/metadata/hzdr_packs/sequence_frames.py",
+            f"{A}/metadata/hzdr_packs/spectrometer_irr8.py",
+            f"{A}/metadata/hzdr_packs/vendor/__init__.py",
+            f"{A}/metadata/hzdr_packs/vendor/camera_metadata.py",
+            f"{A}/metadata/hzdr_packs/vendor/img_csv.py",
+            f"{A}/metadata/hzdr_packs/vendor/irr8.py",
+            f"{A}/metadata/hzdr_packs/vendor/nxwrite.py",
+        ),
+        tests=(
+            f"{T}/test_hzdr_packs.py",
+            f"{T}/test_hzdr_pack_readers.py",
+            f"{T}/test_hzdr_packs_sync.py",
+        ),
+        watch_next=(
+            "The vendored files' cv2/nexusformat paths (shot-aligner's, unused "
+            "here), and frame formats the December campaign did not write"
+        ),
+    ),
+    CoverageArea(
         name="HZDR routers and services",
         files=(
             f"{A}/metadata/gql.py",

@@ -16,6 +16,7 @@ commit it was copied from). Every file here is compared byte for byte, so
 | `raw/Probe135/` | two-frame TIFF recording (`sequence_frames`) | synthetic: no sample is committed |
 | `events.jsonl` | the `hzdr-event-v1` events planet-watchdog would send | paths recorded as `/bigdata/HPLexp/reference-fixture/...` |
 | `manifest.json` | every link name in the container `build_shot` writes | regenerated from `raw/`, values left out |
+| `packs/<pack>.json` | what each pack's own `write` puts under one `NXdetector`, values included | regenerated from `raw/` by `make_pack_references.py` |
 
 ## What the manifest records
 
@@ -108,6 +109,22 @@ their `NXdetector`s and what is under them. These are not part of it:
   attributes: application-definition claims by the mappings, until phase 2
   reconciles the mappings (decision 5; `NXxrd_pan` for a camera goes).
 
+## The per-pack references
+
+`packs/<pack>.json` isolates one pack from everything `build_shot` and the
+mappings add around it. `shot_aligner/scripts/make_pack_references.py` calls
+each pack's `write(nx, "entry/detector", acquisition, raw/, preview=False,
+cache=None)` on a fresh tree, with the same acquisitions the manifest's build
+is fed, and records the same walk as `manifest.json` plus values: `value`
+for datasets of at most 64 elements (numbers, booleans, text), `sha256` of
+the little-endian C-order bytes for larger numeric ones, every other
+attribute under `attrs` (`interpretation`, `description`, `target`,
+`SILX_style`, ...), the pack's
+`problems` and `plottable`. The `date` nexusformat stamps into an `NXnote`
+is the time of writing; it is listed under `volatile` and has no value.
+DAMNIT's h5py port of the packs (plan phase 2b) is held to these, node by
+node. `tests/test_pack_references.py` rebuilds them.
+
 ## Known gaps, recorded on purpose
 
 `build_shot` reports these in `/entry/alignment/problems`. They are true of
@@ -127,6 +144,7 @@ this input, and they are left as they are:
 uv run shot_aligner/scripts/make_reference_fixture.py          # manifest from raw/
 uv run shot_aligner/scripts/make_reference_fixture.py --events # events too, raw/ untouched
 uv run shot_aligner/scripts/make_reference_fixture.py --raws   # raw/ and events too
+uv run shot_aligner/scripts/make_pack_references.py            # packs/ from raw/
 ```
 
 A manifest change is a change to what containers contain. Re-vendor it into

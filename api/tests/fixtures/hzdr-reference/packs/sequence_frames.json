@@ -1,0 +1,229 @@
+{
+  "acquisition": {
+    "files": [
+      "Probe135/20cm_6kv_00001.tif",
+      "Probe135/20cm_6kv_00002.tif"
+    ],
+    "kind": "frame_sequence",
+    "label": "20cm_6kv",
+    "seq": null
+  },
+  "detector_path": "entry/detector",
+  "fixture": "hzdr reference pack output",
+  "instrument": {
+    "id": "probe135",
+    "label": "Probe135"
+  },
+  "nodes": {
+    "/entry": {
+      "NX_class": "NXentry",
+      "type": "group"
+    },
+    "/entry/detector": {
+      "NX_class": "NXdetector",
+      "default": "data",
+      "type": "group"
+    },
+    "/entry/detector/data": {
+      "NX_class": "NXdata",
+      "signal": "image",
+      "type": "group"
+    },
+    "/entry/detector/data/image": {
+      "NX_class": null,
+      "attrs": {
+        "description": "all 2 frames of one recording of one shot, in frame order; raw_data/frame_number says which file each came from",
+        "interpretation": "image",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "<u2",
+      "shape": [
+        2,
+        4,
+        5
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        [
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        ],
+        [
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ]
+        ]
+      ]
+    },
+    "/entry/detector/raw_data": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/raw_data/frame_number": {
+      "NX_class": null,
+      "attrs": {
+        "description": "the frame number in each file name: a position within this recording, not a shot number"
+      },
+      "dtype": "<i4",
+      "shape": [
+        2
+      ],
+      "type": "dataset",
+      "units": null,
+      "value": [
+        1,
+        2
+      ]
+    },
+    "/entry/detector/raw_data/frame_readable": {
+      "NX_class": null,
+      "dtype": "|b1",
+      "shape": [
+        2
+      ],
+      "type": "dataset",
+      "units": null,
+      "value": [
+        true,
+        true
+      ]
+    },
+    "/entry/detector/raw_data/image": {
+      "NX_class": null,
+      "attrs": {
+        "description": "all 2 frames of one recording of one shot, in frame order; raw_data/frame_number says which file each came from",
+        "interpretation": "image",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "<u2",
+      "link": "/entry/detector/data/image",
+      "shape": [
+        2,
+        4,
+        5
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        [
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        ],
+        [
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ]
+        ]
+      ]
+    }
+  },
+  "pack": "sequence_frames",
+  "plottable": "entry/detector/data",
+  "problems": [],
+  "small": 64,
+  "volatile": [],
+  "writer": "shot-aligner diagnostics.sequence_frames.write"
+}
