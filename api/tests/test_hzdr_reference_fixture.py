@@ -3,8 +3,8 @@
 `tests/fixtures/hzdr-reference/` is shot-aligner's reference shot (see its
 README and SOURCE.json): three instruments, the hzdr-event-v1 events
 planet-watchdog would send for them, and a manifest of the container
-shot-aligner builds. The container writer this repository gains in phase 3 is
-held to that manifest. Until then this module pins what it will rely on.
+shot-aligner builds. This module pins what the container writer relies on;
+`test_hzdr_containers.py` holds its output to the manifest (phase 3).
 
 Re-vendor with `hzdr/scripts/sync-hzdr-reference.sh --apply` (or the `.ps1`
 with `-Apply`); never edit the copy by hand.
@@ -130,8 +130,12 @@ def test_recorded_paths_reach_the_raws_through_the_path_map():
             assert hashlib.sha256(local.read_bytes()).hexdigest() == member["sha256"]
 
 
-def test_a_product_row_lacks_its_instrument_and_the_join_recovers_it_phase3_gap():
-    """What a pack needs is not on the product row yet; the join recovers it."""
+def test_a_product_row_lacks_its_instrument_and_the_join_recovers_it():
+    """What a pack needs is not on the product row; the join recovers it.
+
+    Phase 3 chose the join (`hzdr/docs/plans/container-writer.md` section 1):
+    the product row stays flat, the bridge profile unchanged.
+    """
     events = [_normalize_event(event) for event in _events()]
     by_id = {event["event_id"]: event for event in events}
     products = build_event_data_products(
@@ -140,7 +144,7 @@ def test_a_product_row_lacks_its_instrument_and_the_join_recovers_it_phase3_gap(
 
     assert len(products) == len(events)
     for product in products:
-        assert "instrument" not in product["metadata"]  # the phase-3 gap
+        assert "instrument" not in product["metadata"]  # joined, not copied
         event = by_id[product["metadata"]["event_id"]]
         instrument = event["metadata"]["instrument"]
         assert instrument["format"] in {

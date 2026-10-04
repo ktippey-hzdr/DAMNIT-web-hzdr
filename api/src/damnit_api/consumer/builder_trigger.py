@@ -11,6 +11,12 @@ isolation are preserved unchanged, and a slow HDF5 build stays off the API event
 loop.  The builder reads the entire spool on every run and republishes
 atomically, so coalescing and duplicate triggers converge to the same catalog —
 the trigger adds no correctness burden, it only removes the manual step.
+
+With ``containers_enabled`` it also starts ``hzdr-container-worker.py``
+(campaign output phase 3) once before each build, so already published shots
+convert while it runs, and once after a successful build, for the shots it
+published. The worker is not awaited: it converts outside the campaign lock,
+under its own, and a second start while one runs only leaves it a request.
 """
 
 from __future__ import annotations
@@ -30,10 +36,16 @@ logger = logging.getLogger(__name__)
 # (returncode, combined_output_text) — separated out so tests can inject a fake
 # runner instead of spawning a real builder subprocess.
 BuilderRunner = Callable[[Sequence[str]], Awaitable[tuple[int, str]]]
+# Starts the container worker and returns once it is running (not finished).
+WorkerLauncher = Callable[[Sequence[str]], Awaitable[None]]
 
 _DEFAULT_SCRIPT = (
     Path(__file__).resolve().parents[3] / "scripts" / "hzdr-hdf5-builder.py"
 )
+_DEFAULT_WORKER_SCRIPT = (
+    Path(__file__).resolve().parents[3] / "scripts" / "hzdr-container-worker.py"
+)
+WORKER_LOG_NAME = ".hzdr-container-worker.log"
 
 # Cap how much builder output we echo into a single log line on failure so a
 # large traceback cannot flood the structured logs.
@@ -70,6 +82,7 @@ class BuilderTrigger:
         unassigned_trigger_jsonl: Sequence[Path] = (),
         events_spools: Sequence[tuple[Path, str]] = (),
         trigger_spools: Sequence[tuple[Path, str]] = (),
+        worker_launcher: WorkerLauncher | None = None,
     ) -> None:
         self._settings = settings
         self._events_jsonl = list(events_jsonl)
@@ -84,6 +97,8 @@ class BuilderTrigger:
         self._events_spools = list(events_spools)
         self._trigger_spools = list(trigger_spools)
         self._runner = runner or self._run_subprocess
+        self._worker_launcher = worker_launcher or self._spawn_worker
+        self._workers: set[asyncio.Task] = set()
         self._wake = asyncio.Event()
 
     def notify(self, paths: list[Path] | None = None) -> None:
@@ -98,6 +113,22 @@ class BuilderTrigger:
         if s.output_root is not None:
             return [python, str(script), *self._multi_campaign_args()]
         return [python, str(script), *self._single_campaign_args()]
+
+    def worker_command(self) -> list[str]:
+        """The ``hzdr-container-worker.py`` command for the campaign(s) built."""
+        s = self._settings
+        python = s.python_executable or sys.executable
+        script = s.container_worker_script or _DEFAULT_WORKER_SCRIPT
+        if s.output_root is not None:
+            return [python, str(script), "--output-root", str(s.output_root)]
+        return [python, str(script), "--master", str(s.output_nexus)]
+
+    def _worker_log(self) -> Path:
+        s = self._settings
+        if s.output_root is not None:
+            return s.output_root / WORKER_LOG_NAME
+        folder = s.output_nexus.parent if s.output_nexus is not None else Path()
+        return folder / WORKER_LOG_NAME
 
     def _single_campaign_args(self) -> list[str]:
         """The one configured campaign (``OUTPUT_NEXUS``), as before plan C2."""
@@ -188,7 +219,55 @@ class BuilderTrigger:
         stdout, _ = await proc.communicate()
         return proc.returncode or 0, (stdout or b"").decode("utf-8", errors="replace")
 
+    async def _spawn_worker(self, cmd: Sequence[str]) -> None:
+        """Start the worker in its own session, logging to a file; do not wait.
+
+        Its output goes to ``.hzdr-container-worker.log`` beside the output,
+        not to a pipe, so it outlives an API restart without blocking on a
+        full pipe; conversion is resumable either way.
+        """
+        log_path = self._worker_log()
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("ab") as log:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=log,
+                stderr=asyncio.subprocess.STDOUT,
+                start_new_session=True,
+            )
+        task = asyncio.create_task(self._reap_worker(proc))
+        self._workers.add(task)
+        task.add_done_callback(self._workers.discard)
+
+    @staticmethod
+    async def _reap_worker(proc: asyncio.subprocess.Process) -> None:
+        returncode = await proc.wait()
+        if returncode:
+            logger.error(
+                "Auto-trigger: container worker exited %d; see %s",
+                returncode,
+                WORKER_LOG_NAME,
+            )
+        else:
+            logger.info("Auto-trigger: container worker finished")
+
+    async def wait_for_workers(self) -> None:
+        """Wait for the workers this trigger started (tests, shutdown)."""
+        if self._workers:
+            await asyncio.gather(*self._workers, return_exceptions=True)
+
+    async def _start_container_worker(self, when: str) -> None:
+        if not self._settings.containers_enabled:
+            return
+        cmd = self.worker_command()
+        logger.info("Auto-trigger: starting container worker (%s build)", when)
+        try:
+            await self._worker_launcher(cmd)
+        except Exception:
+            logger.exception("Auto-trigger: container worker failed to start")
+
     async def _run_builder_once(self) -> None:
+        await self._start_container_worker("before")
         cmd = self.build_command()
         logger.info("Auto-trigger: running builder %s", " ".join(cmd))
         # Note: a CancelledError from shutdown propagates out of this ``try``
@@ -201,6 +280,7 @@ class BuilderTrigger:
             return
         if returncode == 0:
             logger.info("Auto-trigger: builder finished successfully")
+            await self._start_container_worker("after")
         else:
             logger.error(
                 "Auto-trigger: builder exited %d: %s",
@@ -229,6 +309,10 @@ class BuilderTrigger:
         finally:
             if _RUNNING.get("trigger") is self:
                 del _RUNNING["trigger"]
+            # Stop watching the workers, not the workers: each runs in its own
+            # session and a conversion cut short resumes on the next start.
+            for task in list(self._workers):
+                task.cancel()
         logger.info("Builder auto-trigger stopped")
 
     async def _wait_for_wake(self, stop: asyncio.Event) -> bool:

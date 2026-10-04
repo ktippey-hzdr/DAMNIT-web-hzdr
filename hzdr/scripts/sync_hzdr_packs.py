@@ -42,9 +42,10 @@ DEST = DAMNIT_ROOT / "api" / "src" / "damnit_api" / "metadata" / "hzdr_packs" / 
 MANIFEST = "SOURCE.json"
 _PACKS = "shot_aligner/scripts/shotalign/diagnostics"
 
-# Vendored name -> path in shot-aligner. Only what the rewritten packs use:
-# the two readers, the camera sidecar helpers, nxwrite's naming and scale
-# helpers, and each pack's manifest (suffixes, scale type).
+# Vendored name -> path in shot-aligner. Only what the rewritten packs and the
+# container writer use: the two readers, the camera sidecar helpers, nxwrite's
+# naming and scale helpers, each pack's manifest (suffixes, name patterns,
+# scale type) and the instrument catalogue.
 FILES = {
     "img_csv.py": "polina/img_csv.py",
     "irr8.py": "polina/irr8.py",
@@ -53,6 +54,12 @@ FILES = {
     "camera_png_csv.json": f"{_PACKS}/camera_png_csv.json",
     "spectrometer_irr8.json": f"{_PACKS}/spectrometer_irr8.json",
     "sequence_frames.json": f"{_PACKS}/sequence_frames.json",
+    # NDS's DRACO instrument catalogue as shot-aligner pins it: the container
+    # writer names NXinstrument/NXdetector groups from its family,
+    # instrument_name and detector_name (campaign output phase 3).
+    "hzdr-draco-0.1.0.json": (
+        "shot_aligner/config/instrument-catalogue/hzdr-draco-0.1.0.json"
+    ),
 }
 
 
@@ -111,7 +118,10 @@ def apply(repo: Path, force: bool, dest: Path = DEST) -> None:
         "commit": _git(repo, "log", "-1", "--format=%h", "--", *FILES.values()),
         "files": files,
         "repository": REPOSITORY,
-        "source": "shot-aligner readers, pack helpers and pack manifests",
+        "source": (
+            "shot-aligner readers, pack helpers, pack manifests and the "
+            "instrument catalogue"
+        ),
     }
     with (dest / MANIFEST).open("w", encoding="utf-8", newline="\n") as stream:
         stream.write(json.dumps(record, indent=2, sort_keys=True) + "\n")

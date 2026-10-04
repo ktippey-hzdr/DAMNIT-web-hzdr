@@ -28,24 +28,15 @@ into the local path to read, which is where DAMNIT's path map applies.
 problem, never an exception, so one bad file costs its detector and not the
 build.
 
-Not wired into the builder yet: that is phase 3.
+Phase 3 calls them from :mod:`..hzdr_containers` (design:
+``hzdr/docs/plans/container-writer.md``), which supplies what shot-aligner's
+alignment index supplied:
 
-Phase 3 inputs (recorded, not implemented)
-------------------------------------------
-What the container writer has to supply from events, where shot-aligner's
-alignment index supplied it:
-
-* ``seq`` and ``label`` are not carried by events. shot-aligner parses them
-  from file names (``claim``); the packs use them for ``sequence_number``
-  (``sequence_frames`` with an ordinal, a name-only BMP) and the BMP's
-  ``raw_data/name``.
-* ``when`` (the ``date`` of the camera's ``beam_profile_fit`` and
-  ``roi_statistics``) can come from ``metadata.acquisition.time``.
-* Grouping per-frame events into one recording's acquisition is undefined.
-  planet-watchdog sends one event per frame of a recording (their stems
-  differ), while ``sequence_frames`` expects all of a recording's frames, and
-  its ``.rec``, as one acquisition. Nothing in ``hzdr-event-v1`` says which
-  events form one recording yet.
+* ``seq`` and ``label`` from the file names, with the vendored manifests'
+  ``namePatterns`` (shot-aligner's ``claim``); events carry neither;
+* ``when`` from ``metadata.acquisition.time``;
+* the grouping of a recording's per-frame events into one acquisition: files
+  with the same claim key (a recording's label, a frame's stem) are one.
 """
 
 from __future__ import annotations

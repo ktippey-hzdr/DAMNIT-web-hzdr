@@ -64,6 +64,7 @@ cd api && uv run pytest tests/test_hzdr_spool.py::test_name   # single test
 ```
 python api/scripts/hzdr-hdf5-builder.py --experiment-id <id> --campaign-timezone Europe/Berlin \
     --labfrog-sqlite <c>.sqlite --trigger-jsonl <triggers>.jsonl --output-nexus <c>.nxs
+python api/scripts/hzdr-container-worker.py --master <c>.nxs   # shot containers into <c's folder>/shots/ (or --output-root)
 python api/scripts/hzdr-local-acceptance.py        # emulator events through Confirm Matches, no broker
 python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hzdr-event-v1 schema + sample fixtures
 ```
@@ -109,8 +110,27 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     (`_images.py`; a 16-bit colour frame is refused, not truncated) and stream
     into chunked gzip-4 datasets one frame at a time. Held node for node and
     value for value to shot-aligner's per-pack references
-    (`api/tests/fixtures/hzdr-reference/packs/`). Not wired into the builder
-    yet (phase 3).
+    (`api/tests/fixtures/hzdr-reference/packs/`). Called by `hzdr_containers.py`.
+    The vendor folder also pins NDS's instrument catalogue
+    (`hzdr-draco-0.1.0.json`, `vendor.catalogue()`).
+  - `hzdr_containers.py` — the **shot containers** (campaign output phase 3,
+    design in [hzdr/docs/plans/container-writer.md](hzdr/docs/plans/container-writer.md)):
+    reads the published master's `/entry/source_events` + `/entry/shots`
+    (joined by `event_id`; no bridge-profile change), groups each shot's files
+    into acquisitions by shot-aligner's claim key, and writes
+    `<campaign folder>/shots/<YYYYMMDD>_<shot_number:06d>.nxs` (one `NXentry`,
+    `NXinstrument`/`NXdetector` named by the vendored `nxwrite.container_groups`
+    from the catalogue, `shot_key` as an attribute). Run by
+    `api/scripts/hzdr-container-worker.py` **outside the campaign lock**, under
+    its own `shots/.convert.lock` (a second worker leaves `shots/.convert.pending`
+    for the running one); each container goes to `<name>.nxs.tmp` and is renamed
+    into place, and is rewritten only when its input fingerprint (members'
+    `sha256`, catalogue SHA, conversion-code digest) changes —
+    `shots/.build-manifest.json` plus the container's own attribute, so a crash
+    resumes. A missing/unreadable file drops that detector and is recorded in
+    `/entry/conversion_problems`, never a failed run. Held to the reference
+    fixture's manifest minus shot-aligner's mapping rows (out of phase 3). The
+    master does not link containers yet (phase 4).
   - `scicat.py` — registers the canonical campaign NeXus file as a citable SciCat
     dataset via the `scicat_plugin` HTTP boundary; runs as a best-effort builder
     post-step (never fails a build) and stamps `scicat_pid`/`version_hash` into the
@@ -188,7 +208,11 @@ events by trigger time) and `DW_API_HZDR_BUILDER__TIME_MATCH_AUTOASSIGN`
 propose review candidates, and an authoritative `shot_number` naming exactly
 one shot attaches on the number alone; `true` restores the earlier ladder,
 which attached a numbered trigger to a neighbouring LabFrog shot by time).
-Consumers spool
+`DW_API_HZDR_BUILDER__CONTAINERS_ENABLED` (default `false`) makes the trigger
+start `hzdr-container-worker.py` (for `OUTPUT_NEXUS`, or every campaign under
+`OUTPUT_ROOT`) once before each build and once after a successful one, without
+waiting for it; it logs to `.hzdr-container-worker.log` beside the output
+(`CONTAINER_WORKER_SCRIPT` overrides the script). Consumers spool
 `unassigned` events to a shared `<spool>/_unassigned/` file that every
 campaign's build reads. A ruling posted from Review matches asks the running
 auto-trigger for a rebuild (`builder_trigger.request_rebuild`).
@@ -201,8 +225,8 @@ places: a catalog shot's `hdf5_path` when the API lists or previews datasets
 another host or comes from Mongo); the `hdf5_path` handed to Context Builder
 variables; and each data product's `path`, which a shot detail reports as
 `reachable` (true/false; null for URIs and in-file datasets) and the UI badges
-as on disk / missing. The builder does not use it, and nothing stored is
-rewritten.
+as on disk / missing. The builder does not use it; the container worker reads
+raw files through it (or its `--path-map`). Nothing stored is rewritten.
 Structured JSON logging turns on when `DW_API_DEBUG=false`.
 `hzdr/scripts/damnit-api.service` is the systemd unit for an `/opt` install;
 `hzdr/scripts/damnit-api-checkout.service.example` is the one in use on
@@ -261,8 +285,8 @@ Two more copies come from shot-aligner and are checked the same way (check by
 default, `--apply`/`-Apply` re-vendors, `SHOT_ALIGNER_ROOT` overrides
 `../shot-aligner`): `hzdr/scripts/sync-hzdr-reference.{sh,ps1}` for the reference
 fixture in `api/tests/fixtures/hzdr-reference/`, and
-`hzdr/scripts/sync-hzdr-packs.{sh,ps1}` for the vendored readers in
-`metadata/hzdr_packs/vendor/`. `test-all.ps1` and `test-all.sh` run all three
+`hzdr/scripts/sync-hzdr-packs.{sh,ps1}` for the vendored readers, pack
+manifests and instrument catalogue in `metadata/hzdr_packs/vendor/`. `test-all.ps1` and `test-all.sh` run all three
 checks and stop on drift.
 
 ## Conventions and boundaries

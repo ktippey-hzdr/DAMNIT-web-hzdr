@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Check (default) or apply (--apply) the vendored copy of shot-aligner's
-# readers, pack helpers and pack manifests in
+# readers, pack helpers, pack manifests and instrument catalogue in
 # api/src/damnit_api/metadata/hzdr_packs/vendor/, and re-pin its SOURCE.json.
 # Sibling of sync-hzdr-reference.sh; the logic is in
 # sync_hzdr_packs.py (stdlib only), shared with sync-hzdr-packs.ps1.
