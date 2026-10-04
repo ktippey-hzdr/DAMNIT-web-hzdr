@@ -1,0 +1,39 @@
+{
+  "acquisition": {
+    "files": [
+      "20cm_6kv_00001.tif",
+      "20cm_6kv_00002.tif"
+    ],
+    "instrument": "Probe135",
+    "label": "20cm_6kv"
+  },
+  "detector_path": "entry/detector",
+  "fixture": "hzdr reference pack output",
+  "instrument": {
+    "id": null,
+    "label": "Probe135"
+  },
+  "nodes": {
+    "/entry": {
+      "NX_class": "NXentry",
+      "type": "group"
+    },
+    "/entry/detector": {
+      "NX_class": "NXdetector",
+      "type": "group"
+    },
+    "/entry/detector/raw_data": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    }
+  },
+  "pack": "sequence_frames",
+  "plottable": null,
+  "problems": [
+    "none of the 2 frames of this recording could be read (20cm_6kv_00001.tif …)"
+  ],
+  "root": "packs/cases/sequence_frames__no_readable_frame",
+  "small": 64,
+  "volatile": [],
+  "writer": "shot-aligner diagnostics.sequence_frames.write"
+}

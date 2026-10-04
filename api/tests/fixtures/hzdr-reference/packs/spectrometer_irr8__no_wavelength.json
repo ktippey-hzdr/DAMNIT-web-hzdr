@@ -1,0 +1,174 @@
+{
+  "acquisition": {
+    "files": [
+      "7519372SP_01Dez25_155904_0001.Irr8.txt"
+    ],
+    "instrument": "Reflected 515 spectrometer"
+  },
+  "detector_path": "entry/detector",
+  "fixture": "hzdr reference pack output",
+  "instrument": {
+    "id": null,
+    "label": "Reflected 515 spectrometer"
+  },
+  "nodes": {
+    "/entry": {
+      "NX_class": "NXentry",
+      "type": "group"
+    },
+    "/entry/detector": {
+      "NX_class": "NXdetector",
+      "type": "group"
+    },
+    "/entry/detector/count_time": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Integration time"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "ms",
+      "value": 35.0
+    },
+    "/entry/detector/fabrication": {
+      "NX_class": "NXfabrication",
+      "type": "group"
+    },
+    "/entry/detector/fabrication/serial_number": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "7519372SP"
+    },
+    "/entry/detector/metadata": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/metadata/Averaging_Nr": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "scans",
+      "value": 1.0
+    },
+    "/entry/detector/metadata/Data_measured_with_spectrometer": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "demo"
+    },
+    "/entry/detector/metadata/Integration_time": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "ms",
+      "value": 35.0
+    },
+    "/entry/detector/metadata/Smoothing_Nr": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "pixels",
+      "value": 0.0
+    },
+    "/entry/detector/raw_data": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/raw_data/absolute_irradiance": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "shape": [
+        2
+      ],
+      "type": "dataset",
+      "units": "uW/cm2/nm",
+      "value": [
+        8.0,
+        17.0
+      ]
+    },
+    "/entry/detector/raw_data/dark": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "shape": [
+        2
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        2.0,
+        3.0
+      ]
+    },
+    "/entry/detector/raw_data/photon_counts": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "shape": [
+        2
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        4.0,
+        9.0
+      ]
+    },
+    "/entry/detector/raw_data/pixel": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "shape": [
+        2
+      ],
+      "type": "dataset",
+      "units": "px",
+      "value": [
+        500.0,
+        501.0
+      ]
+    },
+    "/entry/detector/raw_data/reference": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "shape": [
+        2
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        0.0,
+        0.0
+      ]
+    },
+    "/entry/detector/raw_data/sample": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "shape": [
+        2
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        10.0,
+        20.0
+      ]
+    }
+  },
+  "pack": "spectrometer_irr8",
+  "plottable": null,
+  "problems": [
+    "Reflected 515 spectrometer: no wavelength/irradiance pair to plot; the columns are stored raw"
+  ],
+  "root": "packs/cases/spectrometer_irr8__no_wavelength",
+  "small": 64,
+  "volatile": [],
+  "writer": "shot-aligner diagnostics.spectrometer_irr8.write"
+}

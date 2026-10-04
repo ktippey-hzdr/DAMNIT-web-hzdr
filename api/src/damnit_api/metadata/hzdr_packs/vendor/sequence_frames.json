@@ -1,0 +1,98 @@
+{
+  "$comment": "Declarative half of the sequence-named frame pack. Edited here or in the review app's Formats tab; the behaviour is in sequence_frames.py beside this file. See README.md in this folder for what each field means.",
+  "id": "sequence_frames",
+  "title": "Frame numbered by set and ordinal",
+  "order": 60,
+  "kind": "frame_sequence",
+  "summary": "A frame whose name carries a set and an ordinal and no clock at all -- set10_00001.tif, set10_12.png -- optionally with the pco.camware .rec comment file its recording wrote. The convention on 2026_02_20, which is 46 GB nothing could read before. Also a whole recording named by its conditions -- 20cm_6kv_00001.tif ... _00200.tif, 2025_02_24 -- which is one shot, written as one frame stack and matched to its shotsheet row by conditions.py.",
+  "claims": {
+    "$comment": "Deliberately last in `order`: every timestamped dialect is offered its file first, and this pack sees only what no clock-bearing grammar claimed. The image suffixes are bare, so a name that does not parse as set+ordinal is reported as an unparsed name rather than silently becoming an acquisition.",
+    "suffixes": [
+      ".tif",
+      ".tiff",
+      ".bmp",
+      ".png",
+      ".rec"
+    ],
+    "excludeSuffixes": [
+      "_original.png"
+    ],
+    "measurementSuffixes": [
+      ".tif",
+      ".tiff",
+      ".bmp",
+      ".png"
+    ],
+    "sidecarSuffixes": [
+      ".rec"
+    ]
+  },
+  "namePatterns": [
+    {
+      "id": "set_and_ordinal",
+      "regex": "^(?P<label>set[\\s_]*\\d+[A-Za-z0-9]*)_(?!\\d{17}$)(?P<seq>\\d+)$",
+      "example": "set10_00001.tif",
+      "note": "Set label then ordinal, and nothing else. The label may carry a suffix of its own -- set1_23K -- which is why it is not just digits; the ordinal is zero-padded on some cameras and not on others, and int() reads both. A 17-digit tail is a scope timestamp, never an ordinal."
+    },
+    {
+      "id": "conditions_and_frame",
+      "provides": "recording",
+      "regex": "^(?P<label>.+?)_(?P<frame>\\d+)$",
+      "example": "20cm_6kv_00001.tif",
+      "note": "A label of conditions, then a frame number within ONE recording of one shot (2025_02_24, probe135deg). Every frame of a label is one acquisition, and conditions.py finds the shotsheet row whose columns state the label's quantities. The regex is loose on purpose; claim() also requires at least one <number><unit> token (20cm, 6kv, 10Hz) and refuses a set label, so focus_00001 stays an unparsed name."
+    }
+  ],
+  "unlabelledIsShot": false,
+  "$unlabelledIsShot": "False, and it matters more here than elsewhere: this pack's whole grammar IS the set label, so a name that parses without one is not a shot by construction.",
+  "$timing": "Files claimed by this pack carry NO timestamp -- not an mtime standing in for one. The ordinal places them, and `cadence` turns it into a shot number using the framesPerShot the campaign config declares per instrument. Recording an mtime here would look like a clock and align the date wrongly; time_source is 'none', which every downstream report already distinguishes.",
+  "reader": {
+    "$comment": "No new reader: img_csv.read_image goes through cv2.IMREAD_UNCHANGED, which reads TIFF and BMP as readily as PNG. The format was never the gap -- the alignment was.",
+    "module": "img_csv",
+    "functions": [
+      "read_image"
+    ]
+  },
+  "nexus": {
+    "$comment": "No reviewed NDS profile yet: this pack writes a frame and a vendor comment block, and where the comment's fields belong in NeXus is a per-instrument ruling nobody has taken. The rows are proposed through `map --propose` and argued out on the Consensus tab like every other instrument's.",
+    "ndsProfile": null,
+    "ndsProfileVersion": null,
+    "ndsProfileState": "none yet; the .rec fields are carried verbatim and typed where the vendor states a unit, and no mapping claims them",
+    "ndsInput": "sidecar",
+    "$sourceAliases": "Which dataset this pack writes for each field NDS names when it reads a `.rec` with its own pco.camware reader (nexus-design-studio core/pco_rec_input.py, 2026-09-25). Names NDS and this pack share -- camera_type, adc_operation, offset_regulation, ir_sensitivity, pixelrate, conversion_factor, camera_serial_number -- match by name and need no row here. `recording_start_time` is the SET's recording start, written as recording_started: not a frame's time, and where it belongs is a review question. `Record Date` is the same field under the label an earlier proposal used.",
+    "sourceAliases": {
+      "recording_start_time": "recording_started",
+      "Record Date": "recording_started",
+      "exposure_time": "count_time",
+      "picture_size_horizontal": null,
+      "picture_size_vertical": null,
+      "roi_horizontal": null,
+      "roi_vertical": null,
+      "binning_horizontal": null,
+      "binning_vertical": null,
+      "delay_time": null
+    },
+    "$declined": "NDS splits the camera's paired values -- `Picture Size horz./vert.: 2048/2048`, `ROI`, `Binning`, `Exposure / Delay` -- into two fields each. This pack keeps each pair as the one text value the camera wrote (acquisition_settings/picture_size_horz_vert = '2048/2048'), so there is no dataset holding either half: linking the pair as `_horizontal` would put the wrong value at the right name. `exposure_time` is the one half the pack does type, as count_time. Split the pairs in the pack first if a review wants them.",
+    "$unmappedSubtrees": "What no mapping row is expected to claim. The verbatim comment is the whole point of carrying this format before anybody has ruled on it -- see notes/plan-formats.md on writing the bytes and preserving the raw metadata block unmapped.",
+    "unmappedSubtrees": {
+      "original_metadata": "the .rec file exactly as the camera software wrote it, so nothing a parser missed is lost. The typed copies are in acquisition_settings.",
+      "data": "the NXdata view of raw_data/image, made so a viewer has something to plot. A link, not a second measurement."
+    },
+    "nxClass": "NXdetector",
+    "writes": [
+      "raw_data/image — the frame as stored, units counts; for a recording, every frame as image[frame, y, x]",
+      "raw_data/frame_number, raw_data/frame_readable — for a recording: which file each frame came from, and where one could not be read",
+      "raw_data/sequence_number — the ordinal in the file name, which is what places this frame in the run",
+      "data — NXdata linking the frame, interpretation image",
+      "original_metadata/recorder_comment — the .rec verbatim, when the recording wrote one",
+      "acquisition_settings/* — each key: value line of the .rec, with source_text; count_time and the camera's model and serial where it states them",
+      "recording_started — the .rec's Record Date/Time: when the SET started recording, not when this frame was taken"
+    ]
+  },
+  "registryKeys": [],
+  "$registryKeys": "None yet. The .rec carries an exposure and a conversion factor that may well map to governed keys; nothing is claimed until governed-keys.md records the evidence, which is the same rule every other pack follows.",
+  "notes": [
+    "One .rec per set, always beside the first frame -- 48 of them for 47 sets on 2026_02_20 -- so it lands on that frame's acquisition and describes the whole recording. Its Record Date is the set's start, which is why it is written as `recording_started` rather than as this frame's time.",
+    "`.tif.rec` is a two-part suffix. The stem is taken by stripping `.rec` and then the image suffix, so the sidecar and its frame end up with the same key and become two files of one acquisition -- by intent rather than by accident."
+  ],
+  "$kind": "Its own kind, not 'image'. `nexus_build` routes an acquisition to a pack by the kind the INDEX recorded -- so an index built last month still finds its writer -- and two packs sharing a kind would make that lookup ambiguous. The app treats anything that is not 'spectrum' as a frame, so a viewer still draws it."
+}

@@ -45,6 +45,9 @@ dependencies = [
     "python-ulid[pydantic]>=3.1.0",
     "sqlmodel>=0.0.31",
     "motor>=3.7.1",
+    # hzdr_packs reads PNG/TIFF/BMP frames with it (already installed for
+    # matplotlib); 12 opens 16-bit grey PNGs as I;16, as the packs rely on.
+    "pillow~=12.2",
 ]
 
 [project.urls]
@@ -116,3 +119,15 @@ include = ["src/damnit_api"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.pyright]
+# shot-aligner's readers and pack helpers, vendored byte for byte and pinned by
+# sha256 (hzdr/scripts/sync-hzdr-packs.{sh,ps1}). Their unused cv2/nexusformat
+# code paths are shot-aligner's; a fix goes there, never to the copy. The other
+# entries are pyright's own defaults, which `exclude` would otherwise replace.
+exclude = [
+    "src/damnit_api/metadata/hzdr_packs/vendor",
+    "**/node_modules",
+    "**/__pycache__",
+    "**/.*",
+]

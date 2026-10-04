@@ -96,6 +96,21 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     canonical path inventory (only `/entry/shots/*` is shot-indexed —
     `/entry/source_events` and `/entry/data_products` need a `shot_key` join) are in
     [hzdr/docs/plans/openpmd-projection-plan.md](hzdr/docs/plans/openpmd-projection-plan.md).
+  - `hzdr_packs/` — the diagnostic packs (campaign output plan phase 2b): one
+    acquisition's files into one `NXdetector`, via
+    `write(pack_id, group, acquisition, read_path) -> problems`, for
+    `camera_png_csv`, `spectrometer_irr8` and `sequence_frames`
+    (`metadata.instrument.format`). shot-aligner's readers, helpers and pack
+    manifests are **vendored byte for byte** under `hzdr_packs/vendor/`
+    (pinned in its `SOURCE.json`; ruff/pyright/pre-commit skip it; fix them in
+    shot-aligner, re-vendor with `hzdr/scripts/sync-hzdr-packs.{sh,ps1} --apply`,
+    checked by `test-all.ps1`); the packs themselves are **rewritten to h5py**.
+    Frames are read with Pillow in OpenCV's `IMREAD_UNCHANGED` layout
+    (`_images.py`; a 16-bit colour frame is refused, not truncated) and stream
+    into chunked gzip-4 datasets one frame at a time. Held node for node and
+    value for value to shot-aligner's per-pack references
+    (`api/tests/fixtures/hzdr-reference/packs/`). Not wired into the builder
+    yet (phase 3).
   - `scicat.py` — registers the canonical campaign NeXus file as a citable SciCat
     dataset via the `scicat_plugin` HTTP boundary; runs as a best-effort builder
     post-step (never fails a build) and stamps `scicat_pid`/`version_hash` into the

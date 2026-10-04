@@ -1,0 +1,91 @@
+{
+  "$comment": "Declarative half of the Irr8 spectrometer pack. Edited here or in the review app's Formats tab; the behaviour is in spectrometer_irr8.py beside this file. See README.md in this folder for what each field means.",
+  "id": "spectrometer_irr8",
+  "title": "Irr8 spectrometer export",
+  "order": 10,
+  "kind": "spectrum",
+  "summary": "One .Irr8.txt per recording: 1600-2050 rows of wavelength against counts, plus the acquisition header. Two of this campaign's nineteen diagnostics export this way, and one of them writes no timestamp at all.",
+  "claims": {
+    "$comment": "Ordered before the camera so .Irr8.txt is claimed before the camera is asked about .csv. Nothing else in a spectrometer folder is an acquisition: the .Raw8 files are two per log session, not one per shot.",
+    "suffixes": [
+      ".Irr8.txt"
+    ],
+    "excludeSuffixes": [],
+    "measurementSuffixes": [
+      ".Irr8.txt"
+    ],
+    "sidecarSuffixes": []
+  },
+  "namePatterns": [
+    {
+      "id": "stamped",
+      "regex": "^(?P<device>[^_]+)_(?P<day>\\d{2})(?P<month>[A-Za-zä]{3})(?P<year>\\d{2})_(?P<hh>\\d{2})(?P<mm>\\d{2})(?P<ss>\\d{2})_(?P<seq>\\d+)$",
+      "example": "7519372SP_03Dez25_152335_0001.Irr8.txt",
+      "note": "German-abbreviated month and a timestamp, but a sequence number that is always 0001 and therefore carries no ordinal. The pack discards it."
+    },
+    {
+      "id": "plain",
+      "provides": "sequence",
+      "regex": "^(?P<device>[^_]+)_(?P<seq>\\d+)$",
+      "example": "set2/7519372SP_0064.Irr8.txt",
+      "note": "No timestamp at all. The set comes from the parent folder and the ordinal from the name; the clock has to come from the filesystem, which is why time_source is recorded per record and why mounting-the-data.md insists on a copy that preserves mtimes."
+    }
+  ],
+  "unlabelledIsShot": true,
+  "$unlabelledIsShot": "True: the stamped dialect sits directly in the instrument folder and declares no set, so it must stay a shot candidate and let set assignment decide from its timestamp. A camera in the same position would be an alignment series.",
+  "reader": {
+    "$comment": "irr8.py at the checkout root is the authority for the format and is shared with workflows/. The review app's lineouts go through shotalign/spectra.py, which reads through the same function.",
+    "module": "irr8",
+    "functions": [
+      "read_irr8"
+    ]
+  },
+  "nexus": {
+    "$comment": "ndsProfile names the reviewed NeXus Design Studio profile that governs this routing. It is checked by the combo root's `diagnostic-packs` check, which can see NDS; this repository cannot, so nothing here validates it locally.",
+    "ndsProfile": "profiles/irr8_spectrometer.yaml",
+    "ndsProfileVersion": "0.1",
+    "ndsProfileState": "reviewed against the bundled NXDL",
+    "$ndsInput": "Which of this pack's files NDS is given when the review app asks it where a field belongs. 'measurement' or 'sidecar'. The .Irr8.txt itself: it carries both its header and its columns, so there is no separate sidecar to read.",
+    "ndsInput": "measurement",
+    "$sourceAliases": "Which dataset this pack writes corresponds to each field NDS names. A name not listed falls through to matching on the name itself -- `sample`, `dark`, `reference` and `photon_counts` already match their raw_data datasets exactly and need no row here. A name mapped to null is declined and never guessed.",
+    "sourceAliases": {
+      "integration_time": "count_time",
+      "averaging": "metadata/Averaging_Nr",
+      "smoothing": "metadata/Smoothing_Nr",
+      "spectrometer_name": "metadata/Data_measured_with_spectrometer",
+      "spectrometer_serial": "fabrication/serial_number",
+      "wavelength": "raw_data/wave",
+      "absolute_irradiance": "raw_data/absolute_irradiance",
+      "sequence_number": null,
+      "start_time": "/entry/start_time",
+      "experiment_type": null,
+      "experiment_sub_type": null,
+      "sample_name": null,
+      "spectrometer_vendor": null,
+      "spectrometer_model": null
+    },
+    "$declined": "`sequence_number` is the ordinal in the file name, which the index holds and the detector group does not. `start_time` was a null until 2026-09-25 only because nothing outside the pack's own output could be a source; it is now aliased to /entry/start_time, the shot's aligned time, as the maintainer ruled 2026-09-25. The spectrum's own time -- file_metadata/file_creation_date, from the file name in the stamped dialect (file_metadata/time_source says which), which is what NDS's profile note means -- is kept too: every detector carries it, and the spectrometer mappings link it into the subentry with a row of its own. `experiment_type`, `experiment_sub_type` and `sample_name` come from the profile's own defaults rather than from the file. Vendor and model are not in an Irr8 header at all -- only the serial is, which is why the reviewed profile carries a serial_models table.",
+    "$ambiguous": "Why `absolute_irradiance` is listed when the five other spectra are not. `sample`, `dark`, `reference` and `photon_counts` each have exactly one dataset ending in their name, so the advisor's exact pass finds them and an alias would be bookkeeping. `absolute_irradiance` has two -- the measurement at raw_data/absolute_irradiance and the NXdata view of it at data/absolute_irradiance -- and two candidates make the advisor decline rather than pick, which is the right instinct and left a spectrometer's PRIMARY measurement mapped to nothing. The alias names the owner: NXdata is a view, and a mapping links the dataset the value lives in.",
+    "$signalScaleType": "The scale a viewer is asked to open this format's measurement on, written as NXdata@SILX_style on the detector's `data` group and carried to the entry's plot by the builder. Opt-in: the camera pack declares nothing and nothing is written for it, which keeps one present a statement about the measurement rather than a default. 'log' here because an emission line stands four orders of magnitude above its background, so a linear axis draws a spike over an empty plot. silx knows linear, log and asinh; anything else is refused at load.",
+    "signalScaleType": "log",
+    "nxClass": "NXdetector",
+    "writes": [
+      "raw_data/<column> — every data column the file holds, with its units",
+      "data — NXdata of irradiance against wavelength, interpretation spectrum",
+      "metadata/* — the header's scalar settings",
+      "fabrication/serial_number — the device serial, taken from the file name",
+      "count_time — NXdetector base-class name for the header's integration time, matched by unit rather than by spelling"
+    ],
+    "$unmappedSubtrees": "Parts of this pack's output no mapping row is expected to claim, and why. Read by `align.py map <date> --verify`. Claiming one anyway is allowed: `averaging` does, because the Irr8 header's Averaging_Nr has no typed copy to point at instead.",
+    "unmappedSubtrees": {
+      "metadata": "the Irr8 header's own keys under the vendor's spelling, kept as text. count_time is the one value typed out of them; the rest have no typed copy, so a row that wants one points in here and says so.",
+      "data": "the NXdata view of the irradiance against wavelength, made so a viewer has something to plot. Both are links to raw_data."
+    }
+  },
+  "registryKeys": [],
+  "$registryKeys": "Governed keys from DAMNIT's METADATA_KEY_REGISTRY that this pack fills. Empty: nothing in an Irr8 header is a governed quantity. governed-keys.md lists the campaign's registry mappings, all of which come from the shotsheet rather than from a diagnostic file.",
+  "notes": [
+    "The set2 files carry no clock but their mtime. A copy made through FAT/exFAT or an SFTP client with a wrong timezone preference shifts every one of them by a constant, which the aligner reports as acquisitions that fit no offset and cluster into events of their own.",
+    "reference is all zeros in the December 2025 data — no calibration lamp spectrum was recorded — so absolute_irradiance is uncalibrated. The lineout endpoint reports that rather than hiding it."
+  ]
+}

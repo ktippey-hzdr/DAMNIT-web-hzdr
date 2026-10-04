@@ -1,0 +1,341 @@
+{
+  "acquisition": {
+    "files": [
+      "M1_Spec_Fib_Cer/set1_2025-12-01_15h-59m-04s_2.csv",
+      "M1_Spec_Fib_Cer/set1_2025-12-01_15h-59m-04s_2_original.png"
+    ],
+    "instrument": "M1_Spec_Fib_Cer",
+    "kind": "image",
+    "label": "set1",
+    "seq": 2
+  },
+  "detector_path": "entry/detector",
+  "fixture": "hzdr reference pack output",
+  "instrument": {
+    "id": "m1_spec_fib_cer",
+    "label": "M1_Spec_Fib_Cer"
+  },
+  "nodes": {
+    "/entry": {
+      "NX_class": "NXentry",
+      "type": "group"
+    },
+    "/entry/detector": {
+      "NX_class": "NXdetector",
+      "default": "data",
+      "type": "group"
+    },
+    "/entry/detector/acquisition_settings": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/acquisition_settings/black_level_offset": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Black Level Offset",
+        "source_text": "0.00"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": 0.0
+    },
+    "/entry/detector/acquisition_settings/chip_size_x": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Chip Size X",
+        "source_text": "3.69 mm"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "mm",
+      "value": 3.69
+    },
+    "/entry/detector/acquisition_settings/chip_size_y": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Chip Size Y",
+        "source_text": "2.77 mm"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "mm",
+      "value": 2.77
+    },
+    "/entry/detector/acquisition_settings/exposure": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Exposure",
+        "source_text": "0.035000 s"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "s",
+      "value": 0.035
+    },
+    "/entry/detector/acquisition_settings/gain": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Gain",
+        "source_text": "100.00 dB"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "dB",
+      "value": 100.0
+    },
+    "/entry/detector/acquisition_settings/gamma": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Gamma",
+        "source_text": "1.00"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": 1.0
+    },
+    "/entry/detector/count_time": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Exposure",
+        "source_text": "0.035000 s"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "s",
+      "value": 0.035
+    },
+    "/entry/detector/data": {
+      "NX_class": "NXdata",
+      "signal": "image",
+      "type": "group"
+    },
+    "/entry/detector/data/image": {
+      "NX_class": null,
+      "attrs": {
+        "interpretation": "image",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "<u2",
+      "sha256": "5e6f0d6c5f7adf5a5dd18b08c7ce5b1cc0633867efd137a0a01541dc5210f8b1",
+      "shape": [
+        494,
+        659
+      ],
+      "type": "dataset",
+      "units": "counts"
+    },
+    "/entry/detector/fabrication": {
+      "NX_class": "NXfabrication",
+      "type": "group"
+    },
+    "/entry/detector/fabrication/model": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "acA640-120gm"
+    },
+    "/entry/detector/gain_setting": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Gain"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "dB",
+      "value": 100.0
+    },
+    "/entry/detector/metadata": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/metadata/black_level_offset": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "0.00"
+    },
+    "/entry/detector/metadata/chip_size_x": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "3.69 mm"
+    },
+    "/entry/detector/metadata/chip_size_y": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "2.77 mm"
+    },
+    "/entry/detector/metadata/comment": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    },
+    "/entry/detector/metadata/exposure": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "0.035000 s"
+    },
+    "/entry/detector/metadata/gain": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "100.00 dB"
+    },
+    "/entry/detector/metadata/gamma": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "1.00"
+    },
+    "/entry/detector/original_metadata": {
+      "NX_class": "NXnote",
+      "type": "group"
+    },
+    "/entry/detector/original_metadata/analysis": {
+      "NX_class": null,
+      "attrs": {
+        "description": "original parsed camera analysis-tool block; values kept as text"
+      },
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "{\"Peak Profile\": {\"Pos x\": {\"value\": \"284\", \"units\": \"Pixel\"}, \"Pos y\": {\"value\": \"464\", \"units\": \"Pixel\"}, \"Value\": {\"value\": \"52160\", \"units\": \"a.u.\"}, \"Averaging\": {\"value\": \"1\", \"units\": \"Pixel\"}, \"Green x horiz\": {\"value\": \"238\", \"units\": \"Pixel\"}, \"Green y horiz\": {\"value\": \"128\", \"units\": \"a.u.\"}, \"Red x horiz\": {\"value\": \"0\", \"units\": \"Pixel\"}, \"Red y horiz\": {\"value\": \"1840\", \"units\": \"a.u.\"}, \"Dist x horiz\": {\"value\": \"238\", \"units\": \"Pixel\"}, \"Green x vert\": {\"value\": \"0\", \"units\": \"Pixel\"}, \"Green y vert\": {\"value\": \"8992\", \"units\": \"a.u.\"}, \"Red x vert\": {\"value\": \"0\", \"units\": \"Pixel\"}, \"Red y vert\": {\"value\": \"8992\", \"units\": \"a.u.\"}, \"Dist x vert\": {\"value\": \"0\", \"units\": \"Pixel\"}, \"ROI\": {\"value\": \"Image\", \"units\": \"\"}, \"Peak Determination Method\": {\"value\": \"Calculate Centroid\", \"units\": \"a.u.\"}}, \"Contrast\": {\"Min Source\": {\"value\": \"0\", \"units\": \"a.u.\"}, \"Max Source\": {\"value\": \"790\", \"units\": \"a.u.\"}, \"Min Destination\": {\"value\": \"0\", \"units\": \"a.u.\"}, \"Max Destination\": {\"value\": \"65535\", \"units\": \"a.u.\"}, \"ROI\": {\"value\": \"Image\", \"units\": \"\"}}}"
+    },
+    "/entry/detector/original_metadata/data": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "{\"Image No.\": \"108544\", \"Comment\": \"\", \"Name\": \"acA640-120gm\", \"Label\": \"\", \"Exposure\": \"0.035000 s\", \"Gain\": \"100.00 dB\", \"Black Level Offset\": \"0.00\", \"Gamma\": \"1.00\", \"Chip Size X\": \"3.69 mm\", \"Chip Size Y\": \"2.77 mm\"}"
+    },
+    "/entry/detector/original_metadata/date": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
+    "/entry/detector/original_metadata/description": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "original parsed camera CSV metadata; values kept as text"
+    },
+    "/entry/detector/original_metadata/source_file": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "set1_2025-12-01_15h-59m-04s_2.csv"
+    },
+    "/entry/detector/original_metadata/type": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "application/json"
+    },
+    "/entry/detector/raw_data": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/raw_data/image": {
+      "NX_class": null,
+      "attrs": {
+        "interpretation": "image",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "<u2",
+      "link": "/entry/detector/data/image",
+      "sha256": "5e6f0d6c5f7adf5a5dd18b08c7ce5b1cc0633867efd137a0a01541dc5210f8b1",
+      "shape": [
+        494,
+        659
+      ],
+      "type": "dataset",
+      "units": "counts"
+    },
+    "/entry/detector/raw_data/name": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    },
+    "/entry/detector/raw_data/sequence_number": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "108544"
+    },
+    "/entry/detector/x_pixel_size": {
+      "NX_class": null,
+      "attrs": {
+        "description": "derived: 3.69 mm divided by 659 pixels"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "um",
+      "value": 5.599393019726858
+    },
+    "/entry/detector/y_pixel_size": {
+      "NX_class": null,
+      "attrs": {
+        "description": "derived: 2.77 mm divided by 494 pixels"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "um",
+      "value": 5.607287449392713
+    }
+  },
+  "pack": "camera_png_csv",
+  "plottable": "entry/detector/data",
+  "problems": [],
+  "root": "raw",
+  "small": 64,
+  "volatile": [
+    "/entry/detector/original_metadata/date"
+  ],
+  "writer": "shot-aligner diagnostics.camera_png_csv.write"
+}
