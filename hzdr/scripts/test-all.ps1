@@ -215,6 +215,21 @@ if ($Repos.Count -eq 0) {
     }
 }
 
+# -- Reference fixture sync check ----------------------------------------------
+# Verifies that api/tests/fixtures/hzdr-reference/ is byte-identical to
+# shot-aligner's shot_aligner/tests/fixtures/reference/ and to the hashes in
+# its SOURCE.json. Same rule as above: only when every repo is selected.
+if ($Repos.Count -eq 0) {
+    Write-Host ""
+    Write-Host "--- Reference fixture sync (shot-aligner -> hzdr-reference) ---" -ForegroundColor Cyan
+    & "$PSScriptRoot\sync-hzdr-reference.ps1"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Reference fixture drift." -ForegroundColor Red
+        Write-Host "  Run: pwsh hzdr/scripts/sync-hzdr-reference.ps1 -Apply  to fix." -ForegroundColor Yellow
+        exit 1
+    }
+}
+
 # -- Run -----------------------------------------------------------------------
 # Restore the caller's starting folder afterward: the loop Set-Locations into
 # each repo, and PowerShell's location is process-wide.

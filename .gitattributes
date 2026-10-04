@@ -18,3 +18,8 @@
 *.woff binary
 *.woff2 binary
 api/tests/fixtures/semantic-golden-domain.synthetic.json text eol=lf
+# shot-aligner's reference fixture, vendored byte for byte and pinned by sha256
+# in its SOURCE.json: no line-ending conversion, or a Windows checkout with
+# core.autocrlf=true breaks every hash. Re-vendor with
+# hzdr/scripts/sync-hzdr-reference.{sh,ps1}.
+api/tests/fixtures/hzdr-reference/** -text

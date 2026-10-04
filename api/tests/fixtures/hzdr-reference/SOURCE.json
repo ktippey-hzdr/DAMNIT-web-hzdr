@@ -1,14 +1,13 @@
 {
-  "commit": "64d7348",
+  "commit": "ca677f3",
   "files": {
-    "README.md": "dd590ceb55a85467333ef9a89589c8c3892f254818ab62328ec5b3bba1220c6b",
-    "events.jsonl": "e6b52eca4567abbb490afd8fc05b3d085d9fb98aee5edea17302f48173000e1d",
-    "manifest.json": "113ef34865bf75dedcb7156945a1f51070b05ce1c4af9050c5586eb7af748995",
+    "README.md": "edf7638f993b18214e69429207e850f31c53b304e6f51177476ba0cdd5ff2566",
+    "events.jsonl": "1789011aaa41caa4dae2135a63926f327cb9022baff84a9af2ddc5fab64e11d4",
+    "manifest.json": "5100982600d5ee047495920a907fe56e3b182797f63962beb4b09f835486ffae",
     "raw/M1_Spec_Fib_Cer/set1_2025-12-01_15h-59m-04s_2.csv": "e4e5831ccfbec465971dc6a95c4a54fbadc676d875e774c9d516439e445e7506",
     "raw/M1_Spec_Fib_Cer/set1_2025-12-01_15h-59m-04s_2_original.png": "cf4c21d9c5c0c4e7d88ca9f95385261718317a1c306ff1eca3a6ae5ec5fc6d5d",
     "raw/Probe135/20cm_6kv_00001.tif": "763002f1da21c8dc8f64b9bc38c32e0e58fd731b3a57c3f0993b05e74292a632",
     "raw/Probe135/20cm_6kv_00002.tif": "f0863b6a231804f40da4219daaeda57d717eb713f94c33f7bcb81bb578edba01",
-    "raw/Probe135/20cm_6kv_00003.tif": "85700b2ba7d5c5d56657d08223245a5da5d853649cb6ce494a8d7feaffd5b474",
     "raw/Reflected 515 spectrometer/7519372SP_01Dez25_155904_0001.Irr8.txt": "1e098d80712ce90ab21dcf50f78297ae65a4906903dabd80aa650726a8d7018a"
   },
   "repository": "https://codebase.helmholtz.cloud/tippey27/shot-aligner",

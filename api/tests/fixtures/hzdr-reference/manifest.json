@@ -21,6 +21,7 @@
   "nodes": {
     "/entry": {
       "NX_class": "NXentry",
+      "default": "data",
       "type": "group"
     },
     "/entry/Probe_135_deg": {
@@ -36,17 +37,20 @@
     },
     "/entry/Probe_135_deg/pco_Camera": {
       "NX_class": "NXdetector",
+      "default": "data",
+      "nds_definition": "NXoptical_spectroscopy",
       "type": "group"
     },
     "/entry/Probe_135_deg/pco_Camera/data": {
       "NX_class": "NXdata",
+      "signal": "image",
       "type": "group"
     },
     "/entry/Probe_135_deg/pco_Camera/data/image": {
       "NX_class": null,
       "dtype": "<u2",
       "shape": [
-        3,
+        2,
         4,
         5
       ],
@@ -80,7 +84,7 @@
     },
     "/entry/Probe_135_deg/pco_Camera/file_metadata/recorded_offset_removed": {
       "NX_class": null,
-      "dtype": "<i8",
+      "dtype": "<f8",
       "shape": [],
       "type": "dataset",
       "units": "s"
@@ -114,7 +118,7 @@
       "NX_class": null,
       "dtype": "<i4",
       "shape": [
-        3
+        2
       ],
       "type": "dataset",
       "units": null
@@ -123,17 +127,22 @@
       "NX_class": null,
       "dtype": "|b1",
       "shape": [
-        3
+        2
       ],
       "type": "dataset",
       "units": null
     },
-    "/entry/Probe_135_deg/pco_Camera/raw_data/sequence_number": {
+    "/entry/Probe_135_deg/pco_Camera/raw_data/image": {
       "NX_class": null,
-      "dtype": "<i8",
-      "shape": [],
+      "dtype": "<u2",
+      "link": "/entry/Probe_135_deg/pco_Camera/data/image",
+      "shape": [
+        2,
+        4,
+        5
+      ],
       "type": "dataset",
-      "units": null
+      "units": "counts"
     },
     "/entry/Probe_135_deg/pco_Camera/timing_role": {
       "NX_class": null,
@@ -148,6 +157,8 @@
     },
     "/entry/Reflected_515_Spectrometer/data": {
       "NX_class": "NXdata",
+      "axes": "wavelength",
+      "signal": "absolute_irradiance",
       "type": "group"
     },
     "/entry/Reflected_515_Spectrometer/data/absolute_irradiance": {
@@ -268,11 +279,45 @@
     },
     "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer": {
       "NX_class": "NXdetector",
+      "default": "data",
+      "nds_definition": "NXoptical_spectroscopy",
       "type": "group"
+    },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/count_time": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_515_Spectrometer/instrument/Reflected_515_Spectrometer/count_time",
+      "shape": [],
+      "type": "dataset",
+      "units": "ms"
     },
     "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/data": {
       "NX_class": "NXdata",
+      "axes": [
+        "wave"
+      ],
+      "signal": "absolute_irradiance",
       "type": "group"
+    },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/data/absolute_irradiance": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_515_Spectrometer/data/absolute_irradiance",
+      "shape": [
+        2048
+      ],
+      "type": "dataset",
+      "units": "\u00b5Watt/cm\u00b2/nm"
+    },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/data/wave": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_515_Spectrometer/data/wavelength",
+      "shape": [
+        2048
+      ],
+      "type": "dataset",
+      "units": "nm"
     },
     "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/fabrication": {
       "NX_class": "NXfabrication",
@@ -288,6 +333,14 @@
     "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/file_metadata": {
       "NX_class": "NXnote",
       "type": "group"
+    },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/file_metadata/file_creation_date": {
+      "NX_class": null,
+      "dtype": "string",
+      "link": "/entry/Reflected_515_Spectrometer/instrument/Reflected_515_Spectrometer/file_creation_date",
+      "shape": [],
+      "type": "dataset",
+      "units": null
     },
     "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/file_metadata/file_name": {
       "NX_class": null,
@@ -305,7 +358,7 @@
     },
     "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/file_metadata/recorded_offset_removed": {
       "NX_class": null,
-      "dtype": "<i8",
+      "dtype": "<f8",
       "shape": [],
       "type": "dataset",
       "units": "s"
@@ -335,6 +388,22 @@
       "NX_class": "NXcollection",
       "type": "group"
     },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/metadata/Averaging_Nr": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_515_Spectrometer/instrument/Reflected_515_Spectrometer/number_of_cycles",
+      "shape": [],
+      "type": "dataset",
+      "units": "scans"
+    },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/metadata/Data_measured_with_spectrometer": {
+      "NX_class": null,
+      "dtype": "string",
+      "link": "/entry/Reflected_515_Spectrometer/instrument/name",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
     "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/metadata/Integration_time": {
       "NX_class": null,
       "dtype": "<f8",
@@ -342,9 +411,77 @@
       "type": "dataset",
       "units": "ms"
     },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/metadata/Smoothing_Nr": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_515_Spectrometer/process/smoothing_width",
+      "shape": [],
+      "type": "dataset",
+      "units": "pixels"
+    },
     "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/raw_data": {
       "NX_class": "NXcollection",
       "type": "group"
+    },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/raw_data/absolute_irradiance": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_515_Spectrometer/data/absolute_irradiance",
+      "shape": [
+        2048
+      ],
+      "type": "dataset",
+      "units": "\u00b5Watt/cm\u00b2/nm"
+    },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/raw_data/dark": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_515_Spectrometer/instrument/Reflected_515_Spectrometer/raw_data/dark",
+      "shape": [
+        2048
+      ],
+      "type": "dataset",
+      "units": "counts"
+    },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/raw_data/photon_counts": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_515_Spectrometer/data/photon_flux_density",
+      "shape": [
+        2048
+      ],
+      "type": "dataset",
+      "units": "\u00b5Mol/s/m\u00b2/nm"
+    },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/raw_data/reference": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_515_Spectrometer/instrument/Reflected_515_Spectrometer/raw_data/reference",
+      "shape": [
+        2048
+      ],
+      "type": "dataset",
+      "units": "counts"
+    },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/raw_data/sample": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_515_Spectrometer/instrument/Reflected_515_Spectrometer/raw_data/raw",
+      "shape": [
+        2048
+      ],
+      "type": "dataset",
+      "units": "counts"
+    },
+    "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/raw_data/wave": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_515_Spectrometer/data/wavelength",
+      "shape": [
+        2048
+      ],
+      "type": "dataset",
+      "units": "nm"
     },
     "/entry/Reflected_light_spectroscopy/Reflected_515_Spectrometer/timing_role": {
       "NX_class": null,
@@ -355,6 +492,8 @@
     },
     "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer": {
       "NX_class": "NXdetector",
+      "default": "data",
+      "nds_definition": "NXxrd_pan",
       "type": "group"
     },
     "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/acquisition_settings": {
@@ -412,6 +551,7 @@
     },
     "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/data": {
       "NX_class": "NXdata",
+      "signal": "image",
       "type": "group"
     },
     "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/data/image": {
@@ -462,7 +602,7 @@
     },
     "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/file_metadata/recorded_offset_removed": {
       "NX_class": null,
-      "dtype": "<i8",
+      "dtype": "<f8",
       "shape": [],
       "type": "dataset",
       "units": "s"
@@ -598,6 +738,17 @@
       "NX_class": "NXcollection",
       "type": "group"
     },
+    "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/raw_data/image": {
+      "NX_class": null,
+      "dtype": "<u2",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/data/image",
+      "shape": [
+        494,
+        659
+      ],
+      "type": "dataset",
+      "units": "counts"
+    },
     "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/raw_data/name": {
       "NX_class": null,
       "dtype": "string",
@@ -648,6 +799,46 @@
       "NX_class": "NXcollection",
       "type": "group"
     },
+    "/entry/_515_Reflected_Light_Spectrometer/collection/black_level": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/acquisition_settings/black_level_offset",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
+    "/entry/_515_Reflected_Light_Spectrometer/collection/chip_size_x": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/acquisition_settings/chip_size_x",
+      "shape": [],
+      "type": "dataset",
+      "units": "mm"
+    },
+    "/entry/_515_Reflected_Light_Spectrometer/collection/chip_size_y": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/acquisition_settings/chip_size_y",
+      "shape": [],
+      "type": "dataset",
+      "units": "mm"
+    },
+    "/entry/_515_Reflected_Light_Spectrometer/collection/gamma": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/acquisition_settings/gamma",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
+    "/entry/_515_Reflected_Light_Spectrometer/collection/image_file": {
+      "NX_class": null,
+      "dtype": "string",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/file_metadata/file_name",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
     "/entry/_515_Reflected_Light_Spectrometer/definition": {
       "NX_class": null,
       "dtype": "string",
@@ -662,6 +853,49 @@
     "/entry/_515_Reflected_Light_Spectrometer/instrument/_515_Reflected_Light_Spectrometer": {
       "NX_class": "NXdetector",
       "type": "group"
+    },
+    "/entry/_515_Reflected_Light_Spectrometer/instrument/_515_Reflected_Light_Spectrometer/count_time": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/count_time",
+      "shape": [],
+      "type": "dataset",
+      "units": "s"
+    },
+    "/entry/_515_Reflected_Light_Spectrometer/instrument/_515_Reflected_Light_Spectrometer/data": {
+      "NX_class": null,
+      "dtype": "<u2",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/data/image",
+      "shape": [
+        494,
+        659
+      ],
+      "type": "dataset",
+      "units": "counts"
+    },
+    "/entry/_515_Reflected_Light_Spectrometer/instrument/_515_Reflected_Light_Spectrometer/description": {
+      "NX_class": null,
+      "dtype": "string",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/fabrication/model",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
+    "/entry/_515_Reflected_Light_Spectrometer/instrument/_515_Reflected_Light_Spectrometer/frame_start_number": {
+      "NX_class": null,
+      "dtype": "string",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/raw_data/sequence_number",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
+    "/entry/_515_Reflected_Light_Spectrometer/instrument/_515_Reflected_Light_Spectrometer/gain_setting": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/gain_setting",
+      "shape": [],
+      "type": "dataset",
+      "units": "dB"
     },
     "/entry/_515_Reflected_Light_Spectrometer/start_time": {
       "NX_class": null,
@@ -690,7 +924,7 @@
     },
     "/entry/alignment/event_span": {
       "NX_class": null,
-      "dtype": "<i8",
+      "dtype": "<f8",
       "shape": [],
       "type": "dataset",
       "units": "s"
@@ -820,48 +1054,21 @@
     },
     "/entry/data": {
       "NX_class": "NXdata",
+      "signal": "image",
       "type": "group"
+    },
+    "/entry/data/image": {
+      "NX_class": null,
+      "dtype": "<u2",
+      "link": "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer/data/image",
+      "shape": [
+        494,
+        659
+      ],
+      "type": "dataset",
+      "units": "counts"
     },
     "/entry/entry_identifier": {
-      "NX_class": null,
-      "dtype": "string",
-      "shape": [],
-      "type": "dataset",
-      "units": null
-    },
-    "/entry/experiment_description": {
-      "NX_class": null,
-      "dtype": "string",
-      "shape": [],
-      "type": "dataset",
-      "units": null
-    },
-    "/entry/experiment_documentation": {
-      "NX_class": "NXnote",
-      "type": "group"
-    },
-    "/entry/experiment_documentation/data": {
-      "NX_class": null,
-      "dtype": "string",
-      "shape": [],
-      "type": "dataset",
-      "units": null
-    },
-    "/entry/experiment_documentation/date": {
-      "NX_class": null,
-      "dtype": "string",
-      "shape": [],
-      "type": "dataset",
-      "units": null
-    },
-    "/entry/experiment_documentation/description": {
-      "NX_class": null,
-      "dtype": "string",
-      "shape": [],
-      "type": "dataset",
-      "units": null
-    },
-    "/entry/experiment_documentation/type": {
       "NX_class": null,
       "dtype": "string",
       "shape": [],
@@ -889,13 +1096,6 @@
     "/entry/shot_info/count_in_set": {
       "NX_class": null,
       "dtype": "<i8",
-      "shape": [],
-      "type": "dataset",
-      "units": null
-    },
-    "/entry/shot_info/link": {
-      "NX_class": null,
-      "dtype": "string",
       "shape": [],
       "type": "dataset",
       "units": null
@@ -974,6 +1174,14 @@
     "/entry/shotsheet_provenance/type": {
       "NX_class": null,
       "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
+    "/entry/start_time": {
+      "NX_class": null,
+      "dtype": "string",
+      "link": "/entry/_515_Reflected_Light_Spectrometer/start_time",
       "shape": [],
       "type": "dataset",
       "units": null
