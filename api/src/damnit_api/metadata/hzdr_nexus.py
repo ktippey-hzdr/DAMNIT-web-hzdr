@@ -22,6 +22,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import h5py
 import numpy as np
 
+from ..shared.hzdr_paths import map_path
 from .hzdr_event import (
     EVENT_REQUIRED_FIELDS,
     METADATA_KEY_REGISTRY,
@@ -29,12 +30,11 @@ from .hzdr_event import (
     check_values_size,
     lint_metadata_keys,
 )
-from .hzdr_paths import map_path
 
 if TYPE_CHECKING:
     from collections.abc import Container, Iterable, Iterator, Mapping
 
-    from .hzdr_paths import PathRule
+    from ..shared.hzdr_paths import PathRule
 
 logger = logging.getLogger(__name__)
 

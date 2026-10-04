@@ -177,13 +177,18 @@ Consumers spool
 `unassigned` events to a shared `<spool>/_unassigned/` file that every
 campaign's build reads. A ruling posted from Review matches asks the running
 auto-trigger for a rebuild (`builder_trigger.request_rebuild`).
-`DW_API_METADATA__PATH_MAP` (`from=to` prefixes, comma separated; default empty)
-translates the file paths events and the catalog record (`/bigdata/...`,
-`Z:/bigdata/...`) onto this host's mount of the same share
-(`metadata/hzdr_paths.py`). It is applied where the API opens a shot's
-`hdf5_path` (dataset listing and previews), and by the builder (which reads
-the same setting, or `--path-map`) to find the bulk HDF5 files it links from
-`/entry/data_product_links`; it never rewrites what is stored.
+`DW_API_METADATA__PATH_MAP` (`from=to` prefixes, comma separated, absolute
+targets; default empty; a malformed value stops startup) translates recorded
+paths (`/bigdata/...`, `Z:/bigdata/...`) onto this host's mount of the same
+share (`shared/hzdr_paths.py`). The API applies it at read time in three
+places: a catalog shot's `hdf5_path` when it lists or previews datasets
+(normally the campaign NeXus file, so it matters when the catalog was built on
+another host or comes from Mongo); the `hdf5_path` handed to Context Builder
+variables; and each data product's `path`, which a shot detail reports as
+`reachable` (true/false; null for URIs and in-file datasets) and the UI badges
+as on disk / missing. The builder reads the same setting (or `--path-map`) to
+find the bulk HDF5 files it links from `/entry/data_product_links`. Nothing
+stored is rewritten.
 Structured JSON logging turns on when `DW_API_DEBUG=false`.
 `hzdr/scripts/damnit-api.service` is the systemd unit for an `/opt` install;
 `hzdr/scripts/damnit-api-checkout.service.example` is the one in use on

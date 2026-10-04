@@ -19,7 +19,7 @@ from damnit_api.metadata.hzdr_nexus import (
     reconcile_canonical_shots,
     write_nexus_bridge,
 )
-from damnit_api.metadata.hzdr_paths import parse_path_map
+from damnit_api.shared.hzdr_paths import parse_path_map
 
 SCRIPT_PATH = Path(__file__).parents[1] / "scripts" / "hzdr-hdf5-builder.py"
 SPEC = importlib.util.spec_from_file_location("hzdr_hdf5_builder", SCRIPT_PATH)

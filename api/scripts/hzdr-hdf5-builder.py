@@ -43,7 +43,7 @@ from damnit_api.metadata.hzdr_nexus import (
     write_nexus_bridge,
     write_sources_catalog,
 )
-from damnit_api.metadata.hzdr_paths import PathRule, parse_path_map
+from damnit_api.shared.hzdr_paths import PathRule, parse_path_map
 
 
 def load_mongo_shots(args: argparse.Namespace) -> list[dict[str, Any]]:

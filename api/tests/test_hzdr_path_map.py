@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from damnit_api.metadata.hzdr_paths import map_path, parse_path_map
+from damnit_api.shared.hzdr_paths import map_path, parse_path_map
 
 MOUNT = "/home/tippey/mnt/bigdata"
 
@@ -60,3 +60,29 @@ def test_exact_prefix_maps_to_the_mount_itself():
 def test_none_and_no_rules_pass_through():
     assert map_path(None, parse_path_map(f"/bigdata={MOUNT}")) is None
     assert map_path("/bigdata/x", []) == Path("/bigdata/x")
+
+
+def test_target_must_be_absolute():
+    with pytest.raises(ValueError, match="absolute"):
+        parse_path_map("/bigdata=mnt/bigdata")
+
+
+def test_longest_prefix_is_judged_after_normalizing():
+    # "/bigdata//////////" is longer as typed but is only "/bigdata"; the
+    # genuinely longer "/bigdata/HPLexp" must still win.
+    rules = parse_path_map("/bigdata//////////=/a,/bigdata/HPLexp=/b")
+    assert map_path("/bigdata/HPLexp/x.h5", rules) == Path("/b/x.h5")
+
+
+def test_unmatched_path_keeps_its_backslashes():
+    rules = parse_path_map(f"/bigdata={MOUNT}")
+    assert str(map_path("/data/odd\\name.h5", rules)) == "/data/odd\\name.h5"
+
+
+def test_malformed_map_stops_settings_loading():
+    from pydantic import ValidationError
+
+    from damnit_api.shared.settings import MetadataSettings
+
+    with pytest.raises(ValidationError, match="path map"):
+        MetadataSettings(path_map="oops")

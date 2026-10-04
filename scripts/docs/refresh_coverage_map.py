@@ -66,7 +66,7 @@ AREAS = (
             f"{A}/metadata/hzdr_event.py",
             f"{A}/metadata/hzdr_nexus.py",
             f"{A}/metadata/hzdr_openpmd.py",
-            f"{A}/metadata/hzdr_paths.py",
+            f"{A}/shared/hzdr_paths.py",
             f"{A}/metadata/hzdr_sources.py",
             f"{A}/metadata/labfrog_sqlite.py",
             f"{A}/metadata/models.py",

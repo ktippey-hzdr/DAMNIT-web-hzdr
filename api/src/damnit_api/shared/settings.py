@@ -117,6 +117,15 @@ class MetadataSettings(BaseModel):
     # (/bigdata/..., Z:/bigdata/...) onto this host's mount of the same share.
     path_map: str = ""
 
+    @field_validator("path_map")
+    @classmethod
+    def _check_path_map(cls, value: str) -> str:
+        # Refuse a bad map when settings load, not on the first request.
+        from .hzdr_paths import parse_path_map
+
+        parse_path_map(value)
+        return value
+
 
 class TerminologySettings(BaseModel):
     identity_name: str = "source"

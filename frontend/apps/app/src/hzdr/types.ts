@@ -66,6 +66,9 @@ export type HZDRDataProduct = {
   dtype?: string
   units?: string
   metadata: Record<string, unknown>
+  // Only in a shot detail: does the file exist on the API host (after the
+  // path map)? null/absent when there is nothing local to check.
+  reachable?: boolean | null
 }
 
 export type HZDRShotDetail = {

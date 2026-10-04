@@ -7,7 +7,7 @@ translation as ``from=to`` prefixes, comma separated, the way the SciCat
 plugin's ``SOURCE_FOLDER_PUBLISH_MAP`` does in the other direction.
 """
 
-from pathlib import Path, PureWindowsPath
+from pathlib import Path, PurePosixPath, PureWindowsPath
 
 PathRule = tuple[str, str]
 
@@ -24,6 +24,11 @@ def parse_path_map(spec: str) -> list[PathRule]:
         if not sep or not source or not target:
             msg = f"path map entry {entry!r} must look like 'from=to'"
             raise ValueError(msg)
+        if not (
+            PurePosixPath(target).is_absolute() or PureWindowsPath(target).is_absolute()
+        ):
+            msg = f"path map target {target!r} must be an absolute path"
+            raise ValueError(msg)
         rules.append((source, target))
     return rules
 
@@ -37,8 +42,8 @@ def map_path(raw: str | None, rules: list[PathRule]) -> Path | None:
     if raw is None:
         return None
     path = _normalize(raw)
-    for source, target in sorted(rules, key=lambda rule: -len(rule[0])):
-        prefix = _normalize(source).rstrip("/")
+    prefixed = [(_normalize(source).rstrip("/"), target) for source, target in rules]
+    for prefix, target in sorted(prefixed, key=lambda rule: -len(rule[0])):
         head = path[: len(prefix)]
         # Drive letters compare case-insensitively; everything else exactly.
         same = (
@@ -48,4 +53,4 @@ def map_path(raw: str | None, rules: list[PathRule]) -> Path | None:
         )
         if same and (len(path) == len(prefix) or path[len(prefix)] == "/"):
             return Path(target) / path[len(prefix) :].lstrip("/")
-    return Path(path)
+    return Path(raw)
