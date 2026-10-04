@@ -51,6 +51,7 @@ only Phase 5 (deployment evidence) remains.
 | [Deployment plan](plans/deployment-plan.md) | Wiring the Kafka and ASAPO spool consumers into the running server |
 | [Standards alignment plan](plans/alignment-implementation-plan.md) | Phased execution plan for enacting the standards alignment |
 | [Remaining work](plans/remaining-work-plan.md) | Next-steps playbook for open items with ordered recommendations |
+| [Campaign output](plans/campaign-output-plan.md) | Target end product: NeXus master plus linked per-shot containers built by the builder; shot-aligner is the interim answer and the test reference |
 | [openPMD projection](plans/openpmd-projection-plan.md) | DAMNIT's slice of the multi-source openPMD companion: canonical path inventory, synthetic fixture, projection preflight |
 
 ## Plans — delivered (`plans/done/`)
