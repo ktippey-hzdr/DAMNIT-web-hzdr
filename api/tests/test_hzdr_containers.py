@@ -1236,3 +1236,72 @@ def test_the_worker_reports_a_failed_container_and_exits_nonzero(campaign):
 def test_the_worker_needs_a_master_or_a_root():
     result = _worker()
     assert result.returncode == 2
+
+
+# --- A writer whose lock was taken over stops (phase 3 verification, bug a) --
+
+
+def test_a_writer_whose_lock_was_taken_publishes_nothing_more(campaign):
+    """``heartbeat`` failing before a rename ends the pass; nothing is renamed."""
+    from damnit_api.metadata.hzdr_nexus import LockLostError
+
+    shots = hc.shots_dir(campaign["master"])
+    calls: list[int] = []
+
+    def lost_after_first(*_args) -> None:
+        calls.append(1)
+        if len(calls) > 2:  # the first container's two checks pass
+            message = "taken over"
+            raise LockLostError(message)
+
+    with pytest.raises(LockLostError):
+        hc.convert_campaign(
+            campaign["master"],
+            read_path=_read_path(campaign["raw"]),
+            heartbeat=lost_after_first,
+            nonce="mine",
+        )
+    assert len(list(shots.glob("*.nxs"))) == 1
+    assert list(shots.glob("*.tmp")) == []
+    assert not (shots / hc.MANIFEST_NAME).exists()
+
+
+def test_temp_names_are_the_writers_own_and_earlier_ones_are_cleared(
+    campaign, monkeypatch
+):
+    shots = hc.shots_dir(campaign["master"])
+    shots.mkdir(parents=True, exist_ok=True)
+    (shots / "20251201_001044.nxs.oldwriter.tmp").write_bytes(b"half a file")
+    (shots / "20251201_001044.nxs.tmp").write_bytes(b"half a file")
+    temps: list[str] = []
+    real = Path.replace
+
+    def record(self, other):
+        temps.append(self.name)
+        return real(self, other)
+
+    monkeypatch.setattr(Path, "replace", record)
+    run = hc.convert_campaign(
+        campaign["master"], read_path=_read_path(campaign["raw"]), nonce="n0nce"
+    )
+    assert len(run.written) == 4
+    container_temps = [t for t in temps if t.endswith(".nxs.n0nce.tmp")]
+    assert len(container_temps) == 4
+    assert list(shots.glob("*.tmp")) == []
+
+
+def test_run_conversion_writes_under_its_lock_nonce(campaign, monkeypatch):
+    temps: list[str] = []
+    real = Path.replace
+
+    def record(self, other):
+        temps.append(self.name)
+        return real(self, other)
+
+    monkeypatch.setattr(Path, "replace", record)
+    runs = hc.run_conversion(campaign["master"], read_path=_read_path(campaign["raw"]))
+    assert runs
+    assert len(runs[0].written) == 4
+    container_temps = [t for t in temps if t.startswith("2025") and t.endswith(".tmp")]
+    assert len(container_temps) == 4
+    assert all(t.count(".") == 3 for t in container_temps), container_temps

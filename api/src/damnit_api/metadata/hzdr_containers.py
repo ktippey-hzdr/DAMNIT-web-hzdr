@@ -12,7 +12,8 @@ Phase 3 of the campaign NeXus output plan (HZDR_combo
   written by its pack (``metadata.instrument.format``, :mod:`.hzdr_packs`)
   into ``/entry/<NXinstrument>/<NXdetector>``, named as shot-aligner names it
   (``nxwrite.container_groups`` fed from the vendored NDS catalogue);
-* each container is written to ``<name>.nxs.tmp`` and renamed into place, and
+* each container is written to ``<name>.nxs.<nonce>.tmp`` (the writer's own)
+  and renamed into place, and
   is rewritten only when its **input fingerprint** changes
   (``shots/.build-manifest.json``, and the container's own attribute);
 * :func:`run_conversion` holds a **conversion lock** per campaign
@@ -43,6 +44,7 @@ from ..shared.hzdr_paths import map_path, parse_path_map
 from . import hzdr_packs
 from .hzdr_nexus import (
     BuilderAlreadyRunningError,
+    LockLostError,
     replace_with_retry,
     single_writer_lock,
     write_json_atomic,
@@ -900,19 +902,28 @@ def write_container(
     *,
     stats: Mapping[str, Stat] | None = None,
     notes: list[str] | None = None,
+    nonce: str = "",
+    before_publish: Callable[[], None] | None = None,
 ) -> ShotResult:
-    """Write ``target`` whole: to ``<name>.tmp``, fsynced, then renamed into place.
+    """Write ``target`` whole: to ``<name>.<nonce>.tmp``, fsynced, then renamed.
 
     ``stats`` (the members' size and mtime now) are stored beside the
     fingerprint, so a later pass can tell a file changed under the same
     sha256; ``notes`` are problems the caller found (such a change).
+    ``nonce`` (the lock's nonce) makes the temp name this writer's own, and
+    ``before_publish`` (the lock's ``refresh``) runs just before the rename,
+    so a writer whose lock was taken over stops instead of publishing.
     """
-    temp = target.with_name(target.name + _TMP_SUFFIX)
+    temp = target.with_name(
+        f"{target.name}.{nonce}{_TMP_SUFFIX}" if nonce else target.name + _TMP_SUFFIX
+    )
     try:
         with h5py.File(temp, "w") as handle:
             handle.attrs["damnit_input_stats"] = json.dumps(stats or {}, sort_keys=True)
             result = _write_shot(handle, plan, read_path, fingerprint_text, notes or [])
         _fsync(temp)
+        if before_publish is not None:
+            before_publish()
         replace_with_retry(temp, target)
     except BaseException:
         temp.unlink(missing_ok=True)
@@ -1009,20 +1020,24 @@ def convert_campaign(
     flush_seconds: float = 5.0,
     after_write: Callable[[str], None] | None = None,
     heartbeat: Callable[[], None] | None = None,
+    nonce: str = "",
 ) -> ConversionSummary:
     """Bring a campaign's ``shots/`` up to date with its published master.
 
     Call it under the conversion lock (:func:`run_conversion` does, and passes
-    ``heartbeat`` to refresh it once per container). Stale temp files are
-    removed first; the manifest is flushed every ``flush_seconds`` and at the
-    end. A container that cannot be written (a refused rename, a full disk) is
-    recorded with its error and the pass goes on with the next shot.
+    ``heartbeat`` to refresh it once per container, before each rename and
+    before each manifest write; it raises :class:`LockLostError` when the lock
+    was taken over, which ends the pass). Temp files of earlier writers are
+    removed first: they hold no lock now, and one still running cannot publish
+    because its own ``heartbeat`` fails. The manifest is flushed every
+    ``flush_seconds`` and at the end. A container that cannot be written (a
+    refused rename, a full disk) is recorded with its error and the pass goes
+    on with the next shot.
     ``after_write(name)`` runs after each container is in place (for tests).
     """
     folder = shots_dir(master)
     folder.mkdir(parents=True, exist_ok=True)
-    for stale in folder.glob(f"*.nxs{_TMP_SUFFIX}"):
-        stale.unlink(missing_ok=True)
+    _clear_earlier_temps(folder, nonce)
     manifest_path = folder / MANIFEST_NAME
     manifest = _load_manifest(manifest_path)
     manifest["master"] = master.name
@@ -1032,12 +1047,20 @@ def convert_campaign(
     summary = ConversionSummary()
     flushed, dirty = time.monotonic(), False
     for plan in plan_shots(experiment_id, shots, events):
-        if heartbeat is not None:
-            heartbeat()
+        _checked(heartbeat)
         name = plan.name
         target = folder / name
         try:
-            written = _convert_one(plan, target, records.get(name), read_path)
+            written = _convert_one(
+                plan,
+                target,
+                records.get(name),
+                read_path,
+                nonce=nonce,
+                before_publish=heartbeat,
+            )
+        except LockLostError:
+            raise
         except Exception as error:
             logger.warning("Container %s failed: %s", name, error)
             records[name] = {
@@ -1060,15 +1083,35 @@ def convert_campaign(
         if after_write is not None:
             after_write(name)
         if time.monotonic() - flushed >= flush_seconds:
+            _checked(heartbeat)
             write_json_atomic(manifest_path, manifest)
             flushed, dirty = time.monotonic(), False
     if dirty or not manifest_path.exists():
+        _checked(heartbeat)
         write_json_atomic(manifest_path, manifest)
     return summary
 
 
+def _clear_earlier_temps(folder: Path, nonce: str) -> None:
+    """Remove temp containers no writer holding the lock now will publish."""
+    for stale in folder.glob(f"*.nxs*{_TMP_SUFFIX}"):
+        if not (nonce and stale.name.endswith(f".{nonce}{_TMP_SUFFIX}")):
+            stale.unlink(missing_ok=True)
+
+
+def _checked(heartbeat: Callable[[], None] | None) -> None:
+    if heartbeat is not None:
+        heartbeat()
+
+
 def _convert_one(
-    plan: ShotPlan, target: Path, record: Mapping | None, read_path: ReadPath
+    plan: ShotPlan,
+    target: Path,
+    record: Mapping | None,
+    read_path: ReadPath,
+    *,
+    nonce: str = "",
+    before_publish: Callable[[], None] | None = None,
 ) -> tuple[dict | None, ShotResult | None]:
     """``(new manifest record or None, result or None when up to date)``."""
     stats = member_stats(plan, read_path)
@@ -1084,7 +1127,16 @@ def _convert_one(
         "reconverted from the bytes on disk now"
         for recorded in changed or []
     ]
-    result = write_container(target, plan, read_path, wanted, stats=stats, notes=notes)
+    result = write_container(
+        target,
+        plan,
+        read_path,
+        wanted,
+        stats=stats,
+        notes=notes,
+        nonce=nonce,
+        before_publish=before_publish,
+    )
     return _record(plan, target, wanted, result, stats), result
 
 
@@ -1133,8 +1185,10 @@ def run_conversion(
     holder makes another pass while that marker exists or the master changed
     during its pass, and looks for the marker once more after releasing the
     lock, so a request is never lost between the two. The lock is refreshed
-    once per container; one not refreshed for ``stale_after`` seconds (a dead
-    worker, on any host) is reclaimed.
+    once per container; one not refreshed for ``stale_after`` seconds is
+    reclaimed when it is another host's (on this host a live PID keeps it, so
+    a stalled worker is never overtaken). A worker whose lock was taken over
+    raises :class:`LockLostError` before it publishes anything more.
     """
     if not master.is_file():
         return []
@@ -1159,6 +1213,7 @@ def run_conversion(
                                 flush_seconds=flush_seconds,
                                 after_write=after_write,
                                 heartbeat=lock.refresh,
+                                nonce=lock.nonce,
                             )
                         )
                     if _signature(master) != before:

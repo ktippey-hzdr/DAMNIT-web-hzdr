@@ -125,8 +125,9 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     with optional `--campaign`; the `_unassigned` bucket only with
     `--include-unassigned`) **outside the campaign lock**, under its own
     `shots/.convert.lock` (a second worker leaves `shots/.convert.pending` for
-    the running one; refreshed per container, reclaimed after 30 min). Each
-    container goes to `<name>.nxs.tmp`, is fsynced and renamed into place (with
+    the running one; refreshed per container, another host's reclaimed after
+    30 min). Each container goes to `<name>.nxs.<nonce>.tmp`, is fsynced and
+    renamed into place after a lock check (with
     the bounded Windows retry), and is rewritten only when its input
     fingerprint changes (members' `sha256` and presence, catalogue SHA,
     conversion-code digest, h5py/libhdf5/Pillow versions, path-map digest) —
@@ -300,7 +301,7 @@ checks and stop on drift.
 ## Conventions and boundaries
 - Keep work local-first; prefer the local acceptance script and the harness broker. No real broker/Mongo/ASAPO calls unless the user explicitly changes scope.
 - Do not read or print secrets, credentials, tokens, or auth files. Keep endpoints and tokens in env-specific config, never in API code.
-- Preserve HZDR-specific behavior; the builder is single-writer per campaign (PID lock) and publishes the NeXus file + catalog atomically — keep both invariants. The lock (`hzdr_nexus.single_writer_lock`) records `host:pid:process-start`, treats a fresh empty lock as held, reclaims a dead or reused PID on this host, and never lets the builder steal another host's lock; the container worker's lock also expires when not refreshed (`stale_after`). Every create/reclaim/release of the lock is serialized by a kernel lock on `<lock>.guard` (kept on disk), and a reclaim goes through a checked tombstone; without kernel locks a stale lock is not reclaimed (remove it by hand). Renames over a published file go through `replace_with_retry` (bounded, for Windows readers).
+- Preserve HZDR-specific behavior; the builder is single-writer per campaign (PID lock) and publishes the NeXus file + catalog atomically — keep both invariants. The lock (`hzdr_nexus.single_writer_lock`) records `host:pid:process-start`, treats a fresh empty lock as held, reclaims a dead or reused PID on this host (on this host the PID decides, never age), and never lets the builder steal another host's lock; the container worker's lock also expires when another host's is not refreshed (`stale_after`), and `WriterLock.refresh()` raises `LockLostError` once a holder's lock was taken over, so it stops before publishing. Every writer must run the same lock code (older code steals the new record format). Every create/reclaim/release of the lock is serialized by a kernel lock on `<lock>.guard` (kept on disk), and a reclaim goes through a checked tombstone; without kernel locks a stale lock is not reclaimed (remove it by hand). Renames over a published file go through `replace_with_retry` (bounded, for Windows readers).
 - Mind private GitLab dependencies and Windows/Linux differences (PowerShell `.ps1` and bash `.sh` launchers are kept in parallel).
 - Root-level `scripts/` (and other upstream-owned paths) are touched only by upstream merges. Everything HZDR at the repo root lives under `hzdr/` (`hzdr/docs/`, `hzdr/scripts/`); inside `api/`/`frontend/`, HZDR code keeps the `hzdr_`/`hzdr/` naming.
 - Add characterization tests before risky refactors. Fix React hook-dependency warnings properly rather than suppressing them.

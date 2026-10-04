@@ -142,12 +142,26 @@ lives in `damnit_api.metadata.hzdr_containers`.
 - **The lock records `host:pid:process-start`** (shared with the builder). An
   empty lock younger than 5 s is one being written and counts as held. A dead
   PID, or a PID whose start time differs (reused after a reboot), on this host
-  is reclaimed. Another host's PID cannot be checked: the worker refreshes its
-  lock once per container and reclaims one not refreshed for 30 minutes; the
+  is reclaimed. **On this host the PID decides, never age**: a live worker
+  that stalled (a hung read on a mount, one huge container) keeps its lock.
+  Another host's PID cannot be checked: the worker refreshes its lock once per
+  container and reclaims another host's lock not refreshed for 30 minutes; the
   builder passes no age and never steals another host's lock (before, it
   checked that PID locally and could). A legacy bare-PID lock behaves as
   before. The record ends in a per-acquisition nonce, and a holder removes the
   lock on release only while it still holds its own record.
+- **A holder whose lock was taken over stops.** `WriterLock.refresh()` reads
+  the lock back and raises `LockLostError` when it no longer holds this
+  holder's record. The worker calls it before each container, before each
+  rename and before each manifest write, so a worker overtaken by age (another
+  host's reclaim) publishes nothing more; the error fails that campaign's run
+  (exit 1). The window left is a reclaim landing between a refresh and the
+  rename it guards, which needs a 30-minute stall to end in those
+  microseconds.
+- **The guard is shared by every user.** It is created 0666 (`umask` aside),
+  and one another user created without write access is opened read-only,
+  which `flock` and `msvcrt.locking` accept, so an operator's manual builder
+  run beside the service user's guard is serialized, not refused.
 - **Reclaiming a stale lock is serialized.** Every create, reclaim and release
   runs under a kernel lock on a sidecar `<lock>.guard` (`flock` on POSIX,
   `msvcrt.locking` on Windows; held for milliseconds, released by the kernel
@@ -160,7 +174,8 @@ lives in `damnit_api.metadata.hzdr_containers`.
   is **not** reclaimed automatically and must be removed by hand. On sshfs the
   kernel emulates the guard per host: it excludes every process on the API
   host, where the worker and builder run, not processes on two hosts.
-- **Atomic and resumable**: each container is written to `<name>.nxs.tmp`,
+- **Atomic and resumable**: each container is written to
+  `<name>.nxs.<nonce>.tmp` (the writer's own, from its lock record),
   fsynced, and renamed into place, retried up to 10 x 0.5 s while Windows
   refuses the rename because a reader holds the target (review decision c; the
   builder's master rename has the same retry). Its input fingerprint is stored
@@ -168,8 +183,9 @@ lives in `damnit_api.metadata.hzdr_containers`.
   flushed every few seconds and at the end). A container is skipped when the
   manifest, or failing that its own attribute, holds the same fingerprint. A
   crash mid-date leaves finished containers in place; the next run adopts them
-  and converts the rest. Stale `.nxs.tmp` files are removed at the start of a
-  pass, under the lock.
+  and converts the rest. Earlier writers' temp files (`*.nxs*.tmp`) are
+  removed at the start of a pass, under the lock; an earlier writer still
+  running cannot publish, because its `refresh()` fails first.
 - **One container's failure is that container's.** A refused rename, a full
   disk or any other error is recorded as `error` in its manifest entry, the
   worker exits 1 and names it, and the pass goes on with the next shot.
@@ -201,8 +217,15 @@ lives in `damnit_api.metadata.hzdr_containers`.
   (`shared/hzdr_paths.py`), or `--path-map`.
 - `file_metadata/sha256` lists each member's recorded `sha256`, one
   `<name> <sha256>` per line (a DAMNIT field the manifest does not have).
+- **Deploy: every writer is upgraded together.** Code before 615df7a reads the
+  record `host:pid:start:nonce` as PID -1 and steals a live lock, so the API
+  checkout and any `/opt` install (and a manual builder) must run the same
+  version. A crashed builder's lock whose host name has since changed (a
+  container restart) looks foreign and is removed by hand.
 - **Not here**: the master's links (phase 4), garbage collection of containers
-  the master no longer names (phase 4, after publish), validation (phase 5),
+  the master no longer names (phase 4, after publish; it must leave
+  `.convert.lock`, `.convert.lock.guard`, `.convert.pending`, the manifest and
+  `*.stale`/`*.tmp` alone), validation (phase 5),
   the mapping rows (review decision e: a phase of its own, planned by the
   coordinator).
 

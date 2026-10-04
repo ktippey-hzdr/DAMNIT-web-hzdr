@@ -3,6 +3,7 @@ import json
 import os
 import socket
 import sqlite3
+import sys
 import threading
 import time
 from pathlib import Path
@@ -16,6 +17,7 @@ from damnit_api.metadata.hzdr_nexus import (
     HZDR_BRIDGE_PROFILE_VERSION,
     HZDR_TARGET_PROFILE_VERSION,
     BuilderAlreadyRunningError,
+    LockLostError,
     _first_shot_laser,
     _first_shot_target,
     _first_shot_vacuum,
@@ -1979,6 +1981,67 @@ def test_the_holder_refreshes_its_lock(tmp_path: Path):
         assert time.time() - lock.stat().st_mtime < 5
 
 
+def test_a_live_holder_on_this_host_is_never_reclaimed_by_age(tmp_path: Path):
+    """A worker that stalled (a hung mount read) keeps its lock: the PID decides."""
+    lock = tmp_path / "c.nxs.lock"
+    with single_writer_lock(tmp_path / "c.nxs", stale_after=60) as held:
+        _age(lock, 3600)
+        with (
+            pytest.raises(BuilderAlreadyRunningError),
+            single_writer_lock(tmp_path / "c.nxs", stale_after=60),
+        ):
+            pass  # pragma: no cover
+        assert lock.read_text(encoding="utf-8") == held.record
+        held.refresh()
+
+
+def test_a_holder_whose_lock_was_taken_over_is_told(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    with single_writer_lock(tmp_path / "c.nxs") as held:
+        lock.write_text("other-host:1:1:theirs", encoding="utf-8")
+        with pytest.raises(LockLostError, match="taken over"):
+            held.refresh()
+        lock.unlink()
+        with pytest.raises(LockLostError, match="gone"):
+            held.refresh()
+        lock.write_text("other-host:1:1:theirs", encoding="utf-8")
+    # The release is nonce-checked: the new holder's lock stays.
+    assert lock.read_text(encoding="utf-8") == "other-host:1:1:theirs"
+
+
+def test_a_guard_another_user_made_read_only_still_serialises(
+    tmp_path: Path, monkeypatch
+):
+    """An operator's run beside the service user's guard: read-only, not an error."""
+    from damnit_api.metadata import hzdr_nexus
+
+    guard = tmp_path / "c.nxs.lock.guard"
+    guard.write_bytes(b"")
+    real_open = os.open
+    opened: list[int] = []
+
+    def no_write_access(path, flags, *args):
+        if Path(path) == guard and flags & (os.O_RDWR | os.O_WRONLY):
+            if flags & os.O_EXCL:
+                raise FileExistsError(path)
+            raise PermissionError(13, "Permission denied", str(path))
+        opened.append(flags)
+        return real_open(path, flags, *args)
+
+    monkeypatch.setattr(hzdr_nexus.os, "open", no_write_access)
+    with single_writer_lock(tmp_path / "c.nxs"):
+        assert (tmp_path / "c.nxs.lock").exists()
+    assert not (tmp_path / "c.nxs.lock").exists()
+
+
+def test_a_new_guard_is_shared_by_every_user(tmp_path: Path):
+    with single_writer_lock(tmp_path / "c.nxs"):
+        pass
+    if os.name != "nt":
+        mode = (tmp_path / "c.nxs.lock.guard").stat().st_mode & 0o777
+        assert mode == 0o666
+
+
 # --- The reclaim race: two reclaimers of one stale lock -----------------------
 
 
@@ -2036,13 +2099,18 @@ def test_concurrent_reclaimers_of_one_stale_lock_leave_exactly_one_holder(
     assert set(_race(tmp_path, iterations=150)) == {1}
 
 
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="probabilistic: needs Linux thread scheduling"
+)
 def test_the_race_test_catches_unlink_then_create(
     tmp_path: Path, wide_window, monkeypatch
 ):
     """Mutation: the pre-fix reclaim (no guard, unlink) lets two hold at once."""
     from damnit_api.metadata import hzdr_nexus
 
-    monkeypatch.setattr(hzdr_nexus, "_guard", lambda path: contextlib.nullcontext(True))
+    monkeypatch.setattr(
+        hzdr_nexus, "_guard", lambda path, **_: contextlib.nullcontext(True)
+    )
     monkeypatch.setattr(
         hzdr_nexus,
         "_reclaim",
@@ -2096,7 +2164,7 @@ def test_without_kernel_locks_a_stale_lock_is_not_reclaimed(
     """
     from damnit_api.metadata import hzdr_nexus
 
-    monkeypatch.setattr(hzdr_nexus, "_lock_fd", lambda fd: False)
+    monkeypatch.setattr(hzdr_nexus, "_lock_fd", lambda fd, *_: False)
     lock = tmp_path / "c.nxs.lock"
     lock.write_text("rebooted-host:4242:1:dead", encoding="utf-8")
     _age(lock, 3600)
@@ -2111,13 +2179,18 @@ def test_without_kernel_locks_a_stale_lock_is_not_reclaimed(
     assert not lock.exists()
 
 
+@pytest.mark.skipif(
+    sys.platform != "linux", reason="probabilistic: needs Linux thread scheduling"
+)
 def test_the_tombstone_alone_does_not_close_the_race(
     tmp_path: Path, wide_window, monkeypatch
 ):
     """Why the fallback fails closed: unguarded, the tombstone reclaim double-holds."""
     from damnit_api.metadata import hzdr_nexus
 
-    monkeypatch.setattr(hzdr_nexus, "_guard", lambda path: contextlib.nullcontext(True))
+    monkeypatch.setattr(
+        hzdr_nexus, "_guard", lambda path, **_: contextlib.nullcontext(True)
+    )
     assert max(_race(tmp_path, iterations=40)) > 1
 
 
