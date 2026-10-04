@@ -168,8 +168,6 @@ def _judge_lock(
         return None, None
     except OSError:
         return "a process this host cannot read", ""
-    if stale_after is not None and age > stale_after:
-        return None, text
     parsed = _parse_lock(text)
     if parsed is None:
         holder = "a process still writing it" if age < LOCK_EMPTY_GRACE_S else None
@@ -177,7 +175,11 @@ def _judge_lock(
     host, pid, start = parsed
     if host is not None and host != socket.gethostname():
         # Another host's PID cannot be checked from here; only age reclaims it.
+        if stale_after is not None and age > stale_after:
+            return None, text
         return f"pid {pid} on {host}", text
+    # On this host the PID decides, never age: a live holder that stalled (a
+    # hung read on a mount, one huge container) keeps its lock.
     if not _pid_is_alive(pid):
         return None, text
     if start and _process_start_token(pid) not in {"", start}:
@@ -195,7 +197,7 @@ _GUARD_UNSUPPORTED = {
 }
 
 
-def _lock_fd(fd: int) -> bool:
+def _lock_fd(fd: int, path: Path, timeout: float = GUARD_TIMEOUT_S) -> bool:
     """Take an exclusive kernel lock on ``fd``; False where none is available.
 
     ``flock`` on POSIX (per open file, so threads exclude each other too, and
@@ -203,7 +205,7 @@ def _lock_fd(fd: int) -> bool:
     byte through ``msvcrt.locking`` on Windows. Waits up to
     ``GUARD_TIMEOUT_S`` for another process's step to finish.
     """
-    deadline = time.monotonic() + GUARD_TIMEOUT_S
+    deadline = time.monotonic() + timeout
     while True:
         try:
             if os.name == "nt":
@@ -225,7 +227,7 @@ def _lock_fd(fd: int) -> bool:
         else:
             return True
         if time.monotonic() > deadline:
-            message = f"Lock guard busy for {GUARD_TIMEOUT_S:.0f} s: fd {fd}"
+            message = f"Lock guard {path} stayed busy for {timeout:.1f} s"
             raise BuilderAlreadyRunningError(message)
         time.sleep(0.002)
 
@@ -242,8 +244,33 @@ def _unlock_fd(fd: int) -> None:
         fcntl.flock(fd, fcntl.LOCK_UN)
 
 
+def _open_guard(guard: Path) -> int:
+    """Open (creating) the guard, writable by every user; read-only if need be.
+
+    The service user and an operator running the builder by hand share it, so
+    a new guard is made 0666 (``umask`` aside, errors ignored); one another
+    user created without write access is opened read-only, which ``flock`` and
+    ``msvcrt.locking`` (a read handle suffices for ``LockFile``) both accept.
+    """
+    binary = getattr(os, "O_BINARY", 0)
+    try:
+        fd = os.open(guard, os.O_CREAT | os.O_EXCL | os.O_RDWR | binary, 0o666)
+    except FileExistsError:
+        pass
+    else:
+        with contextlib.suppress(OSError):
+            os.chmod(guard, 0o666)  # noqa: PTH101
+        return fd
+    try:
+        return os.open(guard, os.O_RDWR | binary)
+    except PermissionError:
+        return os.open(guard, os.O_RDONLY | binary)
+
+
 @contextlib.contextmanager
-def _guard(lock_path: Path) -> Iterator[bool]:
+def _guard(
+    lock_path: Path, *, timeout: float = GUARD_TIMEOUT_S, warn: bool = True
+) -> Iterator[bool]:
     """Serialize every create, reclaim and release of ``lock_path``.
 
     A kernel lock on the sidecar ``<lock>.guard`` (kept, never removed, so
@@ -258,13 +285,15 @@ def _guard(lock_path: Path) -> Iterator[bool]:
     where the worker and the builder run, not processes on two hosts.
     """
     guard = lock_path.with_name(f"{lock_path.name}.guard")
-    fd = os.open(guard, os.O_CREAT | os.O_RDWR | getattr(os, "O_BINARY", 0))
+    fd = _open_guard(guard)
     try:
-        if not _lock_fd(fd):
-            logger.warning(
-                "No kernel lock on %s; stale locks are not reclaimed automatically",
-                guard,
-            )
+        if not _lock_fd(fd, guard, timeout):
+            if warn:
+                logger.warning(
+                    "No kernel lock on %s; stale locks are not reclaimed "
+                    "automatically",
+                    guard,
+                )
             yield False
             return
         try:
@@ -355,6 +384,10 @@ def _acquire(
     raise BuilderAlreadyRunningError(message)
 
 
+class LockLostError(RuntimeError):
+    """A held lock no longer holds this holder's record: it was reclaimed."""
+
+
 class WriterLock:
     """A held ``single_writer_lock``; ``refresh()`` marks it as still in use."""
 
@@ -362,7 +395,26 @@ class WriterLock:
         self.path = path
         self.record = record
 
+    @property
+    def nonce(self) -> str:
+        """This acquisition's unique token (the record's last field)."""
+        return self.record.rsplit(":", 1)[-1]
+
     def refresh(self) -> None:
+        """Mark the lock as in use; raise :class:`LockLostError` if it is not ours.
+
+        A holder calls this before each unit of work and before publishing, so
+        one whose lock was taken (by age, from another host) stops instead of
+        writing beside the new holder.
+        """
+        try:
+            current = self.path.read_text(encoding="utf-8")
+        except OSError as error:
+            message = f"Lock {self.path} is gone: {error}"
+            raise LockLostError(message) from error
+        if current != self.record:
+            message = f"Lock {self.path} was taken over: it now says {current!r}"
+            raise LockLostError(message)
         with contextlib.suppress(OSError):
             os.utime(self.path)
 
@@ -384,7 +436,10 @@ def _release(lock_path: Path, record: str) -> None:
 
 @contextlib.contextmanager
 def single_writer_lock(
-    output_path: Path, *, stale_after: float | None = None
+    output_path: Path,
+    *,
+    stale_after: float | None = None,
+    guard_timeout: float = GUARD_TIMEOUT_S,
 ) -> Iterator[WriterLock]:
     """Guard one campaign's builder output against a second concurrent run.
 
@@ -397,8 +452,9 @@ def single_writer_lock(
     automatically: an empty one older than ``LOCK_EMPTY_GRACE_S``, one whose
     PID is dead on this host or was reused (another start time), and, with
     ``stale_after``, one not refreshed (``WriterLock.refresh``) for that many
-    seconds. Another host's lock is reclaimed only by age; the builder passes
-    no ``stale_after`` and never steals one.
+    seconds, but only when it is another host's (on this host the PID
+    decides, so a live holder that stalled keeps it). The builder passes no
+    ``stale_after`` and never steals another host's lock.
 
     Every create, reclaim and release runs under :func:`_guard` (a kernel
     lock, so two reclaimers of one stale lock cannot both win), and a reclaim
@@ -412,13 +468,13 @@ def single_writer_lock(
     lock_path = output_path.with_name(f"{output_path.name}.lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
     record = _lock_record()
-    with _guard(lock_path) as guarded:
+    with _guard(lock_path, timeout=guard_timeout) as guarded:
         _acquire(lock_path, record, stale_after, may_reclaim=guarded)
     try:
         yield WriterLock(lock_path, record)
     finally:
         try:
-            with _guard(lock_path):
+            with _guard(lock_path, warn=False):
                 _release(lock_path, record)
         except (BuilderAlreadyRunningError, OSError):
             _release(lock_path, record)
@@ -458,7 +514,7 @@ def write_json_atomic(path: Path, payload: Any) -> None:
     temp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
     try:
         temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        temp_path.replace(path)
+        replace_with_retry(temp_path, path)
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise
@@ -3054,7 +3110,10 @@ def catalog_write_lock(
     with contextlib.ExitStack() as stack:
         while True:
             try:
-                stack.enter_context(single_writer_lock(sources_file))
+                left = max(0.0, deadline - time.monotonic())
+                stack.enter_context(
+                    single_writer_lock(sources_file, guard_timeout=left)
+                )
                 break
             except BuilderAlreadyRunningError:
                 if time.monotonic() >= deadline:
