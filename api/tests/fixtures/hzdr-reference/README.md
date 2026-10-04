@@ -104,10 +104,11 @@ their `NXdetector`s and what is under them. These are not part of it:
   `experiment_documentation` are kept out of the build entirely.
 - `/entry/data` and the entry's `default`: the entry-level plot. Decision 6
   keeps only each detector's default plot.
-- The `NXsubentry` groups (`/entry/Reflected_515_Spectrometer`,
-  `/entry/_515_Reflected_Light_Spectrometer`) and the `nds_definition`
-  attributes: application-definition claims by the mappings, until phase 2
-  reconciles the mappings (decision 5; `NXxrd_pan` for a camera goes).
+- The `NXsubentry` `/entry/Reflected_515_Spectrometer` and the
+  `nds_definition` attribute on its detector: the spectrometer's
+  `NXoptical_spectroscopy` claim, the one its NDS profile names. Since phase
+  2a (2026-10-04) the cameras claim none, so the M1 camera's subentry and
+  Probe135's `nds_definition` are gone.
 
 ## The per-pack references
 
@@ -143,10 +144,6 @@ this input, and they are left as they are:
 - The real M1 CSV lacks three `peak_profile` parameters its mapping names.
 - The synthetic Probe135 recording has no `.rec` sidecar, so the 11 rows its
   mapping reads from it are empty.
-- Probe135's mapping claims `NXoptical_spectroscopy` for a camera
-  (`nds_definition` on `/entry/Probe_135_deg/pco_Camera`), and the M1
-  camera's claims `NXxrd_pan` (on its detector and its `NXsubentry`). Both
-  are mapping errors the plan's phase 2 fixes.
 
 ## Changing it
 

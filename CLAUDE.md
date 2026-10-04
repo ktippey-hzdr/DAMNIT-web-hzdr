@@ -257,6 +257,13 @@ the producer repos that emit the envelope (`shotcounter/`, `planet-watchdog/` un
 conforms, so a contract change fails CI in every producer until the copies re-sync.
 `hzdr/scripts/sync-hzdr-event.ps1` checks (or `-Apply` fixes) the copies; `hzdr/scripts/test-all.ps1`
 runs all sibling suites.
+Two more copies come from shot-aligner and are checked the same way (check by
+default, `--apply`/`-Apply` re-vendors, `SHOT_ALIGNER_ROOT` overrides
+`../shot-aligner`): `hzdr/scripts/sync-hzdr-reference.{sh,ps1}` for the reference
+fixture in `api/tests/fixtures/hzdr-reference/`, and
+`hzdr/scripts/sync-hzdr-packs.{sh,ps1}` for the vendored readers in
+`metadata/hzdr_packs/vendor/`. `test-all.ps1` and `test-all.sh` run all three
+checks and stop on drift.
 
 ## Conventions and boundaries
 - Keep work local-first; prefer the local acceptance script and the harness broker. No real broker/Mongo/ASAPO calls unless the user explicitly changes scope.
