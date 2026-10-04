@@ -22,6 +22,7 @@ under its own, and a second start while one runs only leaves it a request.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import sys
 from collections.abc import Awaitable, Callable, Sequence
@@ -53,6 +54,10 @@ VALIDATION_LOG_NAME = ".hzdr-validation.log"
 # hzdr-container-worker.py's exit status for "containers written that the
 # published master does not link yet" (hzdr_containers.RELINK_EXIT).
 RELINK_EXIT = 3
+# ... and for "converted nothing" (hzdr_containers.BUSY_EXIT).
+BUSY_EXIT = 5
+# hzdr-nexus-validate.py's exit status when the gate could not run.
+VALIDATION_CANNOT_RUN = 2
 # Past this size the log is moved to ``<name>.1`` (one generation kept).
 WORKER_LOG_MAX_BYTES = 5 * 1024 * 1024
 
@@ -109,6 +114,9 @@ class BuilderTrigger:
         self._runner = runner or self._run_subprocess
         self._worker_launcher = worker_launcher or self._spawn_worker
         self._validation_launcher = validation_launcher or self._spawn_validation
+        # One validation at a time; a request while one runs is remembered once.
+        self._validating = False
+        self._validate_again = False
         self._workers: set[asyncio.Task] = set()
         self._wake = asyncio.Event()
 
@@ -256,8 +264,21 @@ class BuilderTrigger:
         task.add_done_callback(self._workers.discard)
 
     async def _spawn_validation(self, cmd: Sequence[str]) -> None:
-        """Start the validation gate like the worker, logging to its own file."""
-        proc = await self._spawn(cmd, self._worker_log(VALIDATION_LOG_NAME))
+        """Start the validation gate like the worker, logging to its own file.
+
+        One at a time: a request while one runs sets a flag, and the running
+        one starts a single follow-up when it ends, so a burst of builds costs
+        at most two runs, never a pile of overlapping ones.
+        """
+        if self._validating:
+            self._validate_again = True
+            return
+        self._validating = True
+        try:
+            proc = await self._spawn(cmd, self._worker_log(VALIDATION_LOG_NAME))
+        except BaseException:
+            self._validating = False
+            raise
         task = asyncio.create_task(self._reap_validation(proc))
         self._workers.add(task)
         task.add_done_callback(self._workers.discard)
@@ -285,13 +306,47 @@ class BuilderTrigger:
             )
 
     async def _reap_worker(self, proc: asyncio.subprocess.Process) -> None:
-        self.worker_finished(await proc.wait())
+        returncode = await proc.wait()
+        self.worker_finished(returncode)
+        if returncode in {RELINK_EXIT, RELINK_EXIT + 1}:
+            return  # a build is coming to link them; validate after its worker
+        if returncode == BUSY_EXIT:
+            return  # it converted nothing; the worker that is converting checks
         # The containers are as this worker left them: check them and the master.
         await self._start_validation("after the container worker")
 
-    @staticmethod
-    async def _reap_validation(proc: asyncio.subprocess.Process) -> None:
-        returncode = await proc.wait()
+    async def _reap_validation(self, proc: asyncio.subprocess.Process) -> None:
+        try:
+            returncode = await proc.wait()
+            self.validation_finished(returncode)
+        finally:
+            self._validating = False
+        if self._validate_again:
+            self._validate_again = False
+            await self._start_validation("requested while the last one ran")
+
+    def validation_finished(self, returncode: int) -> None:
+        """Log the gate's result, with each campaign's counts from its report."""
+        if returncode == VALIDATION_CANNOT_RUN:
+            logger.error(
+                "Auto-trigger: NeXus validation could not run; see %s",
+                VALIDATION_LOG_NAME,
+            )
+            return
+        for master, s in self._validation_reports():
+            if s.get("passed") is None:
+                continue  # that campaign's gate did not run
+            logger.info(
+                "Auto-trigger: NeXus validation of %s: %s; master %s error(s); "
+                "%s container(s), %s error(s); subentries %s/%s certified",
+                master,
+                "passed" if s.get("passed") else "FAILED",
+                s.get("master_errors"),
+                s.get("containers"),
+                s.get("container_errors"),
+                s.get("subentries_certified"),
+                s.get("subentries"),
+            )
         if returncode:
             logger.error(
                 "Auto-trigger: NeXus validation failed (exit %d); see %s",
@@ -300,6 +355,26 @@ class BuilderTrigger:
             )
         else:
             logger.info("Auto-trigger: NeXus validation passed")
+
+    def _validation_reports(self) -> list[tuple[str, dict]]:
+        s = self._settings
+        if s.output_root is not None:
+            paths = sorted(s.output_root.glob("*/.validation.json"))
+        elif s.output_nexus is not None:
+            paths = [s.output_nexus.parent / ".validation.json"]
+        else:
+            paths = []
+        found = []
+        for path in paths:
+            try:
+                report = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, ValueError):
+                continue
+            found.append((
+                str(report.get("master", path.parent.name)),
+                report.get("summary", {}),
+            ))
+        return found
 
     async def _start_validation(self, when: str) -> None:
         if not self._settings.validation_python:

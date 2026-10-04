@@ -240,9 +240,12 @@ which attached a numbered trigger to a neighbouring LabFrog shot by time).
 `DW_API_HZDR_BUILDER__VALIDATION_PYTHON` (default empty: off) names a Python
 with nexus-design-studio and pynxtools (NDS's own `.venv`); set, the trigger
 runs `api/scripts/hzdr-nexus-validate.py` (campaign output phase 5) after each
-container worker, or after the build without containers: the master against
-NXhzdr_target, the containers structurally and their definition subentries,
-reported in `<campaign folder>/.validation.json` and `.hzdr-validation.log`.
+container worker (not after one that asked for a relink or converted
+nothing, `BUSY_EXIT`), or after the build without containers, one run at a
+time: the master against NXhzdr_target and its container links, the
+containers structurally and their definition subentries (known mapping gaps
+reported, anything new gating), in `<campaign folder>/.validation.json` and
+`.hzdr-validation.log`; exit 1 fails the gate, exit 2 means it could not run.
 `DW_API_HZDR_BUILDER__CONTAINERS_ENABLED` (default `false`) makes the trigger
 start `hzdr-container-worker.py` (for `OUTPUT_NEXUS`, or every campaign under
 `OUTPUT_ROOT`) once before each build and once after a successful one, without
@@ -515,7 +518,7 @@ instrument group. `/entry/shot_containers` (campaign output phase 4) is an
 `NXcollection` index (`shot_key`/`container` datasets) of the per-shot
 containers in `shots/`, which the file links at its root, one relative
 external link per container named by its stem. These additive views
-keep the v4 table columns unchanged.
+keep the v5 table columns unchanged.
 
 ### Shared Pydantic field constraints (`api/src/damnit_api/shared/models.py`)
 

@@ -71,6 +71,10 @@ PENDING_NAME = ".convert.pending"
 # RELINK_EXIT + 1 when some container also failed. builder_trigger keeps its
 # own copy (it does not import this module's h5py/Pillow); a test ties them.
 RELINK_EXIT = 3
+# The worker's exit status when it converted nothing: another worker had every
+# campaign it was asked for (it left each a request), or none was published.
+# Nothing it did is worth validating.
+BUSY_EXIT = 5
 # single_writer_lock(<shots>/.convert) holds <shots>/.convert.lock.
 _LOCK_STEM = ".convert"
 _TMP_SUFFIX = ".tmp"
@@ -1442,6 +1446,7 @@ def campaign_masters(
 
 
 __all__ = [
+    "BUSY_EXIT",
     "CONTAINER_PROFILE",
     "MANIFEST_NAME",
     "PENDING_NAME",

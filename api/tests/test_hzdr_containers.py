@@ -1697,3 +1697,20 @@ def test_a_rebuild_drops_the_previous_masters_links(campaign):
         _write_shot_container_links(master, [], [], output_path=campaign["master"])
         assert shot_container_links(master) == {}
         assert "notes" in master  # only links into shots/ are the builder's
+
+
+def test_a_worker_that_converted_nothing_says_so(campaign):
+    """Another worker holds the campaign: exit BUSY_EXIT, so nothing validates."""
+    from damnit_api.metadata.hzdr_nexus import single_writer_lock
+
+    shots = hc.shots_dir(campaign["master"])
+    shots.mkdir(parents=True)
+    with single_writer_lock(shots / ".convert"):
+        result = _worker(
+            "--master",
+            str(campaign["master"]),
+            "--path-map",
+            f"{RECORDED_ROOT}={campaign['raw'].as_posix()}",
+        )
+    assert result.returncode == hc.BUSY_EXIT, result.stdout + result.stderr
+    assert "another worker is converting" in result.stdout

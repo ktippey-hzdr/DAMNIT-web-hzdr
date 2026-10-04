@@ -14,7 +14,9 @@ given. Design: ``hzdr/docs/plans/container-writer.md``.
 
 Exit status: 0 done; 1 a campaign or container failed; 3 (``RELINK_EXIT``)
 containers are in place that the published master does not link yet, so a
-build should run to link them; 4 both of the last two.
+build should run to link them; 4 both of the last two; 5 (``BUSY_EXIT``)
+it converted nothing (another worker had every campaign asked for, or none
+was published yet).
 """
 
 from __future__ import annotations
@@ -29,6 +31,7 @@ os.environ.setdefault("DW_API_DAMNIT_PATH", str(Path.cwd()))
 
 from damnit_api.consumer.campaign_builds import campaign_dir_name
 from damnit_api.metadata.hzdr_containers import (
+    BUSY_EXIT,
     RELINK_EXIT,
     campaign_masters,
     make_read_path,
@@ -96,6 +99,7 @@ def main(argv: list[str] | None = None) -> int:
 
     failures = 0
     unlinked = 0
+    converted = 0
     for master in masters:
         if not master.is_file():
             print(f"Containers ({master.name}): no published master yet")
@@ -110,6 +114,7 @@ def main(argv: list[str] | None = None) -> int:
         if not runs:
             print(f"Containers ({master.name}): another worker is converting; asked it")
             continue
+        converted += 1
         written = sum(len(run.written) for run in runs)
         current = len(runs[-1].skipped)
         failed = sorted({name for run in runs for name in run.failed})
@@ -138,9 +143,17 @@ def main(argv: list[str] | None = None) -> int:
                 f"  failed (see shots/.build-manifest.json): {', '.join(failed)}",
                 file=sys.stderr,
             )
+    return _exit_status(
+        failures=failures, unlinked=unlinked, converted=converted, asked=len(masters)
+    )
+
+
+def _exit_status(*, failures: int, unlinked: int, converted: int, asked: int) -> int:
     if unlinked:
         return RELINK_EXIT + (1 if failures else 0)
-    return 1 if failures else 0
+    if failures:
+        return 1
+    return BUSY_EXIT if asked and not converted else 0
 
 
 if __name__ == "__main__":

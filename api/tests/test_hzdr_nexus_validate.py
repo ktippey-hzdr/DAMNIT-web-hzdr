@@ -46,16 +46,17 @@ def _nds_python() -> str | None:
 
 
 NDS_PYTHON = _nds_python()
-pytestmark = pytest.mark.skipif(
+needs_nds = pytest.mark.skipif(
     NDS_PYTHON is None,
     reason="no nexus-design-studio Python with pynxtools (set HZDR_NDS_PYTHON)",
 )
 
 
-def _gate(*args: str) -> subprocess.CompletedProcess:
-    assert NDS_PYTHON is not None
+def _gate(*args: str, python: str | None = None) -> subprocess.CompletedProcess:
+    python = python or NDS_PYTHON
+    assert python is not None
     return subprocess.run(  # noqa: S603
-        [NDS_PYTHON, str(SCRIPT), *args],
+        [python, str(SCRIPT), *args],
         capture_output=True,
         text=True,
         check=False,
@@ -72,6 +73,7 @@ def reference_output(tmp_path_factory) -> Path:
     return master
 
 
+@needs_nds
 def test_the_reference_output_passes_the_gate(reference_output):
     result = _gate("--master", str(reference_output))
     assert result.returncode == 0, result.stdout + result.stderr
@@ -87,6 +89,7 @@ def test_the_reference_output_passes_the_gate(reference_output):
     assert entries == [{"entry": "entry", "definition": "NXhzdr_target", "valid": True}]
 
 
+@needs_nds
 def test_the_irr8_subentry_is_reported_with_what_it_lacks(reference_output):
     """Not certified yet: the concepts it lacks are mapping decisions."""
     result = _gate("--master", str(reference_output), "--no-write", "--json")
@@ -103,6 +106,7 @@ def test_the_irr8_subentry_is_reported_with_what_it_lacks(reference_output):
     assert "FAILED" in strict.stdout
 
 
+@needs_nds
 def test_a_master_invalid_against_its_definition_fails_the_gate(
     reference_output, tmp_path
 ):
@@ -116,6 +120,7 @@ def test_a_master_invalid_against_its_definition_fails_the_gate(
     assert "/entry is not valid against NXhzdr_target" in result.stdout
 
 
+@needs_nds
 def test_a_structurally_broken_container_fails_the_gate(reference_output, tmp_path):
     folder = tmp_path / "campaign"
     (folder / "shots").mkdir(parents=True)
@@ -126,3 +131,54 @@ def test_a_structurally_broken_container_fails_the_gate(reference_output, tmp_pa
     result = _gate("--master", str(master), "--no-write")
     assert result.returncode == 1, result.stdout
     assert "20251201_000001.nxs:" in result.stdout
+
+
+def test_without_nds_the_gate_says_it_could_not_run(reference_output, tmp_path):
+    """Exit 2, not 1, and a report that does not read as a current pass."""
+    folder = tmp_path / "c"
+    folder.mkdir()
+    master = folder / "c.nxs"
+    master.write_bytes(reference_output.read_bytes())
+    (folder / ".validation.json").write_text('{"summary": {"passed": true}}')
+    result = _gate("--master", str(master), python=sys.executable)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "could not run" in result.stderr
+    report = json.loads((folder / ".validation.json").read_text(encoding="utf-8"))
+    assert report["ran"] is False
+    assert report["summary"]["passed"] is None
+
+
+def test_a_missing_output_root_could_not_run(tmp_path):
+    result = _gate("--output-root", str(tmp_path / "nope"), python=sys.executable)
+    assert result.returncode == 2
+
+
+@needs_nds
+def test_a_dangling_container_link_fails_the_gate(reference_output, tmp_path):
+    folder = tmp_path / "campaign"
+    folder.mkdir()
+    master = folder / "campaign.nxs"
+    master.write_bytes(reference_output.read_bytes())  # its shots/ is not here
+    result = _gate("--master", str(master), "--no-write")
+    assert result.returncode == 1, result.stdout
+    assert "cannot be opened" in result.stdout
+
+
+@needs_nds
+def test_a_new_subentry_finding_fails_the_gate(reference_output, tmp_path):
+    """The known gaps are reported; anything else in a subentry gates."""
+    folder = tmp_path / "campaign"
+    (folder / "shots").mkdir(parents=True)
+    master = folder / "unassigned.nxs"
+    master.write_bytes(reference_output.read_bytes())
+    container = folder / "shots" / "20251201_001042.nxs"
+    container.write_bytes(
+        (reference_output.parent / "shots" / "20251201_001042.nxs").read_bytes()
+    )
+    with h5py.File(container, "r+") as handle:
+        sub = handle["entry/Reflected_515_Spectrometer"]
+        del sub["definition"]
+        sub["definition"] = "NXno_such_definition"
+    result = _gate("--master", str(master), "--no-write")
+    assert result.returncode == 1, result.stdout
+    assert "/entry/Reflected_515_Spectrometer:" in result.stdout
