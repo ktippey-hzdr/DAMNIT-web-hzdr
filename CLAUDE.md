@@ -237,6 +237,15 @@ events by trigger time) and `DW_API_HZDR_BUILDER__TIME_MATCH_AUTOASSIGN`
 propose review candidates, and an authoritative `shot_number` naming exactly
 one shot attaches on the number alone; `true` restores the earlier ladder,
 which attached a numbered trigger to a neighbouring LabFrog shot by time).
+`DW_API_HZDR_BUILDER__VALIDATION_PYTHON` (default empty: off) names a Python
+with nexus-design-studio and pynxtools (NDS's own `.venv`); set, the trigger
+runs `api/scripts/hzdr-nexus-validate.py` (campaign output phase 5) after each
+container worker (not after one that asked for a relink or converted
+nothing, `BUSY_EXIT`), or after the build without containers, one run at a
+time: the master against NXhzdr_target and its container links, the
+containers structurally and their definition subentries (known mapping gaps
+reported, anything new gating), in `<campaign folder>/.validation.json` and
+`.hzdr-validation.log`; exit 1 fails the gate, exit 2 means it could not run.
 `DW_API_HZDR_BUILDER__CONTAINERS_ENABLED` (default `false`) makes the trigger
 start `hzdr-container-worker.py` (for `OUTPUT_NEXUS`, or every campaign under
 `OUTPUT_ROOT`) once before each build and once after a successful one, without
@@ -341,6 +350,7 @@ checks and stop on drift.
 - `cd api && uv run ruff check .` and `cd api && uv run pytest -k hzdr` for API/integration changes.
 - `pwsh hzdr/scripts/test-all.ps1` before a cross-repo change (it runs the sibling conformance suites).
 - `python api/scripts/hzdr-local-acceptance.py` for an end-to-end check without a broker or sibling repos.
+- NeXus output: `<nds>/.venv/bin/python api/scripts/hzdr-nexus-validate.py --master <c>.nxs` (or `HZDR_NDS_PYTHON=<that python> uv run pytest tests/test_hzdr_nexus_validate.py`); exit 1 on a master or container error.
 - Frontend: `pnpm run dev:app` and verify in the browser; `pnpm run lint`.
 
 ## Agent Pack
@@ -508,7 +518,7 @@ instrument group. `/entry/shot_containers` (campaign output phase 4) is an
 `NXcollection` index (`shot_key`/`container` datasets) of the per-shot
 containers in `shots/`, which the file links at its root, one relative
 external link per container named by its stem. These additive views
-keep the v4 table columns unchanged.
+keep the v5 table columns unchanged.
 
 ### Shared Pydantic field constraints (`api/src/damnit_api/shared/models.py`)
 

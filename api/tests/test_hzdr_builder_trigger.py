@@ -8,6 +8,7 @@ the debounce loop with a short window for speed.
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -548,3 +549,163 @@ def test_a_worker_that_left_containers_to_link_asks_for_a_build(
     trigger = BuilderTrigger(_settings(tmp_path))
     trigger.worker_finished(returncode)
     assert trigger._wake.is_set() is rebuilds
+
+
+# --- Phase 5: the NeXus validation gate after each build's worker -------------
+
+
+class _Proc:
+    def __init__(self, returncode: int) -> None:
+        self.returncode = returncode
+
+    async def wait(self) -> int:
+        return self.returncode
+
+
+def test_validation_is_off_by_default(tmp_path):
+    assert HZDRBuilderSettings().validation_python == ""
+
+
+@pytest.mark.asyncio
+async def test_without_containers_validation_follows_the_build(tmp_path):
+    log: list[str] = []
+    validations = _RecordingLauncher(log)
+    trigger = BuilderTrigger(
+        _settings(tmp_path, validation_python="/nds/.venv/bin/python"),
+        runner=_ordered_runner(log),
+        validation_launcher=validations,
+    )
+    await trigger._run_builder_once()
+    assert len(validations.calls) == 1
+    cmd = validations.calls[0]
+    assert cmd[0] == "/nds/.venv/bin/python"
+    assert cmd[1].endswith("hzdr-nexus-validate.py")
+    assert cmd[2:] == ["--master", str(tmp_path / "campaign.nxs")]
+
+
+@pytest.mark.asyncio
+async def test_with_containers_validation_follows_the_worker(tmp_path):
+    log: list[str] = []
+    validations = _RecordingLauncher([])
+    trigger = BuilderTrigger(
+        _settings(tmp_path, containers_enabled=True, validation_python="/nds/python"),
+        runner=_ordered_runner(log),
+        worker_launcher=_RecordingLauncher(log),
+        validation_launcher=validations,
+    )
+    await trigger._run_builder_once()
+    assert validations.calls == []  # not before the containers are done
+    await trigger._reap_worker(_Proc(0))
+    assert validations.calls == [trigger.validation_command()]
+
+
+@pytest.mark.asyncio
+async def test_no_validation_unless_configured(tmp_path):
+    validations = _RecordingLauncher([])
+    trigger = BuilderTrigger(
+        _settings(tmp_path), runner=_ordered_runner([]), validation_launcher=validations
+    )
+    await trigger._run_builder_once()
+    await trigger._reap_worker(_Proc(0))
+    assert validations.calls == []
+
+
+def test_multi_campaign_validation_covers_the_root(tmp_path):
+    trigger = BuilderTrigger(
+        _settings(
+            tmp_path,
+            output_nexus=None,
+            output_root=tmp_path / "out",
+            validation_python="py",
+        )
+    )
+    assert trigger.validation_command()[2:] == ["--output-root", str(tmp_path / "out")]
+
+
+def test_the_busy_exit_matches_the_workers():
+    from damnit_api.consumer import builder_trigger
+    from damnit_api.metadata import hzdr_containers
+
+    assert builder_trigger.BUSY_EXIT == hzdr_containers.BUSY_EXIT
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("returncode", [3, 4, 5])
+async def test_no_validation_after_a_relink_or_busy_worker(tmp_path, returncode):
+    validations = _RecordingLauncher([])
+    trigger = BuilderTrigger(
+        _settings(tmp_path, validation_python="py"),
+        validation_launcher=validations,
+    )
+    await trigger._reap_worker(_Proc(returncode))
+    assert validations.calls == []
+
+
+class _HeldProc:
+    """A validation that runs until released."""
+
+    def __init__(self) -> None:
+        self.done = asyncio.Event()
+
+    async def wait(self) -> int:
+        await self.done.wait()
+        return 0
+
+
+@pytest.mark.asyncio
+async def test_validations_never_overlap_and_coalesce_to_one_followup(
+    tmp_path, monkeypatch
+):
+    trigger = BuilderTrigger(_settings(tmp_path, validation_python="py"))
+    started: list[_HeldProc] = []
+
+    async def spawn(cmd, log_path):
+        await asyncio.sleep(0)
+        proc = _HeldProc()
+        started.append(proc)
+        return proc
+
+    monkeypatch.setattr(trigger, "_spawn", spawn)
+    for _ in range(4):  # a burst: the first runs, the rest coalesce
+        await trigger._start_validation("test")
+    assert len(started) == 1
+    started[0].done.set()
+    await asyncio.sleep(0)
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert len(started) == 2  # exactly one follow-up
+    started[1].done.set()
+    await trigger.wait_for_workers()
+    assert len(started) == 2
+    assert trigger._validating is False
+
+
+def test_the_gate_s_counts_reach_the_api_log(tmp_path, caplog):
+    (tmp_path / ".validation.json").write_text(
+        json.dumps({
+            "master": "campaign.nxs",
+            "summary": {
+                "passed": True,
+                "master_errors": 0,
+                "containers": 7,
+                "container_errors": 0,
+                "subentries": 2,
+                "subentries_certified": 0,
+            },
+        })
+    )
+    trigger = BuilderTrigger(_settings(tmp_path, validation_python="py"))
+    with caplog.at_level("INFO"):
+        trigger.validation_finished(0)
+    assert "campaign.nxs: passed; master 0 error(s); 7 container(s)" in caplog.text
+    with caplog.at_level("INFO"):
+        trigger.validation_finished(2)
+    assert "could not run" in caplog.text
+
+
+def test_a_busy_worker_is_not_logged_as_an_error(tmp_path, caplog):
+    trigger = BuilderTrigger(_settings(tmp_path))
+    with caplog.at_level("INFO"):
+        trigger.worker_finished(5)
+    assert "found the campaign busy" in caplog.text
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]

@@ -303,9 +303,8 @@ master), backgrounds (`<campaign>_backgrounds.nxs`), and an entry-level plot
   the root links into `shots/` it finds (a seeded previous master's) and
   writes them and the index whole. The bridge profile is unchanged (no table
   column changed). Relative links resolve against the master's own folder
-  for h5py and silx (checked with a decoy `shots/` in the working directory;
-  `HDF5_EXT_PREFIX` would override it); pynxtools resolves them against its
-  working directory, so the validation gate runs from the master's folder.
+  (checked with a decoy `shots/` in the working directory; `HDF5_EXT_PREFIX`
+  would override it).
 - **The master never links a missing container**: it links only files already
   renamed into place, and is itself renamed last.
 - **Catching up.** Containers are written outside the campaign lock, so a new
@@ -350,3 +349,62 @@ master), backgrounds (`<campaign>_backgrounds.nxs`), and an entry-level plot
   (size, mtime) if it shows on the SMB share at campaign scale.
 - **SciCat** still registers the campaign file; registering the folder
   (master + `shots/`) belongs with the side-by-side run (phase 6).
+
+## 9. Phase 5: the validation gate
+
+`api/scripts/hzdr-nexus-validate.py` runs in nexus-design-studio's own
+environment (NDS has pynxtools; DAMNIT does not depend on it) and imports
+nothing from `damnit_api`, so one process checks a whole campaign: about
+0.33 s per container with an Irr8 subentry, so some 50 s for 150.
+
+- **Master**: NDS's structural check; pynxtools against the definition
+  `/entry` declares (`NXhzdr_target`, overlaid from `hzdr/nxdl`); and every
+  root link into `shots/` must resolve to a container holding `/entry` (the
+  master never names a missing container). The per-shot entries at the root
+  declare no definition, so pynxtools leaves them to the container checks.
+- **Containers** (this campaign's, by their own `shot_key`; another master's
+  in a shared folder are left out): NDS's structural check (NX classes, a
+  top-level NXentry), and pynxtools on every `NXsubentry` that declares a
+  definition (the mapping rows' claims: `NXoptical_spectroscopy` for the Irr8
+  spectrometers). One container that cannot be checked is an error for it,
+  not the end of the run.
+- **Exit 1, the gate**: a structural error in the master or a container, the
+  master's entry not valid against its definition, a dangling container
+  link, or a subentry finding outside `KNOWN_SUBENTRY_GAPS`. Warnings are
+  counted, never gating. A subentry whose only findings are the known gaps is
+  *not certified* and gates only with `--strict-subentries`.
+- **Exit 2, could not run**: no nexus-design-studio or pynxtools in that
+  Python, a missing `--output-root`, or no NXDL in `--definitions`. It writes
+  a report with `"ran": false`, so an older passing one is not read as
+  current.
+- **Known gaps (today)**: every Irr8 subentry lacks `experiment_type`, the
+  `beam_TYPE` and `detector_TYPE` groups and `definition/@URL`/`@version`,
+  and its `number_of_cycles` is not NX_INT. shot-aligner's own build of the
+  reference shot has exactly the same findings (checked in review). Filling
+  them is a mapping decision (the rows in shot-aligner's `config/mappings`,
+  reviewed by a person), not a converter's to invent; once they are filled,
+  drop them from `KNOWN_SUBENTRY_GAPS` and run with `--strict-subentries`.
+  Any *other* subentry finding is new and fails the gate, so a regression is
+  not hidden behind the known ones.
+- **Report**: `<campaign folder>/.validation.json` (written atomically,
+  fsynced) and one line per campaign, e.g. `Validation (c.nxs): passed;
+  master 0 error(s), 1 warning(s); 150 container(s), 0 error(s), 150
+  warning(s); subentries 0/40 certified`.
+- **After each build**: with `DW_API_HZDR_BUILDER__VALIDATION_PYTHON` set to
+  that environment's Python (e.g. `<nexus-design-studio>/.venv/bin/python`),
+  the trigger starts the gate when a container worker exits, or right after a
+  successful build when containers are off, logging to `.hzdr-validation.log`
+  beside the output. Not after a worker that asked for a relink (its build
+  follows, and that build's worker validates) or one that converted nothing
+  (`BUSY_EXIT`, 5: another worker had every campaign). **One run at a time**:
+  a request while one runs is remembered once and starts when it ends. When
+  it ends, the API log gets each campaign's counts from its report, and
+  "could not run" for exit 2. Empty (the default): off.
+- **In CI**: `api/tests/test_hzdr_nexus_validate.py` runs the gate on the
+  reference output with that Python (`HZDR_NDS_PYTHON`, or the sibling
+  `../nexus-design-studio/.venv`) and skips where there is none, like the
+  shot-aligner sync checks without their sibling. DAMNIT's GitHub CI has no
+  NDS checkout, so there it skips (the exit-2 cases still run); it runs
+  wherever the sibling is (the combo, `test-all`, fwkt-webapps). The gate uses
+  two private NDS helpers (the definitions overlay, the pynxtools import);
+  those tests break wherever NDS moves them.
