@@ -237,6 +237,12 @@ events by trigger time) and `DW_API_HZDR_BUILDER__TIME_MATCH_AUTOASSIGN`
 propose review candidates, and an authoritative `shot_number` naming exactly
 one shot attaches on the number alone; `true` restores the earlier ladder,
 which attached a numbered trigger to a neighbouring LabFrog shot by time).
+`DW_API_HZDR_BUILDER__VALIDATION_PYTHON` (default empty: off) names a Python
+with nexus-design-studio and pynxtools (NDS's own `.venv`); set, the trigger
+runs `api/scripts/hzdr-nexus-validate.py` (campaign output phase 5) after each
+container worker, or after the build without containers: the master against
+NXhzdr_target, the containers structurally and their definition subentries,
+reported in `<campaign folder>/.validation.json` and `.hzdr-validation.log`.
 `DW_API_HZDR_BUILDER__CONTAINERS_ENABLED` (default `false`) makes the trigger
 start `hzdr-container-worker.py` (for `OUTPUT_NEXUS`, or every campaign under
 `OUTPUT_ROOT`) once before each build and once after a successful one, without
@@ -341,6 +347,7 @@ checks and stop on drift.
 - `cd api && uv run ruff check .` and `cd api && uv run pytest -k hzdr` for API/integration changes.
 - `pwsh hzdr/scripts/test-all.ps1` before a cross-repo change (it runs the sibling conformance suites).
 - `python api/scripts/hzdr-local-acceptance.py` for an end-to-end check without a broker or sibling repos.
+- NeXus output: `<nds>/.venv/bin/python api/scripts/hzdr-nexus-validate.py --master <c>.nxs` (or `HZDR_NDS_PYTHON=<that python> uv run pytest tests/test_hzdr_nexus_validate.py`); exit 1 on a master or container error.
 - Frontend: `pnpm run dev:app` and verify in the browser; `pnpm run lint`.
 
 ## Agent Pack
