@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
+import os
 import re
 import time
 from dataclasses import dataclass, field
@@ -35,21 +37,25 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import h5py
+import PIL
 
 from ..shared.hzdr_paths import map_path, parse_path_map
 from . import hzdr_packs
 from .hzdr_nexus import (
     BuilderAlreadyRunningError,
+    replace_with_retry,
     single_writer_lock,
     write_json_atomic,
 )
 from .hzdr_packs import _h5, vendor
-from .hzdr_packs.vendor.nxwrite import container_groups
+from .hzdr_packs.vendor.nxwrite import _safe, container_groups
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable, Mapping
 
     ReadPath = Callable[[str], Path]
+
+logger = logging.getLogger(__name__)
 
 CONTAINER_PROFILE = "hzdr-shot-container-v1"
 SHOTS_DIRNAME = "shots"
@@ -58,6 +64,26 @@ PENDING_NAME = ".convert.pending"
 # single_writer_lock(<shots>/.convert) holds <shots>/.convert.lock.
 _LOCK_STEM = ".convert"
 _TMP_SUFFIX = ".tmp"
+# Rows of /entry/source_events read at a time: memory is bounded by a slice of
+# JSON text, not by the campaign's event count.
+READ_SLICE = 4096
+# A worker's conversion lock not refreshed for this long is a dead worker's
+# (a host that rebooted, a PID reused); it is refreshed once per container.
+LOCK_STALE_AFTER_S = 30 * 60
+# Names the writer gives entry-level fields and NXinstrument fields; a group
+# that sanitises to one of them gets a suffix instead of overwriting it.
+RESERVED_ENTRY_NAMES = frozenset({
+    "title",
+    "start_time",
+    "end_time",
+    "experiment_identifier",
+    "entry_identifier",
+    "definition",
+    "data",
+    "labfrog_shot",
+    "conversion_problems",
+})
+RESERVED_INSTRUMENT_NAMES = frozenset({"name"})
 
 _SHOT_KEY = re.compile(r"^(?P<campaign>.+):(?P<date>\d{8}|unknown):(?P<number>\d{6,})$")
 
@@ -97,14 +123,23 @@ def shots_dir(master: Path) -> Path:
     return master.parent / SHOTS_DIRNAME
 
 
-def make_read_path(path_map: str) -> ReadPath:
-    """Recorded path -> this host's path, through ``DW_API_METADATA__PATH_MAP``."""
-    rules = parse_path_map(path_map)
+class PathMapReader:
+    """Recorded path -> this host's path, through ``DW_API_METADATA__PATH_MAP``.
 
-    def read_path(recorded: str) -> Path:
-        return map_path(recorded, rules) or Path(recorded)
+    ``digest`` names the map, so a container read through another one is
+    rewritten (it is part of the fingerprint).
+    """
 
-    return read_path
+    def __init__(self, path_map: str) -> None:
+        self.rules = parse_path_map(path_map)
+        self.digest = hashlib.sha256(path_map.strip().encode()).hexdigest()
+
+    def __call__(self, recorded: str) -> Path:
+        return map_path(recorded, self.rules) or Path(recorded)
+
+
+def make_read_path(path_map: str) -> PathMapReader:
+    return PathMapReader(path_map)
 
 
 def _recorded_name(recorded: str) -> str:
@@ -249,20 +284,21 @@ def _group(handle: h5py.File, path: str) -> h5py.Group | None:
 
 
 def read_master(master: Path) -> tuple[str, list[dict], list[dict]]:
-    """``(experiment_id, shot rows, event rows)`` of a published master.
+    """``(experiment_id, shot rows, acquisition event rows)`` of a published master.
 
-    Opened read-only and closed before anything is converted, so a long
-    conversion never holds the master (on Windows an open handle would block
-    the builder's atomic rename).
+    Opened read-only, read in slices of ``READ_SLICE`` rows and closed before
+    anything is converted: only events naming ``metadata.instrument.format``
+    are kept, and of them only what a container is written from, so memory
+    follows the acquisitions, not the campaign's event table, and the master is
+    held as briefly as the tables allow (on Windows an open handle makes the
+    builder's rename wait; it retries).
     """
     with h5py.File(master, "r") as handle:
         experiment_id = handle.attrs.get("experiment_id", master.stem)
         if isinstance(experiment_id, bytes):
             experiment_id = experiment_id.decode()
-        shots_group = _group(handle, "entry/shots")
-        events_group = _group(handle, "entry/source_events")
         shots = _rows(
-            shots_group,
+            _group(handle, "entry/shots"),
             (
                 "shot_key",
                 "fired_at",
@@ -271,10 +307,7 @@ def read_master(master: Path) -> tuple[str, list[dict], list[dict]]:
                 "labfrog_local_count",
             ),
         )
-        events = _rows(
-            events_group,
-            ("event_id", "shot_key", "timestamp", "payload_ref_json", "metadata_json"),
-        )
+        events = _acquisition_events(_group(handle, "entry/source_events"))
     return str(experiment_id), shots, events
 
 
@@ -285,6 +318,77 @@ def _rows(group: h5py.Group | None, names: Iterable[str]) -> list[dict]:
     count = len(key) if isinstance(key, h5py.Dataset) else 0
     columns = {name: _column(group, name, count) for name in names}
     return [{name: values[i] for name, values in columns.items()} for i in range(count)]
+
+
+def _text_slice(group: h5py.Group, name: str, start: int, stop: int) -> list[str]:
+    dataset = group.get(name)
+    if not isinstance(dataset, h5py.Dataset):
+        return [""] * (stop - start)
+    return [str(value) for value in dataset.asstr()[start:stop]]
+
+
+def _compact_payload(payload: dict) -> dict:
+    """The payload fields a container uses: paths and their sha256."""
+    keep = ("path", "sha256", "size_bytes")
+    members = [
+        {k: m[k] for k in keep if k in m}
+        for m in payload.get("members") or []
+        if isinstance(m, dict)
+    ]
+    compact = {k: payload[k] for k in keep if k in payload}
+    if members:
+        compact["members"] = members
+    return compact
+
+
+def _compact_metadata(metadata: dict) -> dict:
+    """The metadata a container uses: instrument, watch folder, acquisition time."""
+    compact = {"instrument": metadata["instrument"]}
+    watch = _as_object(metadata.get("watch"))
+    if watch:
+        compact["watch"] = {
+            k: watch[k] for k in ("watch_name", "watch_path") if k in watch
+        }
+    acquisition = _as_object(metadata.get("acquisition"))
+    if acquisition:
+        compact["acquisition"] = {
+            k: acquisition[k] for k in ("time", "time_source") if k in acquisition
+        }
+    return compact
+
+
+def _acquisition_events(group: h5py.Group | None) -> list[dict]:
+    if group is None or "shot_key" not in group or "metadata_json" not in group:
+        return []
+    keys_dataset = group["shot_key"]
+    count = len(keys_dataset) if isinstance(keys_dataset, h5py.Dataset) else 0
+    kept: list[dict] = []
+    for start in range(0, count, READ_SLICE):
+        stop = min(start + READ_SLICE, count)
+        keys = _text_slice(group, "shot_key", start, stop)
+        texts = _text_slice(group, "metadata_json", start, stop)
+        rows = []
+        for i, (key, text) in enumerate(zip(keys, texts, strict=True)):
+            if not key or '"format"' not in text:
+                continue
+            metadata = _json_object(text)
+            instrument = metadata.get("instrument")
+            if isinstance(instrument, dict) and instrument.get("format"):
+                rows.append((i, key, _compact_metadata(metadata)))
+        if not rows:
+            continue
+        ids = _text_slice(group, "event_id", start, stop)
+        payloads = _text_slice(group, "payload_ref_json", start, stop)
+        kept += [
+            {
+                "event_id": ids[i],
+                "shot_key": key,
+                "metadata": metadata,
+                "payload_ref": _compact_payload(_json_object(payloads[i])),
+            }
+            for i, key, metadata in rows
+        ]
+    return kept
 
 
 def _as_object(value: Any) -> dict:
@@ -387,7 +491,9 @@ def _add_event(
     watch_path = str(_as_object(metadata.get("watch")).get("watch_path") or "")
     acquired = _as_object(metadata.get("acquisition"))
     when = str(acquired.get("time") or "")
-    payload = _json_object(row.get("payload_ref_json"))
+    payload = _as_object(row.get("payload_ref")) or _json_object(
+        row.get("payload_ref_json")
+    )
     members = payload.get("members") or ([payload] if payload.get("path") else [])
     for member in members:
         recorded = member.get("path") if isinstance(member, dict) else None
@@ -434,7 +540,9 @@ def plan_shots(
     with_files: set[str] = set()
     for row in events:
         shot_key = row.get("shot_key") or ""
-        metadata = _json_object(row.get("metadata_json"))
+        metadata = _as_object(row.get("metadata")) or _json_object(
+            row.get("metadata_json")
+        )
         instrument = metadata.get("instrument")
         if not shot_key or not isinstance(instrument, dict):
             continue
@@ -443,7 +551,17 @@ def plan_shots(
         plan = by_key.setdefault(shot_key, ShotPlan(shot_key, experiment_id))
         with_files.add(shot_key)
         _add_event(row, plan, metadata, acquisitions)
-    for (shot_key, _, _), acquisition in sorted(acquisitions.items()):
+    # Deterministic whatever order the events arrived in: by instrument, then
+    # time, then key, so the earliest acquisition keeps the plain detector name.
+    for (shot_key, _, _), acquisition in sorted(
+        acquisitions.items(),
+        key=lambda item: (
+            item[0][0],
+            item[1].instrument_id,
+            item[1].when or "\uffff",
+            item[1].key,
+        ),
+    ):
         acquisition.files.sort()
         by_key[shot_key].acquisitions.append(acquisition)
     return [by_key[key] for key in sorted(with_files)]
@@ -490,23 +608,56 @@ def catalogue_sha256() -> str:
     ).hexdigest()
 
 
-def _file_identity(recorded: str, sha256: str | None, read_path: ReadPath) -> Any:
-    """A member's recorded sha256; a stat only when the producer sent none."""
+def library_versions() -> dict[str, str]:
+    """The libraries whose output a container holds: h5py, libhdf5, Pillow."""
+    return {
+        "h5py": h5py.__version__,
+        "hdf5": h5py.version.hdf5_version,
+        "pillow": PIL.__version__,
+    }
+
+
+Stat = list[int] | None  # [size, mtime_ns], or None for a file not there
+
+
+def member_stats(plan: ShotPlan, read_path: ReadPath) -> dict[str, Stat]:
+    """``[size, mtime_ns]`` of every member as this host sees it (None: missing).
+
+    One stat per file per pass: it says whether a file is there (part of the
+    fingerprint, so a file that comes back is converted even when the manifest
+    was lost) and whether it changed under an unchanged sha256.
+    """
+    stats: dict[str, Stat] = {}
+    for acquisition in plan.acquisitions:
+        for recorded in acquisition.files:
+            try:
+                stat = read_path(recorded).stat()
+            except OSError:
+                stats[recorded] = None
+            else:
+                stats[recorded] = [stat.st_size, stat.st_mtime_ns]
+    return stats
+
+
+def _file_identity(sha256: str | None, stat: Stat) -> Any:
+    """The producer's sha256 and whether the file is there; a stat without one."""
     if sha256:
-        return sha256
-    try:
-        stat = read_path(recorded).stat()
-    except OSError:
-        return "missing"
-    return [stat.st_size, stat.st_mtime_ns]
+        return [sha256, stat is not None]
+    return stat if stat is not None else "missing"
 
 
-def fingerprint(plan: ShotPlan, read_path: ReadPath) -> str:
+def fingerprint(
+    plan: ShotPlan, read_path: ReadPath, stats: Mapping[str, Stat] | None = None
+) -> str:
     """The inputs a container is written from, as one sha256."""
+    if stats is None:
+        stats = member_stats(plan, read_path)
     record = {
         "profile": CONTAINER_PROFILE,
         "code": code_digest(),
         "catalogue": catalogue_sha256(),
+        "libraries": library_versions(),
+        "path_map": getattr(read_path, "digest", ""),
         "shot": {
             "shot_key": plan.shot_key,
             "experiment_id": plan.experiment_id,
@@ -518,7 +669,7 @@ def fingerprint(plan: ShotPlan, read_path: ReadPath) -> str:
             {
                 **a.facts(),
                 "inputs": [
-                    _file_identity(f, a.sha256.get(f), read_path) for f in a.files
+                    _file_identity(a.sha256.get(f), stats.get(f)) for f in a.files
                 ],
             }
             for a in plan.acquisitions
@@ -560,13 +711,28 @@ def _problem(instrument: str, text: str) -> str:
     return text if text.startswith(instrument) else f"{instrument}: {text}"
 
 
-def _detector_group(instrument: h5py.Group, name: str, seq: int | None) -> str:
-    """shot-aligner's rule for a second acquisition: ``<detector>_<seq or 0>``."""
+def _unreserved(name: str, reserved: frozenset[str], suffix: str) -> str:
+    return f"{name}_{suffix}" if name in reserved else name
+
+
+def _detector_group(instrument: h5py.Group, name: str, acquisition: Acquisition) -> str:
+    """The detector's group name under its NXinstrument.
+
+    The first acquisition (earliest; see :func:`plan_shots`) keeps the plain
+    name; a second takes shot-aligner's ``<detector>_<seq>``, or, with no
+    ordinal, its sanitised key (the file stem or recording label), not ``_0``.
+    """
+    name = _unreserved(name, RESERVED_INSTRUMENT_NAMES, "detector")
     if name not in instrument:
         return name
-    candidate, n = f"{name}_{seq or 0}", 1
-    while candidate in instrument:
-        candidate, n = f"{name}_{seq or 0}_{n}", n + 1
+    tail = (
+        str(acquisition.seq)
+        if acquisition.seq is not None
+        else _safe(acquisition.key.rsplit("|", 1)[-1])
+    )
+    candidate, n = f"{name}_{tail}", 2
+    while candidate in instrument or candidate in RESERVED_INSTRUMENT_NAMES:
+        candidate, n = f"{name}_{tail}_{n}", n + 1
     return candidate
 
 
@@ -589,6 +755,15 @@ def _write_file_metadata(detector: h5py.Group, acquisition: Acquisition) -> None
         "sidecar_files",
         "\n".join(_recorded_name(f) for f in files if f != primary),
     )
+    _h5.field(
+        notes,
+        "sha256",
+        "\n".join(
+            f"{_recorded_name(f)} {acquisition.sha256.get(f) or ''}".rstrip()
+            for f in files
+        ),
+        description="each file's sha256 as its event recorded it, one per line",
+    )
     _h5.field(notes, "file_creation_date", acquisition.when)
     _h5.field(notes, "time_source", acquisition.time_source)
     _h5.field(
@@ -606,6 +781,7 @@ def _write_acquisition(
     result.missing += missing
 
     machine, detector_name = container_groups(acquisition.layout, label)
+    machine = _unreserved(machine, RESERVED_ENTRY_NAMES, "instrument")
     created = machine not in entry
     instrument = _h5.group(entry, machine, "NXinstrument")
     if created:
@@ -615,7 +791,7 @@ def _write_acquisition(
             "name",
             layout.get("group") or layout.get("instrumentName") or label,
         )
-    name = _detector_group(instrument, detector_name, acquisition.seq)
+    name = _detector_group(instrument, detector_name, acquisition)
     detector = _h5.group(instrument, name, "NXdetector")
     _h5.field(detector, "local_name", label)
     if acquisition.layout.get("detectorName"):
@@ -657,7 +833,11 @@ def _write_acquisition(
 
 
 def _write_shot(
-    handle: h5py.File, plan: ShotPlan, read_path: ReadPath, fingerprint_text: str
+    handle: h5py.File,
+    plan: ShotPlan,
+    read_path: ReadPath,
+    fingerprint_text: str,
+    notes: list[str],
 ) -> ShotResult:
     handle.attrs["NX_class"] = "NXroot"
     handle.attrs["default"] = "entry"
@@ -666,6 +846,7 @@ def _write_shot(
     handle.attrs["damnit_container_profile"] = CONTAINER_PROFILE
     handle.attrs["damnit_input_fingerprint"] = fingerprint_text
     handle.attrs["shot_key"] = plan.shot_key
+    handle.attrs["damnit_libraries"] = json.dumps(library_versions(), sort_keys=True)
 
     entry = _h5.group(handle, "entry", "NXentry")
     entry.attrs["shot_key"] = plan.shot_key
@@ -696,7 +877,7 @@ def _write_shot(
                 description="LabFrog's local Count, a user aid; never the shot number",
             )
 
-    result = ShotResult(problems=list(plan.problems))
+    result = ShotResult(problems=[*plan.problems, *notes])
     for acquisition in plan.acquisitions:
         _write_acquisition(entry, acquisition, read_path, result)
     if result.problems:
@@ -712,18 +893,40 @@ def _write_shot(
 
 
 def write_container(
-    target: Path, plan: ShotPlan, read_path: ReadPath, fingerprint_text: str
+    target: Path,
+    plan: ShotPlan,
+    read_path: ReadPath,
+    fingerprint_text: str,
+    *,
+    stats: Mapping[str, Stat] | None = None,
+    notes: list[str] | None = None,
 ) -> ShotResult:
-    """Write ``target`` whole: to ``<name>.tmp`` first, then renamed into place."""
+    """Write ``target`` whole: to ``<name>.tmp``, fsynced, then renamed into place.
+
+    ``stats`` (the members' size and mtime now) are stored beside the
+    fingerprint, so a later pass can tell a file changed under the same
+    sha256; ``notes`` are problems the caller found (such a change).
+    """
     temp = target.with_name(target.name + _TMP_SUFFIX)
     try:
         with h5py.File(temp, "w") as handle:
-            result = _write_shot(handle, plan, read_path, fingerprint_text)
-        temp.replace(target)
+            handle.attrs["damnit_input_stats"] = json.dumps(stats or {}, sort_keys=True)
+            result = _write_shot(handle, plan, read_path, fingerprint_text, notes or [])
+        _fsync(temp)
+        replace_with_retry(temp, target)
     except BaseException:
         temp.unlink(missing_ok=True)
         raise
     return result
+
+
+def _fsync(path: Path) -> None:
+    """Flush a written file to disk before it is renamed into place."""
+    fd = os.open(path, os.O_RDWR | getattr(os, "O_BINARY", 0))
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 # ---------------------------------------------------------------------------
@@ -735,6 +938,7 @@ def write_container(
 class ConversionSummary:
     written: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    failed: list[str] = field(default_factory=list)
     problems: int = 0
 
 
@@ -749,30 +953,53 @@ def _load_manifest(path: Path) -> dict:
     }
 
 
-def _stored_fingerprint(path: Path) -> str | None:
+def _stored(path: Path) -> tuple[str | None, dict | None]:
+    """A container's own fingerprint and member stats, from its attributes."""
     try:
         with h5py.File(path, "r") as handle:
-            value = handle.attrs.get("damnit_input_fingerprint")
+            wanted = handle.attrs.get("damnit_input_fingerprint")
+            stats = handle.attrs.get("damnit_input_stats")
     except OSError:
-        return None
-    return value.decode() if isinstance(value, bytes) else value
+        return None, None
+    if isinstance(wanted, bytes):
+        wanted = wanted.decode()
+    try:
+        parsed = json.loads(stats) if stats is not None else None
+    except (TypeError, ValueError):
+        parsed = None
+    return wanted, parsed if isinstance(parsed, dict) else None
 
 
-def _up_to_date(target: Path, record: Mapping | None, wanted: str, read_path) -> bool:
-    """Whether ``target`` already holds these inputs.
+def _changed_files(
+    target: Path, record: Mapping | None, wanted: str, stats: Mapping[str, Stat]
+) -> list[str] | None:
+    """None when ``target`` must be (re)written; else the files changed on disk.
 
     The manifest answers without opening the file; a container the manifest
-    does not know (a run that died before flushing it) is asked itself. A
-    container written while some of its files were missing is redone once one
-    of them is back.
+    does not know (a run that died before flushing it) is asked itself. An
+    empty list means up to date. A file whose size or mtime moved since the
+    last conversion, under the same sha256, is listed: the caller reconverts
+    it and says so.
     """
     if not target.is_file():
-        return False
-    if record and record.get("fingerprint") == wanted:
-        if record.get("bytes") != target.stat().st_size:
-            return False
-        return not any(read_path(f).is_file() for f in record.get("missing") or [])
-    return _stored_fingerprint(target) == wanted
+        return None
+    if (
+        record
+        and record.get("fingerprint") == wanted
+        and record.get("bytes") == target.stat().st_size
+    ):
+        before = record.get("stats")
+    else:
+        stored, before = _stored(target)
+        if stored != wanted:
+            return None
+    if not isinstance(before, dict):
+        return []
+    return [
+        recorded
+        for recorded, now in stats.items()
+        if now is not None and before.get(recorded) not in (None, now)
+    ]
 
 
 def convert_campaign(
@@ -781,13 +1008,16 @@ def convert_campaign(
     read_path: ReadPath,
     flush_seconds: float = 5.0,
     after_write: Callable[[str], None] | None = None,
+    heartbeat: Callable[[], None] | None = None,
 ) -> ConversionSummary:
     """Bring a campaign's ``shots/`` up to date with its published master.
 
-    Call it under the conversion lock (:func:`run_conversion` does). Stale
-    temp files are removed first; the manifest is flushed every
-    ``flush_seconds`` and at the end. ``after_write(name)`` runs after each
-    container is in place (for tests).
+    Call it under the conversion lock (:func:`run_conversion` does, and passes
+    ``heartbeat`` to refresh it once per container). Stale temp files are
+    removed first; the manifest is flushed every ``flush_seconds`` and at the
+    end. A container that cannot be written (a refused rename, a full disk) is
+    recorded with its error and the pass goes on with the next shot.
+    ``after_write(name)`` runs after each container is in place (for tests).
     """
     folder = shots_dir(master)
     folder.mkdir(parents=True, exist_ok=True)
@@ -802,21 +1032,31 @@ def convert_campaign(
     summary = ConversionSummary()
     flushed, dirty = time.monotonic(), False
     for plan in plan_shots(experiment_id, shots, events):
+        if heartbeat is not None:
+            heartbeat()
         name = plan.name
         target = folder / name
-        wanted = fingerprint(plan, read_path)
-        record = records.get(name)
-        if _up_to_date(target, record, wanted, read_path):
-            summary.skipped.append(name)
-            if not record or record.get("fingerprint") != wanted:
-                records[name] = _record(plan, target, wanted, None)
-                dirty = True
+        try:
+            written = _convert_one(plan, target, records.get(name), read_path)
+        except Exception as error:
+            logger.warning("Container %s failed: %s", name, error)
+            records[name] = {
+                "shot_key": plan.shot_key,
+                "error": f"{type(error).__name__}: {error}",
+                "recorded_at": datetime.now(UTC).isoformat(),
+            }
+            summary.failed.append(name)
+            dirty = True
             continue
-        result = write_container(target, plan, read_path, wanted)
-        records[name] = _record(plan, target, wanted, result)
+        record, result = written
+        if record is not None:
+            records[name] = record
+            dirty = True
+        if result is None:
+            summary.skipped.append(name)
+            continue
         summary.written.append(name)
         summary.problems += len(result.problems)
-        dirty = True
         if after_write is not None:
             after_write(name)
         if time.monotonic() - flushed >= flush_seconds:
@@ -827,13 +1067,39 @@ def convert_campaign(
     return summary
 
 
+def _convert_one(
+    plan: ShotPlan, target: Path, record: Mapping | None, read_path: ReadPath
+) -> tuple[dict | None, ShotResult | None]:
+    """``(new manifest record or None, result or None when up to date)``."""
+    stats = member_stats(plan, read_path)
+    wanted = fingerprint(plan, read_path, stats)
+    changed = _changed_files(target, record, wanted, stats)
+    if changed == []:
+        if record and record.get("fingerprint") == wanted:
+            return None, None
+        return _record(plan, target, wanted, None, stats), None
+    notes = [
+        f"{_recorded_name(recorded)} changed on disk since it was last converted "
+        "(its size or mtime differ) while its event's sha256 did not; "
+        "reconverted from the bytes on disk now"
+        for recorded in changed or []
+    ]
+    result = write_container(target, plan, read_path, wanted, stats=stats, notes=notes)
+    return _record(plan, target, wanted, result, stats), result
+
+
 def _record(
-    plan: ShotPlan, target: Path, wanted: str, result: ShotResult | None
+    plan: ShotPlan,
+    target: Path,
+    wanted: str,
+    result: ShotResult | None,
+    stats: Mapping[str, Stat],
 ) -> dict:
     record = {
         "shot_key": plan.shot_key,
         "fingerprint": wanted,
         "bytes": target.stat().st_size,
+        "stats": dict(stats),
         "recorded_at": datetime.now(UTC).isoformat(),
     }
     if result is not None:
@@ -858,6 +1124,7 @@ def run_conversion(
     read_path: ReadPath,
     flush_seconds: float = 5.0,
     after_write: Callable[[str], None] | None = None,
+    stale_after: float = LOCK_STALE_AFTER_S,
 ) -> list[ConversionSummary]:
     """Convert a campaign under its own lock; one pass per request.
 
@@ -865,7 +1132,9 @@ def run_conversion(
     finds it taken leaves ``shots/.convert.pending`` and returns ``[]``; the
     holder makes another pass while that marker exists or the master changed
     during its pass, and looks for the marker once more after releasing the
-    lock, so a request is never lost between the two.
+    lock, so a request is never lost between the two. The lock is refreshed
+    once per container; one not refreshed for ``stale_after`` seconds (a dead
+    worker, on any host) is reclaimed.
     """
     if not master.is_file():
         return []
@@ -876,7 +1145,9 @@ def run_conversion(
     summaries: list[ConversionSummary] = []
     while pending.exists():
         try:
-            with single_writer_lock(folder / _LOCK_STEM):
+            with single_writer_lock(
+                folder / _LOCK_STEM, stale_after=stale_after
+            ) as lock:
                 while pending.exists():
                     pending.unlink(missing_ok=True)
                     before = _signature(master)
@@ -887,6 +1158,7 @@ def run_conversion(
                                 read_path=read_path,
                                 flush_seconds=flush_seconds,
                                 after_write=after_write,
+                                heartbeat=lock.refresh,
                             )
                         )
                     if _signature(master) != before:
@@ -896,15 +1168,32 @@ def run_conversion(
     return summaries
 
 
-def campaign_masters(output_root: Path) -> list[Path]:
-    """Every campaign master under a multi-campaign output root.
+UNASSIGNED_FOLDER = "_unassigned"
 
-    ``<root>/<folder>/<folder>.nxs``, and the bucket's
-    ``<root>/_unassigned/unassigned.nxs`` (``campaign_builds`` layout).
+
+def campaign_masters(
+    output_root: Path,
+    *,
+    include_unassigned: bool = False,
+    folders: Iterable[str] | None = None,
+) -> list[Path]:
+    """Campaign masters under a multi-campaign output root.
+
+    ``<root>/<folder>/<folder>.nxs`` (``campaign_builds`` layout). The
+    ``_unassigned`` bucket (``unassigned.nxs``) only with
+    ``include_unassigned`` or when named in ``folders``: its shots move to a
+    campaign once resolved and would be converted twice. ``folders`` limits the
+    run to those campaign folders.
     """
+    wanted = set(folders) if folders is not None else None
     found = []
     for folder in sorted(p for p in output_root.iterdir() if p.is_dir()):
-        stem = "unassigned" if folder.name == "_unassigned" else folder.name
+        if wanted is not None and folder.name not in wanted:
+            continue
+        is_bucket = folder.name == UNASSIGNED_FOLDER
+        if is_bucket and not include_unassigned and wanted is None:
+            continue
+        stem = "unassigned" if is_bucket else folder.name
         master = folder / f"{stem}.nxs"
         if master.is_file():
             found.append(master)
@@ -925,7 +1214,9 @@ __all__ = [
     "container_name",
     "convert_campaign",
     "fingerprint",
+    "library_versions",
     "make_read_path",
+    "member_stats",
     "plan_shots",
     "read_master",
     "run_conversion",

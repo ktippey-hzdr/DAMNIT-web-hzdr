@@ -46,6 +46,8 @@ _DEFAULT_WORKER_SCRIPT = (
     Path(__file__).resolve().parents[3] / "scripts" / "hzdr-container-worker.py"
 )
 WORKER_LOG_NAME = ".hzdr-container-worker.log"
+# Past this size the log is moved to ``<name>.1`` (one generation kept).
+WORKER_LOG_MAX_BYTES = 5 * 1024 * 1024
 
 # Cap how much builder output we echo into a single log line on failure so a
 # large traceback cannot flood the structured logs.
@@ -120,7 +122,10 @@ class BuilderTrigger:
         python = s.python_executable or sys.executable
         script = s.container_worker_script or _DEFAULT_WORKER_SCRIPT
         if s.output_root is not None:
-            return [python, str(script), "--output-root", str(s.output_root)]
+            cmd = [python, str(script), "--output-root", str(s.output_root)]
+            if s.containers_include_unassigned:
+                cmd.append("--include-unassigned")
+            return cmd
         return [python, str(script), "--master", str(s.output_nexus)]
 
     def _worker_log(self) -> Path:
@@ -228,6 +233,11 @@ class BuilderTrigger:
         """
         log_path = self._worker_log()
         log_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            if log_path.stat().st_size > WORKER_LOG_MAX_BYTES:
+                log_path.replace(log_path.with_name(log_path.name + ".1"))
+        except OSError:
+            pass  # no log yet, or another start rotated it first
         with log_path.open("ab") as log:
             proc = await asyncio.create_subprocess_exec(
                 *cmd,

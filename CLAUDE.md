@@ -121,16 +121,23 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     `<campaign folder>/shots/<YYYYMMDD>_<shot_number:06d>.nxs` (one `NXentry`,
     `NXinstrument`/`NXdetector` named by the vendored `nxwrite.container_groups`
     from the catalogue, `shot_key` as an attribute). Run by
-    `api/scripts/hzdr-container-worker.py` **outside the campaign lock**, under
-    its own `shots/.convert.lock` (a second worker leaves `shots/.convert.pending`
-    for the running one); each container goes to `<name>.nxs.tmp` and is renamed
-    into place, and is rewritten only when its input fingerprint (members'
-    `sha256`, catalogue SHA, conversion-code digest) changes —
+    `api/scripts/hzdr-container-worker.py` (`--master`, or `--output-root`
+    with optional `--campaign`; the `_unassigned` bucket only with
+    `--include-unassigned`) **outside the campaign lock**, under its own
+    `shots/.convert.lock` (a second worker leaves `shots/.convert.pending` for
+    the running one; refreshed per container, reclaimed after 30 min). Each
+    container goes to `<name>.nxs.tmp`, is fsynced and renamed into place (with
+    the bounded Windows retry), and is rewritten only when its input
+    fingerprint changes (members' `sha256` and presence, catalogue SHA,
+    conversion-code digest, h5py/libhdf5/Pillow versions, path-map digest) —
     `shots/.build-manifest.json` plus the container's own attribute, so a crash
-    resumes. A missing/unreadable file drops that detector and is recorded in
-    `/entry/conversion_problems`, never a failed run. Held to the reference
-    fixture's manifest minus shot-aligner's mapping rows (out of phase 3). The
-    master does not link containers yet (phase 4).
+    resumes — or a member's size/mtime moved under the same `sha256`. The
+    master is read in slices, keeping only acquisition events. A
+    missing/unreadable file drops that detector and is recorded in
+    `/entry/conversion_problems`; a container that fails is recorded with its
+    error and the pass goes on. Held to the reference fixture's manifest minus
+    shot-aligner's mapping rows (their own phase). The master does not link
+    containers yet (phase 4).
   - `scicat.py` — registers the canonical campaign NeXus file as a citable SciCat
     dataset via the `scicat_plugin` HTTP boundary; runs as a best-effort builder
     post-step (never fails a build) and stamps `scicat_pid`/`version_hash` into the
@@ -212,7 +219,8 @@ which attached a numbered trigger to a neighbouring LabFrog shot by time).
 start `hzdr-container-worker.py` (for `OUTPUT_NEXUS`, or every campaign under
 `OUTPUT_ROOT`) once before each build and once after a successful one, without
 waiting for it; it logs to `.hzdr-container-worker.log` beside the output
-(`CONTAINER_WORKER_SCRIPT` overrides the script). Consumers spool
+(`CONTAINER_WORKER_SCRIPT` overrides the script; `CONTAINERS_INCLUDE_UNASSIGNED`
+adds the `_unassigned` bucket in multi-campaign mode). Consumers spool
 `unassigned` events to a shared `<spool>/_unassigned/` file that every
 campaign's build reads. A ruling posted from Review matches asks the running
 auto-trigger for a rebuild (`builder_trigger.request_rebuild`).
@@ -292,7 +300,7 @@ checks and stop on drift.
 ## Conventions and boundaries
 - Keep work local-first; prefer the local acceptance script and the harness broker. No real broker/Mongo/ASAPO calls unless the user explicitly changes scope.
 - Do not read or print secrets, credentials, tokens, or auth files. Keep endpoints and tokens in env-specific config, never in API code.
-- Preserve HZDR-specific behavior; the builder is single-writer per campaign (PID lock) and publishes the NeXus file + catalog atomically — keep both invariants.
+- Preserve HZDR-specific behavior; the builder is single-writer per campaign (PID lock) and publishes the NeXus file + catalog atomically — keep both invariants. The lock (`hzdr_nexus.single_writer_lock`) records `host:pid:process-start`, treats a fresh empty lock as held, reclaims a dead or reused PID on this host, and never lets the builder steal another host's lock; the container worker's lock also expires when not refreshed (`stale_after`). Renames over a published file go through `replace_with_retry` (bounded, for Windows readers).
 - Mind private GitLab dependencies and Windows/Linux differences (PowerShell `.ps1` and bash `.sh` launchers are kept in parallel).
 - Root-level `scripts/` (and other upstream-owned paths) are touched only by upstream merges. Everything HZDR at the repo root lives under `hzdr/` (`hzdr/docs/`, `hzdr/scripts/`); inside `api/`/`frontend/`, HZDR code keeps the `hzdr_`/`hzdr/` naming.
 - Add characterization tests before risky refactors. Fix React hook-dependency warnings properly rather than suppressing them.

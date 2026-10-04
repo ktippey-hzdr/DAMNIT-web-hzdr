@@ -495,3 +495,35 @@ async def test_a_worker_that_cannot_start_does_not_stop_the_build(tmp_path, capl
         await trigger._run_builder_once()
     assert log == ["build"]
     assert any("container worker" in r.message for r in caplog.records)
+
+
+def test_worker_command_includes_the_bucket_only_when_configured(tmp_path):
+    base = {
+        "enabled": True,
+        "output_root": tmp_path / "out",
+        "containers_enabled": True,
+    }
+    assert (
+        "--include-unassigned"
+        not in BuilderTrigger(HZDRBuilderSettings(**base)).worker_command()
+    )
+    cmd = BuilderTrigger(
+        HZDRBuilderSettings(**base, containers_include_unassigned=True)
+    ).worker_command()
+    assert cmd[-1] == "--include-unassigned"
+
+
+@pytest.mark.asyncio
+async def test_the_worker_log_is_rotated_when_it_grows(tmp_path, monkeypatch):
+    from damnit_api.consumer import builder_trigger
+
+    monkeypatch.setattr(builder_trigger, "WORKER_LOG_MAX_BYTES", 100)
+    trigger = BuilderTrigger(_settings(tmp_path, containers_enabled=True))
+    log = tmp_path / builder_trigger.WORKER_LOG_NAME
+    log.write_text("x" * 200, encoding="utf-8")
+    await trigger._spawn_worker([sys.executable, "-c", "print('fresh')"])
+    await trigger.wait_for_workers()
+    assert (tmp_path / (builder_trigger.WORKER_LOG_NAME + ".1")).read_text(
+        encoding="utf-8"
+    ) == "x" * 200
+    assert log.read_text(encoding="utf-8").strip() == "fresh"

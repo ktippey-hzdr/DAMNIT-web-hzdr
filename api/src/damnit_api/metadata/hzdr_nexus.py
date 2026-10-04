@@ -7,8 +7,10 @@ import hashlib
 import json
 import logging
 import os
+import pathlib
 import re
 import shutil
+import socket
 import sqlite3
 import time
 import uuid
@@ -83,18 +85,122 @@ def _pid_is_alive(pid: int) -> bool:
     return True
 
 
+# An empty lock file is one being written (between the O_EXCL create and the
+# record write); only one older than this is a crash's leftover.
+LOCK_EMPTY_GRACE_S = 5.0
+# Bounded retries for a rename refused because the target is open elsewhere
+# (Windows: a reader holding the master or a container).
+REPLACE_ATTEMPTS = 10
+REPLACE_DELAY_S = 0.5
+
+
+def replace_with_retry(
+    source: Path,
+    target: Path,
+    *,
+    attempts: int = REPLACE_ATTEMPTS,
+    delay: float = REPLACE_DELAY_S,
+) -> None:
+    """``source.replace(target)``, retried while the target is held open.
+
+    Atomic on one filesystem on POSIX and Windows; Windows alone refuses it
+    with ``PermissionError`` while another process has the target open (a
+    container worker reading the master, a viewer). Bounded: the last refusal
+    is raised.
+    """
+    for attempt in range(attempts):
+        try:
+            source.replace(target)
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay)
+        else:
+            return
+
+
+def _process_start_token(pid: int) -> str:
+    """When ``pid`` started, where the OS says (Linux ``/proc``); else ``""``.
+
+    A PID reused after its holder died, or after a reboot, starts at another
+    time, so this tells a recycled PID from the holder.
+    """
+    try:
+        text = pathlib.Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+        fields = text.rsplit(")", 1)[1].split()
+    except (OSError, IndexError):
+        return ""
+    return fields[19] if len(fields) > 19 else ""  # starttime, field 22
+
+
+def _lock_record() -> str:
+    pid = os.getpid()
+    return f"{socket.gethostname()}:{pid}:{_process_start_token(pid)}"
+
+
+def _parse_lock(text: str) -> tuple[str | None, int, str] | None:
+    """``(host, pid, start)``; ``host`` None for a legacy bare-PID lock."""
+    text = text.strip()
+    try:
+        if ":" not in text:
+            return None, int(text), ""
+        host, pid, start = text.rsplit(":", 2)
+        return host, int(pid), start
+    except ValueError:
+        return None
+
+
+def _lock_holder(lock_path: Path, stale_after: float | None) -> str | None:
+    """Who holds ``lock_path``, or None when it is stale and may be reclaimed."""
+    try:
+        text = lock_path.read_text(encoding="utf-8")
+        age = time.time() - lock_path.stat().st_mtime
+    except OSError:
+        return None
+    if stale_after is not None and age > stale_after:
+        return None
+    parsed = _parse_lock(text)
+    if parsed is None:
+        return "a process still writing it" if age < LOCK_EMPTY_GRACE_S else None
+    host, pid, start = parsed
+    if host is not None and host != socket.gethostname():
+        # Another host's PID cannot be checked from here; only age reclaims it.
+        return f"pid {pid} on {host}"
+    if not _pid_is_alive(pid):
+        return None
+    if start and _process_start_token(pid) not in {"", start}:
+        return None  # the PID was reused
+    return f"pid {pid}"
+
+
+class WriterLock:
+    """A held ``single_writer_lock``; ``refresh()`` marks it as still in use."""
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+
+    def refresh(self) -> None:
+        with contextlib.suppress(OSError):
+            os.utime(self.path)
+
+
 @contextlib.contextmanager
-def single_writer_lock(output_path: Path) -> Iterator[None]:
+def single_writer_lock(
+    output_path: Path, *, stale_after: float | None = None
+) -> Iterator[WriterLock]:
     """Guard one campaign's builder output against a second concurrent run.
 
     `hzdr-hdf5-builder.py` is invoked manually/by cron with no orchestration
     above it; two invocations for the same --output-nexus would otherwise
-    race on the same NeXus/catalog files. This takes an exclusive,
-    PID-stamped lock file next to `output_path` (atomic create via O_EXCL on
-    both POSIX and Windows) and removes it on exit. A lock file left behind
-    by a crashed/killed process is reclaimed automatically once its PID is no
-    longer alive, so a crash does not require manual cleanup before the next
-    run. This is single-writer locking only - it does not replace
+    race on the same NeXus/catalog files. This takes an exclusive lock file
+    next to `output_path` (atomic create via O_EXCL on both POSIX and Windows)
+    holding ``host:pid:process-start`` and removes it on exit. A lock left
+    behind by a crashed/killed process is reclaimed automatically: an empty
+    one older than ``LOCK_EMPTY_GRACE_S``, one whose PID is dead on this host
+    or was reused (another start time), and, with ``stale_after``, one not
+    refreshed (``WriterLock.refresh``) for that many seconds. Another host's
+    lock is reclaimed only by age; the builder passes no ``stale_after`` and
+    never steals one. This is single-writer locking only - it does not replace
     write_json_atomic's protection for concurrent *readers*.
     """
     lock_path = output_path.with_name(f"{output_path.name}.lock")
@@ -102,13 +208,10 @@ def single_writer_lock(output_path: Path) -> Iterator[None]:
     try:
         fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
-        try:
-            holder_pid = int(lock_path.read_text(encoding="utf-8").strip())
-        except (OSError, ValueError):
-            holder_pid = -1
-        if _pid_is_alive(holder_pid):
+        holder = _lock_holder(lock_path, stale_after)
+        if holder is not None:
             message = (
-                f"Builder output is locked by pid {holder_pid}: {lock_path}. "
+                f"Builder output is locked by {holder}: {lock_path}. "
                 "If that process is no longer running, remove the lock file "
                 "and retry."
             )
@@ -123,9 +226,9 @@ def single_writer_lock(output_path: Path) -> Iterator[None]:
             message = f"Builder output is locked by another process: {lock_path}"
             raise BuilderAlreadyRunningError(message) from exc
     try:
-        os.write(fd, str(os.getpid()).encode("ascii"))
+        os.write(fd, _lock_record().encode("utf-8"))
         os.close(fd)
-        yield
+        yield WriterLock(lock_path)
     finally:
         with contextlib.suppress(OSError):
             lock_path.unlink()
@@ -1821,7 +1924,7 @@ def write_nexus_bridge(
             _write_data_products(entry, products, output_path=output_path)
             write_nexus_detector_groups(entry, products)
 
-        temp_path.replace(output_path)
+        replace_with_retry(temp_path, output_path)
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise

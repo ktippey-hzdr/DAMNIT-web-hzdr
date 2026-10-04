@@ -45,8 +45,19 @@ by the **acquisition key** shot-aligner's `claim()` gives each file name
 - a `.rec` comment sidecar falls to its frame's key, whether it arrives as a
   member or as an event of its own.
 
-Two acquisitions of one instrument in one shot become two detectors, the second
-named `<detector>_<seq or 0>` (shot-aligner's rule). An event whose
+A recording whose cadence spans two shots splits by shot: grouping is within a
+shot, so each shot gets the frames attributed to it.
+
+Two acquisitions of one instrument in one shot become two detectors. They are
+ordered by their earliest `metadata.acquisition.time`, then by key, whatever
+order the events arrived in (shot-aligner's index order is its event's
+acquisition order, which is also time). The first keeps the plain name; the
+next takes shot-aligner's `<detector>_<seq>`, or, with no ordinal, its
+sanitised key (file stem or recording label) rather than shot-aligner's `_0`.
+A name that would land on a field the writer owns gets a suffix: a family that
+sanitises to an entry field (`title`, `start_time`, `conversion_problems`, ...)
+becomes `<name>_instrument`, and a detector called `name` becomes
+`name_detector`. An event whose
 `instrument.format` names no pack is recorded as a problem and skipped; events
 without `metadata.instrument` (triggers, LabFrog rows) are not acquisitions.
 
@@ -57,10 +68,13 @@ same regexes `claim()` uses; suffix stripping as each pack's `_stem`). `when`
 is `metadata.acquisition.time` of the acquisition's earliest event, and
 `time_source` comes beside it. `hzdr-event-v1` is unchanged.
 
-One simplification: shot-aligner's recording claim also requires a quantity
-token and refuses a set label, because there it decides *whether a file is an
-acquisition at all*. A producer has already decided that here, so a name no
-pattern fits is still converted, with its stem as key and no `seq`.
+One deliberate difference from shot-aligner: its recording claim also requires
+a quantity token and refuses a set label, because there it decides *whether a
+file is an acquisition at all*. A producer has already decided that here. So
+`focus_00001.tif` and `focus_00002.tif`, which shot-aligner leaves unparsed,
+stack here as one recording of the `focus` label when both are attributed to
+the same shot, and a name no pattern fits is converted with its stem as key
+and no `seq`. Tested in `test_frames_with_a_label_but_no_quantity_still_stack`.
 
 ## 4. Container layout
 
@@ -82,7 +96,7 @@ exactly where the manifest has it. Each detector also gets shot-aligner's
 not this host's mount of it. `recorded_offset_removed` is 0.0 with a
 description saying DAMNIT fits no offset (the contract lists the field).
 
-## 5. Mapping rows: **out of phase 3**
+## 5. Mapping rows: **out of phase 3** (confirmed by review: a phase of its own)
 
 shot-aligner's `mappings.apply_to` (reviewed NDS rows linking pack output to
 agreed paths) is about 1,600 lines with its catalogue and profile checks, and
@@ -109,38 +123,75 @@ lives in `damnit_api.metadata.hzdr_containers`.
   `DW_API_HZDR_BUILDER__CONTAINERS_ENABLED=true` (default off): once before the
   master build, so already published shots convert while it runs, and once after
   a successful build, so new shots convert without waiting for another event.
-  The trigger does not wait for it.
-- **Its own lock per campaign**: `shots/.convert.lock`, the same PID-stamped
+  The trigger does not wait for it; it logs to `.hzdr-container-worker.log`
+  beside the output, moved to `.log.1` past 5 MiB.
+- **One worker, campaigns in turn** (review decision d). `--master` names one
+  campaign; `--output-root` finds every `<root>/<campaign>/<campaign>.nxs`, and
+  `--campaign` (repeatable) limits that to the named ones for a manual run.
+- **The `_unassigned` bucket is skipped** with `--output-root` (review decision
+  a): its shots are converted again once a campaign claims them, and a date is
+  1 to 20 GB. `--include-unassigned`, or
+  `DW_API_HZDR_BUILDER__CONTAINERS_INCLUDE_UNASSIGNED=true`, converts it too;
+  an explicit `--master` is always converted.
+- **Its own lock per campaign**: `shots/.convert.lock`, the same
   `single_writer_lock`, never the master's `<campaign>.nxs.lock`. A worker that
   finds the lock held writes `shots/.convert.pending` and exits; the holder
   re-reads the master and makes another pass while that marker exists or the
   master changed since its pass began, and checks the marker once more after
   releasing the lock, so no request is lost.
-- **Atomic and resumable**: each container is written to `<name>.nxs.tmp` and
-  renamed into place. Its input fingerprint is stored as a root attribute and
-  in `shots/.build-manifest.json` (written atomically, flushed every few
-  seconds and at the end). A container is skipped when the manifest, or failing
-  that its own attribute, holds the same fingerprint. A crash mid-date leaves
-  finished containers in place; the next run adopts them and converts the rest.
-  Stale `.nxs.tmp` files are removed at the start of a pass, under the lock.
-- **Fingerprint**: the members' recorded paths and `sha256` (stat only when a
-  producer sent none), the acquisition facts above, the shot fields written,
-  the catalogue's SHA-256, and a digest of the conversion code (packs, vendored
-  files and this module). A code change therefore rebuilds everything, as the
-  plan requires.
-- **Memory** is bounded by one frame: the packs stream (phase 2b), and the
-  writer holds only the shot's event metadata.
+- **The lock records `host:pid:process-start`** (shared with the builder). An
+  empty lock younger than 5 s is one being written and counts as held. A dead
+  PID, or a PID whose start time differs (reused after a reboot), on this host
+  is reclaimed. Another host's PID cannot be checked: the worker refreshes its
+  lock once per container and reclaims one not refreshed for 30 minutes; the
+  builder passes no age and never steals another host's lock (before, it
+  checked that PID locally and could). A legacy bare-PID lock behaves as
+  before.
+- **Atomic and resumable**: each container is written to `<name>.nxs.tmp`,
+  fsynced, and renamed into place, retried up to 10 x 0.5 s while Windows
+  refuses the rename because a reader holds the target (review decision c; the
+  builder's master rename has the same retry). Its input fingerprint is stored
+  as a root attribute and in `shots/.build-manifest.json` (written atomically,
+  flushed every few seconds and at the end). A container is skipped when the
+  manifest, or failing that its own attribute, holds the same fingerprint. A
+  crash mid-date leaves finished containers in place; the next run adopts them
+  and converts the rest. Stale `.nxs.tmp` files are removed at the start of a
+  pass, under the lock.
+- **One container's failure is that container's.** A refused rename, a full
+  disk or any other error is recorded as `error` in its manifest entry, the
+  worker exits 1 and names it, and the pass goes on with the next shot.
+- **Fingerprint**: per member the producer's `sha256` *and whether the file is
+  there* (so a file that comes back is converted even when a crash lost the
+  manifest); a stat only when a producer sent no `sha256`. Also the acquisition
+  facts above, the shot fields written, the catalogue's SHA-256, a digest of
+  the conversion code (packs, vendored files, this module), the h5py, libhdf5
+  and Pillow versions, and a digest of the path map. Any of them changing
+  rebuilds the containers it covers.
+- **Changed under the same sha256** (review decision b): the producer's
+  `sha256` is trusted, but each member's `[size, mtime_ns]` is recorded at
+  conversion (manifest and the container's `damnit_input_stats` attribute) and
+  stat'ed on every pass. When it moved, the shot is reconverted from the bytes
+  on disk and `/entry/conversion_problems` says which file changed.
+- **Memory** is bounded by one frame while converting (the packs stream), and
+  by one slice of `READ_SLICE` (4096) rows while reading the master: only
+  events naming `metadata.instrument.format` are kept, and only the fields a
+  container is written from (instrument, watch folder, acquisition time; paths,
+  sizes and `sha256`).
 - **Missing or unreadable files**: a detector whose pack wrote nothing
-  plottable is removed (and its `NXinstrument` if left empty), and the reason
-  goes into `/entry/conversion_problems` (`NXnote`). Partial problems (a
-  missing CSV beside a readable frame) keep the detector and are recorded the
-  same way. A container whose files were *missing* records them in the
-  manifest and is retried once one of them appears; an unreadable file is not
-  retried until its bytes (its `sha256`) change.
+  plottable and no array is removed (and its `NXinstrument` if left empty), and
+  the reason goes into `/entry/conversion_problems` (`NXnote`). Partial
+  problems (a missing CSV beside a readable frame) keep the detector and are
+  recorded the same way. A pack that raises costs its detector, not the shot.
+  A file that comes back changes the fingerprint (above); an unreadable file is
+  not retried until its bytes change.
 - **Path map**: raws are read through `DW_API_METADATA__PATH_MAP`
   (`shared/hzdr_paths.py`), or `--path-map`.
+- `file_metadata/sha256` lists each member's recorded `sha256`, one
+  `<name> <sha256>` per line (a DAMNIT field the manifest does not have).
 - **Not here**: the master's links (phase 4), garbage collection of containers
-  the master no longer names (phase 4, after publish), validation (phase 5).
+  the master no longer names (phase 4, after publish), validation (phase 5),
+  the mapping rows (review decision e: a phase of its own, planned by the
+  coordinator).
 
 ## 7. Shot-level metadata (minimal)
 

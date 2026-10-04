@@ -21,6 +21,7 @@ import json
 import os
 import subprocess  # noqa: S404 -- the interpreter itself, fixed arguments
 import sys
+import time
 import weakref
 from pathlib import Path
 
@@ -177,6 +178,8 @@ def reference_container(tmp_path_factory) -> Path:
 
 def _contract_scope(path: str) -> bool:
     excluded = (*NOT_CONTRACT, *CONTAINER_OWN)
+    if path.endswith("/file_metadata/sha256"):  # DAMNIT's: the members' sha256
+        return False
     return not any(path == p or path.startswith(p + "/") for p in excluded)
 
 
@@ -274,6 +277,12 @@ def test_the_container_names_its_shot(reference_container):
             "2025-12-01T14:59:04.300000+00:00"
         )
         assert notes["time_source"].asstr()[()] == "first_seen"
+        assert notes["sha256"].asstr()[()] == (
+            "20cm_6kv_00001.tif "
+            "763002f1da21c8dc8f64b9bc38c32e0e58fd731b3a57c3f0993b05e74292a632\n"
+            "20cm_6kv_00002.tif "
+            "f0863b6a231804f40da4219daaeda57d717eb713f94c33f7bcb81bb578edba01"
+        )
         assert probe["timing_role"].asstr()[()] == "on_shot"
         assert entry["Probe_135_deg/name"].asstr()[()] == "Probe 135 deg"
         assert entry["Reflected_light_spectroscopy/name"].asstr()[()] == (
@@ -396,6 +405,156 @@ def test_the_timing_role_falls_back_to_the_catalogue(tmp_path):
     with h5py.File(hc.shots_dir(master) / CONTAINER, "r") as handle:
         role = handle["entry/Probe_135_deg/pco_Camera/timing_role"]
         assert role.asstr()[()] == "on_shot"
+
+
+CASES = FIXTURE / "packs" / "cases"
+
+
+def _frame_event(name: str, number: int, raw: Path, source: Path, **meta) -> dict:
+    """One Probe135 file as planet-watchdog sends it, attributed to shot `number`."""
+    template = next(
+        e for e in _fixture_events() if e["metadata"]["instrument"]["id"] == "probe135"
+    )
+    event = copy.deepcopy(template)
+    (raw / "Probe135").mkdir(parents=True, exist_ok=True)
+    (raw / "Probe135" / name).write_bytes(source.read_bytes())
+    event["event_id"] = f"probe-{number}-{name}"
+    event["shot_number"] = number
+    event["shot_id"] = f"shot-{number:06d}"
+    for trigger in event["metadata"]["zmq_data"]:
+        trigger["payload"]["shot_number"] = number
+    event["metadata"]["acquisition"].update(meta)
+    event["payload_ref"].update(
+        path=f"{RECORDED_ROOT}/Probe135/{name}",
+        filename=name,
+        sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+    )
+    return event
+
+
+FRAME_1 = FIXTURE / "raw" / "Probe135" / "20cm_6kv_00001.tif"
+FRAME_2 = FIXTURE / "raw" / "Probe135" / "20cm_6kv_00002.tif"
+
+
+def test_a_recording_whose_cadence_spans_two_shots_splits_by_shot(tmp_path):
+    """Frames 1-2 belong to shot 1042, 3-4 to 1043: one stack per shot."""
+    raw = tmp_path / "raw"
+    events = [
+        _frame_event(f"20cm_6kv_{n:05d}.tif", shot, raw, frame)
+        for n, shot, frame in (
+            (1, 1042, FRAME_1),
+            (2, 1042, FRAME_2),
+            (3, 1043, FRAME_1),
+            (4, 1043, FRAME_2),
+        )
+    ]
+    master = _build_master(tmp_path / "out" / "unassigned.nxs", events)
+    hc.convert_campaign(master, read_path=_read_path(raw))
+    for name, frames in (
+        ("20251201_001042.nxs", [1, 2]),
+        ("20251201_001043.nxs", [3, 4]),
+    ):
+        with h5py.File(hc.shots_dir(master) / name, "r") as handle:
+            detector = handle["entry/Probe_135_deg/pco_Camera"]
+            assert detector["raw_data/frame_number"][()].tolist() == frames
+            assert detector["data/image"].shape == (2, 4, 5)
+
+
+def test_a_rec_sent_as_its_own_event_joins_its_recording(tmp_path):
+    raw = tmp_path / "raw"
+    rec = CASES / "sequence_frames__recording_with_comment" / "20cm_6kv_00001.tif.rec"
+    events = [
+        _frame_event("20cm_6kv_00001.tif", 1042, raw, FRAME_1),
+        _frame_event("20cm_6kv_00002.tif", 1042, raw, FRAME_2),
+        _frame_event("20cm_6kv_00001.tif.rec", 1042, raw, rec),
+    ]
+    master = _build_master(tmp_path / "out" / "unassigned.nxs", events)
+    hc.convert_campaign(master, read_path=_read_path(raw))
+    with h5py.File(hc.shots_dir(master) / CONTAINER, "r") as handle:
+        instrument = handle["entry/Probe_135_deg"]
+        assert isinstance(instrument, h5py.Group)
+        assert sorted(k for k in instrument if k != "name") == ["pco_Camera"]
+        detector = instrument["pco_Camera"]
+        assert "recorder_comment" in detector["original_metadata"]
+        assert detector["data/image"].shape == (2, 4, 5)
+
+
+def test_frames_with_a_label_but_no_quantity_still_stack(tmp_path):
+    """Differs from shot-aligner, which leaves `focus_00001.tif` unparsed.
+
+    The producer attributed both frames to this shot, so DAMNIT keeps them, as
+    one recording of the `focus` label (design note, section 3).
+    """
+    raw = tmp_path / "raw"
+    events = [
+        _frame_event("focus_00001.tif", 1042, raw, FRAME_1),
+        _frame_event("focus_00002.tif", 1042, raw, FRAME_2),
+    ]
+    assert hc.claim("sequence_frames", "focus_00001.tif") == ("focus", "focus", None)
+    master = _build_master(tmp_path / "out" / "unassigned.nxs", events)
+    hc.convert_campaign(master, read_path=_read_path(raw))
+    with h5py.File(hc.shots_dir(master) / CONTAINER, "r") as handle:
+        assert handle["entry/Probe_135_deg/pco_Camera/data/image"].shape == (2, 4, 5)
+
+
+def test_second_acquisitions_are_named_by_time_then_by_their_stem(tmp_path):
+    """The earliest keeps the plain name; the rest take their sanitised stem.
+
+    Neither the order the events arrived in nor the order of the master's
+    table changes which file is which detector.
+    """
+    raw = tmp_path / "raw"
+    events = [
+        _frame_event("beam.tif", 1042, raw, FRAME_1, time="2025-12-01T14:59:04+00:00"),
+        _frame_event(
+            "dark-2.tif", 1042, raw, FRAME_2, time="2025-12-01T14:59:01+00:00"
+        ),
+    ]
+    names = []
+    for order in (events, events[::-1]):
+        master = _build_master(tmp_path / f"out{len(names)}" / "unassigned.nxs", order)
+        hc.convert_campaign(master, read_path=_read_path(raw))
+        with h5py.File(hc.shots_dir(master) / CONTAINER, "r") as handle:
+            instrument = handle["entry/Probe_135_deg"]
+            assert isinstance(instrument, h5py.Group)
+            names.append({
+                k: instrument[k]["file_metadata/file_name"].asstr()[()]
+                for k in instrument
+                if k != "name"
+            })
+    assert (
+        names[0]
+        == names[1]
+        == {
+            "pco_Camera": "dark-2.tif",
+            "pco_Camera_beam": "beam.tif",
+        }
+    )
+
+
+def test_the_master_is_read_in_slices_keeping_only_acquisitions(campaign, monkeypatch):
+    whole = hc.read_master(campaign["master"])
+    monkeypatch.setattr(hc, "READ_SLICE", 3)
+    sliced = hc.read_master(campaign["master"])
+    assert sliced == whole
+    _, _, events = whole
+    assert len(events) == 16  # every event of the four shots is an acquisition
+    for event in events:
+        # Only what a container is written from: no trigger payloads.
+        assert set(event["metadata"]) <= {"instrument", "watch", "acquisition"}
+        assert "zmq_topic" not in event["payload_ref"]
+
+
+def test_events_without_an_instrument_format_are_not_kept(tmp_path):
+    raw = tmp_path / "raw"
+    events = _shot_events(1042, raw)
+    trigger = copy.deepcopy(events[0])
+    trigger["event_id"] = "trigger-1042"
+    trigger["metadata"] = {"trigger": {"role": "main"}}
+    master = _build_master(tmp_path / "out" / "unassigned.nxs", [*events, trigger])
+    _, _, kept = hc.read_master(master)
+    assert "trigger-1042" not in {e["event_id"] for e in kept}
+    assert len(kept) == 4
 
 
 def test_a_format_without_a_pack_is_recorded_not_written(tmp_path):
@@ -525,6 +684,28 @@ def test_a_crash_after_k_shots_resumes_with_the_rest(campaign):
     assert len(_mtimes(shots)) == 4
 
 
+def test_a_different_path_map_rebuilds_every_container(campaign):
+    raw = campaign["raw"]
+    hc.convert_campaign(campaign["master"], read_path=_read_path(raw))
+    # The same mapping, spelled with an extra rule: another configuration.
+    other = hc.make_read_path(
+        f"{RECORDED_ROOT}={raw.as_posix()},Z:/unused={raw.as_posix()}"
+    )
+    assert len(hc.convert_campaign(campaign["master"], read_path=other).written) == 4
+
+
+def test_the_fingerprint_names_the_libraries_that_wrote_it():
+    import h5py as h5
+    import PIL
+
+    versions = hc.library_versions()
+    assert versions == {
+        "h5py": h5.__version__,
+        "hdf5": h5.version.hdf5_version,
+        "pillow": PIL.__version__,
+    }
+
+
 def test_containers_are_renamed_into_place_whole(campaign, monkeypatch):
     """A failure while writing leaves the previous container, never half of one."""
     read_path = _read_path(campaign["raw"])
@@ -534,14 +715,100 @@ def test_containers_are_renamed_into_place_whole(campaign, monkeypatch):
 
     def broken(*args, **kwargs):
         message = "disk full"
-        raise RuntimeError(message)
+        raise OSError(message)
 
     monkeypatch.setattr(hc, "code_digest", lambda: "forces a rewrite")
     monkeypatch.setattr(hc, "_write_shot", broken)
-    with pytest.raises(RuntimeError, match="disk full"):
-        hc.convert_campaign(campaign["master"], read_path=read_path)
+    run = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert len(run.failed) == 4
     assert (shots / CONTAINER).read_bytes() == before
     assert not list(shots.glob("*.tmp"))
+
+
+def test_one_failing_container_does_not_stop_the_pass(campaign, monkeypatch):
+    """Regression: a PermissionError on the first shot wrote none of the rest."""
+    read_path = _read_path(campaign["raw"])
+    real = hc.write_container
+
+    def refuse_the_first(target, *args, **kwargs):
+        if target.name == CONTAINER:
+            message = "Access is denied"
+            raise PermissionError(message)
+        return real(target, *args, **kwargs)
+
+    monkeypatch.setattr(hc, "write_container", refuse_the_first)
+    run = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert run.failed == [CONTAINER]
+    assert len(run.written) == 3
+    shots = hc.shots_dir(campaign["master"])
+    record = json.loads((shots / hc.MANIFEST_NAME).read_text())["containers"][CONTAINER]
+    assert "PermissionError: Access is denied" in record["error"]
+
+    monkeypatch.setattr(hc, "write_container", real)
+    assert hc.convert_campaign(campaign["master"], read_path=read_path).written == [
+        CONTAINER
+    ]
+
+
+def test_a_rename_refused_while_the_container_is_open_is_retried(campaign, monkeypatch):
+    from damnit_api.metadata import hzdr_nexus
+
+    monkeypatch.setattr(hzdr_nexus, "REPLACE_DELAY_S", 0)
+    refused = []
+    real = Path.replace
+
+    def busy_once(self, other):
+        if str(self).endswith(".nxs.tmp") and not refused:
+            refused.append(self)
+            message = "held open by a viewer"
+            raise PermissionError(message)
+        return real(self, other)
+
+    monkeypatch.setattr(Path, "replace", busy_once)
+    run = hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    assert refused
+    assert len(run.written) == 4
+    assert run.failed == []
+
+
+def test_containers_are_fsynced_before_the_rename(campaign, monkeypatch):
+    synced = []
+    real = os.fsync
+    monkeypatch.setattr(hc.os, "fsync", lambda fd: (synced.append(fd), real(fd)))
+    hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    assert len(synced) >= 4
+
+
+@pytest.mark.parametrize(
+    ("family", "instrument_name", "where"),
+    [
+        # A family that sanitises to an entry-level field of the writer's.
+        ("title", "Spec", "title_instrument/Spec"),
+        ("conversion problems", "Spec", "conversion_problems_instrument/Spec"),
+        # A detector that sanitises to its NXinstrument's `name` field.
+        ("Optics", "name", "Optics/name_detector"),
+    ],
+)
+def test_reserved_names_are_never_written_over(
+    tmp_path, monkeypatch, family, instrument_name, where
+):
+    from damnit_api.metadata.hzdr_packs import vendor
+
+    catalogue = dict(vendor.catalogue())
+    catalogue["reflected_515_spectrometer"] = {
+        **catalogue["reflected_515_spectrometer"],
+        "family": family,
+        "instrument_name": instrument_name,
+    }
+    monkeypatch.setattr(vendor, "catalogue", lambda: catalogue)
+    raw = tmp_path / "raw"
+    master = _build_master(tmp_path / "out" / "unassigned.nxs", _shot_events(1042, raw))
+    run = hc.convert_campaign(master, read_path=_read_path(raw))
+    assert run.written == [CONTAINER]
+    with h5py.File(hc.shots_dir(master) / CONTAINER, "r") as handle:
+        entry = handle["entry"]
+        assert entry[where].attrs["NX_class"] == "NXdetector"
+        assert entry["title"].asstr()[()] == "unassigned 2025-12-01 shot 1042"
 
 
 def test_the_manifest_is_flushed_as_the_run_goes(campaign):
@@ -671,6 +938,44 @@ def test_a_missing_file_drops_its_detector_and_says_why(campaign):
         assert "conversion_problems" not in handle["entry"]
 
 
+def test_a_file_back_after_a_crash_lost_the_manifest_is_reconverted(campaign):
+    """Regression: the missing-file retry lived only in the manifest."""
+    read_path = _read_path(campaign["raw"])
+    spectrum = next((campaign["raw"] / "1044").rglob("*.Irr8.txt"))
+    held = spectrum.read_bytes()
+    spectrum.unlink()
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    shots = hc.shots_dir(campaign["master"])
+    (shots / hc.MANIFEST_NAME).unlink()  # the crash, before any flush
+    spectrum.write_bytes(held)
+
+    run = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert run.written == ["20251201_001044.nxs"]
+    with h5py.File(shots / "20251201_001044.nxs", "r") as handle:
+        assert (
+            "Reflected_515_Spectrometer" in handle["entry/Reflected_light_spectroscopy"]
+        )
+
+
+def test_a_file_changed_on_disk_under_the_same_sha256_is_reconverted(campaign):
+    """Design (b): the producer's sha256 is trusted, but size/mtime are watched."""
+    read_path = _read_path(campaign["raw"])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    spectrum = next((campaign["raw"] / "1043").rglob("*.Irr8.txt"))
+    stat = spectrum.stat()
+    os.utime(spectrum, ns=(stat.st_atime_ns, stat.st_mtime_ns + 5 * 10**9))
+
+    run = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert run.written == ["20251201_001043.nxs"]
+    shots = hc.shots_dir(campaign["master"])
+    with h5py.File(shots / "20251201_001043.nxs", "r") as handle:
+        problems = handle["entry/conversion_problems/data"].asstr()[()]
+    assert "changed on disk since it was last converted" in problems
+    assert spectrum.name in problems
+    # The new size and mtime are the reference now.
+    assert hc.convert_campaign(campaign["master"], read_path=read_path).written == []
+
+
 def test_an_unreadable_file_is_recorded_and_not_retried(campaign):
     read_path = _read_path(campaign["raw"])
     spectrum = next((campaign["raw"] / "1045").rglob("*.Irr8.txt"))
@@ -750,6 +1055,39 @@ def test_a_request_arriving_mid_pass_gets_another_pass(campaign):
     assert len(runs) == 2
     assert runs[1].written == []
     assert not (shots / hc.PENDING_NAME).exists()
+
+
+def test_a_dead_workers_lock_from_another_host_is_reclaimed_when_stale(campaign):
+    """A rebooted or foreign host's PID cannot be checked: age decides."""
+    master = campaign["master"]
+    shots = hc.shots_dir(master)
+    shots.mkdir(parents=True)
+    lock = shots / ".convert.lock"
+    lock.write_text("worker-pc-2:4242:99", encoding="utf-8")
+    read_path = _read_path(campaign["raw"])
+    assert hc.run_conversion(master, read_path=read_path) == []  # fresh: held
+    old = time.time() - hc.LOCK_STALE_AFTER_S - 60
+    os.utime(lock, (old, old))
+    runs = hc.run_conversion(master, read_path=read_path)
+    assert len(runs[0].written) == 4
+
+
+def test_the_conversion_lock_is_refreshed_once_per_container(campaign):
+    master = campaign["master"]
+    lock = hc.shots_dir(master) / ".convert.lock"
+    ages: list[float] = []
+
+    def age_then_look(name: str) -> None:
+        ages.append(time.time() - lock.stat().st_mtime)
+        old = time.time() - 600
+        os.utime(lock, (old, old))
+
+    hc.run_conversion(
+        master, read_path=_read_path(campaign["raw"]), after_write=age_then_look
+    )
+    # Aged to ten minutes after every container, fresh again by the next one.
+    assert len(ages) == 4
+    assert all(age < 60 for age in ages)
 
 
 def test_a_missing_master_is_nothing_to_convert(tmp_path):
@@ -841,18 +1179,58 @@ def test_the_worker_converts_a_campaign(campaign):
     assert len(list(hc.shots_dir(campaign["master"]).glob("*.nxs"))) == 4
 
 
-def test_the_worker_finds_every_campaign_under_an_output_root(tmp_path):
+@pytest.fixture
+def output_root(tmp_path):
     raw = tmp_path / "raw"
     root = tmp_path / "out"
     _build_master(root / "_unassigned" / "unassigned.nxs", _shot_events(1042, raw))
     _build_master(root / "c1" / "c1.nxs", _shot_events(1043, raw))
+    _build_master(root / "c2" / "c2.nxs", _shot_events(1044, raw))
     (root / "not-a-campaign").mkdir()
+    return root, f"{RECORDED_ROOT}={raw.as_posix()}"
+
+
+def test_the_worker_skips_the_unassigned_bucket_by_default(output_root):
+    root, path_map = output_root
+    result = _worker("--output-root", str(root), "--path-map", path_map)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not (root / "_unassigned" / "shots").exists()
+    assert (root / "c1" / "shots" / "20251201_001043.nxs").is_file()
+    assert (root / "c2" / "shots" / "20251201_001044.nxs").is_file()
+
+
+def test_the_worker_converts_the_bucket_when_asked(output_root):
+    root, path_map = output_root
     result = _worker(
-        "--output-root", str(root), "--path-map", f"{RECORDED_ROOT}={raw.as_posix()}"
+        "--output-root", str(root), "--path-map", path_map, "--include-unassigned"
     )
     assert result.returncode == 0, result.stdout + result.stderr
     assert (root / "_unassigned" / "shots" / "20251201_001042.nxs").is_file()
-    assert (root / "c1" / "shots" / "20251201_001043.nxs").is_file()
+
+
+def test_the_worker_converts_only_the_campaigns_named(output_root):
+    root, path_map = output_root
+    result = _worker(
+        "--output-root", str(root), "--path-map", path_map, "--campaign", "c2"
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert not (root / "c1" / "shots").exists()
+    assert (root / "c2" / "shots" / "20251201_001044.nxs").is_file()
+
+
+def test_the_worker_reports_a_failed_container_and_exits_nonzero(campaign):
+    shots = hc.shots_dir(campaign["master"])
+    shots.mkdir(parents=True)
+    (shots / CONTAINER).mkdir()  # a directory where the container should go
+    result = _worker(
+        "--master",
+        str(campaign["master"]),
+        "--path-map",
+        f"{RECORDED_ROOT}={campaign['raw'].as_posix()}",
+    )
+    assert result.returncode == 1
+    assert "3 written" in result.stdout
+    assert "1 failed" in result.stdout
 
 
 def test_the_worker_needs_a_master_or_a_root():

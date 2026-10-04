@@ -1,6 +1,8 @@
 import json
 import os
+import socket
 import sqlite3
+import time
 from pathlib import Path
 from typing import cast
 
@@ -25,6 +27,7 @@ from damnit_api.metadata.hzdr_nexus import (
     read_labfrog_nexus_shots,
     read_labfrog_sqlite_shots,
     reconcile_canonical_shots,
+    replace_with_retry,
     review_sidecar_backup_path,
     review_sidecar_path,
     single_writer_lock,
@@ -1869,9 +1872,158 @@ def test_single_writer_lock_reclaims_a_stale_lock_from_a_dead_pid(tmp_path: Path
     lock_path.write_text("999999999", encoding="utf-8")
 
     with single_writer_lock(output_nexus):
-        assert lock_path.read_text(encoding="utf-8").strip() == str(os.getpid())
+        host, pid, _start = lock_path.read_text(encoding="utf-8").rsplit(":", 2)
+        assert (host, int(pid)) == (socket.gethostname(), os.getpid())
 
     assert not lock_path.exists()
+
+
+# --- Lock hardening: host:pid:start, empty locks, recycled PIDs, age ---
+
+
+def _age(path: Path, seconds: float) -> None:
+    now = time.time()
+    os.utime(path, (now - seconds, now - seconds))
+
+
+def test_the_lock_names_host_pid_and_process_start(tmp_path: Path):
+    with single_writer_lock(tmp_path / "c.nxs"):
+        text = (tmp_path / "c.nxs.lock").read_text(encoding="utf-8")
+    host, pid, start = text.rsplit(":", 2)
+    assert host == socket.gethostname()
+    assert int(pid) == os.getpid()
+    if Path("/proc/self/stat").exists():
+        assert start  # Linux: the process start time, which a recycled PID lacks
+
+
+def test_an_empty_lock_being_written_is_held(tmp_path: Path):
+    """Between O_EXCL create and the PID write the file is empty: not stale."""
+    (tmp_path / "c.nxs.lock").write_text("", encoding="utf-8")
+    with (
+        pytest.raises(BuilderAlreadyRunningError),
+        single_writer_lock(tmp_path / "c.nxs"),
+    ):
+        pass  # pragma: no cover
+
+
+def test_an_empty_lock_left_by_a_crash_is_reclaimed(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    lock.write_text("", encoding="utf-8")
+    _age(lock, 60)
+    with single_writer_lock(tmp_path / "c.nxs"):
+        assert lock.read_text(encoding="utf-8")
+
+
+@pytest.mark.skipif(not Path("/proc/self/stat").exists(), reason="needs /proc")
+def test_a_recycled_pid_on_this_host_is_reclaimed(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    # Our own (alive) PID, but with a start time it never had: a PID reused
+    # after the holder died, or after a reboot.
+    lock.write_text(f"{socket.gethostname()}:{os.getpid()}:1", encoding="utf-8")
+    with single_writer_lock(tmp_path / "c.nxs"):
+        pass
+
+
+def test_a_live_holder_on_this_host_is_respected(tmp_path: Path):
+    with (
+        single_writer_lock(tmp_path / "c.nxs"),
+        pytest.raises(BuilderAlreadyRunningError),
+        single_writer_lock(tmp_path / "c.nxs", stale_after=3600),
+    ):
+        pass  # pragma: no cover
+
+
+def test_a_legacy_bare_pid_lock_still_works(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    lock.write_text(str(os.getpid()), encoding="utf-8")  # alive: held
+    with (
+        pytest.raises(BuilderAlreadyRunningError),
+        single_writer_lock(tmp_path / "c.nxs"),
+    ):
+        pass  # pragma: no cover
+
+
+def test_a_foreign_hosts_lock_is_held_by_the_builder(tmp_path: Path):
+    """No way to check another host's PID: the builder never steals it."""
+    lock = tmp_path / "c.nxs.lock"
+    lock.write_text("some-other-host:1:42", encoding="utf-8")
+    _age(lock, 10 * 86400)
+    with (
+        pytest.raises(BuilderAlreadyRunningError, match="some-other-host"),
+        single_writer_lock(tmp_path / "c.nxs"),
+    ):
+        pass  # pragma: no cover
+
+
+def test_a_lock_not_refreshed_within_stale_after_is_reclaimed(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    lock.write_text("some-other-host:1:42", encoding="utf-8")
+    with (
+        pytest.raises(BuilderAlreadyRunningError),
+        single_writer_lock(tmp_path / "c.nxs", stale_after=600),
+    ):
+        pass  # pragma: no cover
+    _age(lock, 601)
+    with single_writer_lock(tmp_path / "c.nxs", stale_after=600):
+        pass
+
+
+def test_the_holder_refreshes_its_lock(tmp_path: Path):
+    lock = tmp_path / "c.nxs.lock"
+    with single_writer_lock(tmp_path / "c.nxs", stale_after=600) as held:
+        _age(lock, 500)
+        held.refresh()
+        assert time.time() - lock.stat().st_mtime < 5
+
+
+def test_replace_retries_a_target_held_open_then_gives_up(tmp_path: Path, monkeypatch):
+    source, target = tmp_path / "a.tmp", tmp_path / "a.nxs"
+    source.write_text("new", encoding="utf-8")
+    calls = []
+    real = Path.replace
+
+    def busy_twice(self, other):
+        calls.append(1)
+        if len(calls) <= 2:
+            message = "in use by another process"
+            raise PermissionError(message)
+        return real(self, other)
+
+    monkeypatch.setattr(Path, "replace", busy_twice)
+    replace_with_retry(source, target, attempts=5, delay=0)
+    assert target.read_text(encoding="utf-8") == "new"
+    assert len(calls) == 3
+
+    def always_busy(self, other):
+        calls.append(1)
+        message = "held"
+        raise PermissionError(message)
+
+    source.write_text("again", encoding="utf-8")
+    calls.clear()
+    monkeypatch.setattr(Path, "replace", always_busy)
+    with pytest.raises(PermissionError):
+        replace_with_retry(source, target, attempts=3, delay=0)
+    assert len(calls) == 3  # bounded
+
+
+def test_the_master_publish_retries_a_rename_refused_while_read(tmp_path, monkeypatch):
+    """Windows refuses to rename over a file open elsewhere (a reader)."""
+    from damnit_api.metadata import hzdr_nexus
+
+    seen = []
+    real = hzdr_nexus.replace_with_retry
+
+    def spy(source, target, **kwargs):
+        seen.append(target)
+        return real(source, target, **kwargs)
+
+    monkeypatch.setattr(hzdr_nexus, "replace_with_retry", spy)
+    output = tmp_path / "c.nxs"
+    hzdr_nexus.write_nexus_bridge(
+        output_path=output, experiment_id="c", shots=[], events=[]
+    )
+    assert seen == [output]
 
 
 # --- Review sidecar tests ---

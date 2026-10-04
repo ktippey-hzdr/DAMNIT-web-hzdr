@@ -273,6 +273,9 @@ class HZDRBuilderSettings(BaseModel):
     # campaign lock, to write <campaign folder>/shots/<date>_<number>.nxs.
     # Off by default, so a deployment is unchanged until it opts in.
     containers_enabled: bool = False
+    # Multi-campaign mode: also convert the _unassigned bucket. Off: its shots
+    # are converted again once a campaign claims them.
+    containers_include_unassigned: bool = False
     container_worker_script: Path | None = None
 
     @property
