@@ -1174,7 +1174,9 @@ def test_the_worker_converts_a_campaign(campaign):
         "--path-map",
         f"{RECORDED_ROOT}={campaign['raw'].as_posix()}",
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    # New containers the published master does not link yet: ask for a build.
+    assert result.returncode == hc.RELINK_EXIT, result.stdout + result.stderr
+    assert "not linked (or no longer there) in the published master" in result.stdout
     assert "4 written" in result.stdout
     assert len(list(hc.shots_dir(campaign["master"]).glob("*.nxs"))) == 4
 
@@ -1193,7 +1195,7 @@ def output_root(tmp_path):
 def test_the_worker_skips_the_unassigned_bucket_by_default(output_root):
     root, path_map = output_root
     result = _worker("--output-root", str(root), "--path-map", path_map)
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == hc.RELINK_EXIT, result.stdout + result.stderr
     assert not (root / "_unassigned" / "shots").exists()
     assert (root / "c1" / "shots" / "20251201_001043.nxs").is_file()
     assert (root / "c2" / "shots" / "20251201_001044.nxs").is_file()
@@ -1204,7 +1206,7 @@ def test_the_worker_converts_the_bucket_when_asked(output_root):
     result = _worker(
         "--output-root", str(root), "--path-map", path_map, "--include-unassigned"
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == hc.RELINK_EXIT, result.stdout + result.stderr
     assert (root / "_unassigned" / "shots" / "20251201_001042.nxs").is_file()
 
 
@@ -1213,7 +1215,7 @@ def test_the_worker_converts_only_the_campaigns_named(output_root):
     result = _worker(
         "--output-root", str(root), "--path-map", path_map, "--campaign", "c2"
     )
-    assert result.returncode == 0, result.stdout + result.stderr
+    assert result.returncode == hc.RELINK_EXIT, result.stdout + result.stderr
     assert not (root / "c1" / "shots").exists()
     assert (root / "c2" / "shots" / "20251201_001044.nxs").is_file()
 
@@ -1228,7 +1230,7 @@ def test_the_worker_reports_a_failed_container_and_exits_nonzero(campaign):
         "--path-map",
         f"{RECORDED_ROOT}={campaign['raw'].as_posix()}",
     )
-    assert result.returncode == 1
+    assert result.returncode == hc.RELINK_EXIT + 1  # a failure, and 3 to link
     assert "3 written" in result.stdout
     assert "1 failed" in result.stdout
 
@@ -1305,3 +1307,293 @@ def test_run_conversion_writes_under_its_lock_nonce(campaign, monkeypatch):
     container_temps = [t for t in temps if t.startswith("2025") and t.endswith(".tmp")]
     assert len(container_temps) == 4
     assert all(t.count(".") == 3 for t in container_temps), container_temps
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: the master links the containers, and drops the ones it lost.
+# ---------------------------------------------------------------------------
+
+
+def _republish(campaign, events=None) -> Path:
+    """The builder's next run over the same (or other) events."""
+    return _build_master(campaign["master"], events or campaign["events"])
+
+
+def _frame(handle: h5py.Group) -> str:
+    found: list[str] = []
+    handle.visititems(
+        lambda name, item: (
+            found.append(name)
+            if isinstance(item, h5py.Dataset) and item.ndim >= 2
+            else None
+        )
+    )
+    assert found, "the container holds no frame"
+    return min(found)
+
+
+def test_the_master_links_each_container_in_place(campaign):
+    read_path = _read_path(campaign["raw"])
+    first = hc.convert_campaign(campaign["master"], read_path=read_path)
+    # Nothing linked yet: the worker asks for a build.
+    assert hc.relink_needed(campaign["master"], [first]) == sorted(first.written)
+
+    _republish(campaign)
+    with h5py.File(campaign["master"], "r") as master:
+        links = master["entry/shot_containers"]
+        assert links.attrs["NX_class"] == "NXcollection"
+        names = sorted(n for n in links if n not in {"shot_key", "container"})
+        assert names == [f"20251201_{n:06d}" for n in range(1042, 1046)]
+        link = links.get("20251201_001042", getlink=True)
+        assert isinstance(link, h5py.ExternalLink)
+        assert link.filename == "shots/20251201_001042.nxs"
+        assert link.path == "/entry"
+        keys = [k.decode() for k in links["shot_key"][...]]
+        stems = [c.decode() for c in links["container"][...]]
+        assert (
+            dict(zip(stems, keys, strict=True))["20251201_001042"]
+            == (links["20251201_001042"].attrs["shot_key"])
+        )
+        # A frame read through the master is the container's own.
+        frame = _frame(links["20251201_001042"])
+        through_master = links["20251201_001042"][frame][...]
+    with h5py.File(hc.shots_dir(campaign["master"]) / CONTAINER, "r") as container:
+        assert np.array_equal(through_master, container["entry"][frame][...])
+
+    # Linked now: the next pass writes nothing and asks for no build.
+    second = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert second.written == []
+    assert hc.relink_needed(campaign["master"], [second]) == []
+
+
+def test_a_master_built_before_any_container_links_none(campaign):
+    with h5py.File(campaign["master"], "r") as master:
+        links = master["entry/shot_containers"]
+        assert list(links["container"][...]) == []
+        assert [n for n in links if n not in {"shot_key", "container"}] == []
+
+
+def test_a_file_of_another_shot_under_the_name_is_not_linked(campaign):
+    hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    path = hc.shots_dir(campaign["master"]) / CONTAINER
+    with h5py.File(path, "r+") as handle:
+        handle.attrs["shot_key"] = "another-campaign:20251201:001042"
+    (hc.shots_dir(campaign["master"]) / "20251201_001043.nxs").write_bytes(b"junk")
+    _republish(campaign)
+    with h5py.File(campaign["master"], "r") as master:
+        stems = [c.decode() for c in master["entry/shot_containers/container"][...]]
+    assert stems == ["20251201_001044", "20251201_001045"]
+
+
+def test_a_shot_that_left_the_master_loses_its_container(campaign):
+    read_path = _read_path(campaign["raw"])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    shots = hc.shots_dir(campaign["master"])
+    for keep in (".convert.pending", ".convert.lock.guard", "x.nxs.n0nce.tmp"):
+        (shots / keep).write_bytes(b"")
+    (shots / "notes.nxs").write_bytes(b"not a container name")
+
+    # A ruling moved shot 1045's files elsewhere: the next master lacks it.
+    _republish(campaign, [e for e in campaign["events"] if e["shot_number"] != 1045])
+    run = hc.convert_campaign(campaign["master"], read_path=read_path, nonce="n0nce")
+    assert run.removed == ["20251201_001045.nxs"]
+    assert not (shots / "20251201_001045.nxs").exists()
+    # Kept a while in .trash, not deleted: a rebuild would read the raws again.
+    assert [p.name.rsplit(".", 1)[0] for p in (shots / ".trash").iterdir()] == [
+        "20251201_001045.nxs"
+    ]
+    manifest = json.loads((shots / hc.MANIFEST_NAME).read_text(encoding="utf-8"))
+    assert "20251201_001045.nxs" not in manifest["containers"]
+    for keep in (".convert.pending", ".convert.lock.guard", "notes.nxs"):
+        assert (shots / keep).exists(), keep
+    with h5py.File(campaign["master"], "r") as master:
+        assert "20251201_001045" not in master["entry/shot_containers"]
+
+
+def test_a_master_with_no_acquisition_removes_nothing(campaign, tmp_path):
+    hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    shots = hc.shots_dir(campaign["master"])
+    before = sorted(p.name for p in shots.glob("*.nxs"))
+    trigger_only = [{**e, "metadata": {}} for e in campaign["events"]]
+    _republish(campaign, trigger_only)
+    run = hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    assert run.removed == []
+    assert sorted(p.name for p in shots.glob("*.nxs")) == before
+
+
+def test_the_shot_detail_lists_its_container_through_the_master(campaign):
+    from damnit_api.metadata.hzdr_sources import (
+        list_container_datasets,
+        list_hdf5_datasets,
+    )
+
+    hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    _republish(campaign)
+    with h5py.File(campaign["master"], "r") as master:
+        shot_key = master["entry/shot_containers"]["20251201_001042"].attrs["shot_key"]
+    link, datasets = list_container_datasets(campaign["master"], shot_key)
+    assert link == "entry/shot_containers/20251201_001042"
+    names = {d.name for d in datasets}
+    assert names
+    assert all(n.startswith(link + "/") for n in names)
+    # The campaign file's own listing does not descend into the link.
+    assert not any(
+        d.name.startswith(link) for d in list_hdf5_datasets(campaign["master"])
+    )
+    assert list_container_datasets(campaign["master"], "c:20251201:009999") == (
+        None,
+        [],
+    )
+    assert list_container_datasets(campaign["master"], "not-a-key") == (None, [])
+
+    # A container that is gone leaves the link dangling, not an error.
+    (hc.shots_dir(campaign["master"]) / CONTAINER).unlink()
+    assert list_container_datasets(campaign["master"], shot_key) == (None, [])
+
+
+def test_a_frame_previews_through_the_master(campaign):
+    from damnit_api.metadata.hzdr_sources import preview_hdf5_dataset
+
+    hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    _republish(campaign)
+    with h5py.File(campaign["master"], "r") as master:
+        frame = _frame(master["entry/shot_containers/20251201_001042"])
+    preview = preview_hdf5_dataset(
+        campaign["master"], f"entry/shot_containers/20251201_001042/{frame}"
+    )
+    assert preview.preview_kind == "image"
+
+
+def _without_files_for(events: list[dict], number: int) -> list[dict]:
+    """A ruling moved shot ``number``'s files away: its row stays, its files go."""
+    from damnit_api.metadata.hzdr_nexus import is_acquisition
+
+    return [
+        {**e, "metadata": {}}
+        if e["shot_number"] == number and is_acquisition(e.get("metadata"))
+        else e
+        for e in events
+    ]
+
+
+def test_a_build_published_mid_pass_still_gets_its_containers_linked(campaign):
+    """Review B1: a later pass that writes nothing must not hide the first's."""
+    published: list[str] = []
+
+    def republish_after_first(name: str) -> None:
+        if not published:
+            published.append(name)
+            _republish(campaign)  # the builder publishes while the pass runs
+
+    runs = hc.run_conversion(
+        campaign["master"],
+        read_path=_read_path(campaign["raw"]),
+        after_write=republish_after_first,
+    )
+    assert len(runs) == 2
+    assert runs[-1].written == []
+    missing = hc.relink_needed(campaign["master"], runs)
+    assert missing
+    assert published[0] not in missing  # the one the mid-pass build linked
+
+
+def test_a_shot_that_lost_its_files_is_not_linked_to_a_stale_container(campaign):
+    """Review B2: the row stays, its acquisitions went to another shot."""
+    read_path = _read_path(campaign["raw"])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    _republish(campaign)  # all four linked
+    _republish(campaign, _without_files_for(campaign["events"], 1045))
+    with h5py.File(campaign["master"], "r") as master:
+        stems = [c.decode() for c in master["entry/shot_containers/container"][...]]
+    assert "20251201_001045" not in stems
+    run = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert run.removed == ["20251201_001045.nxs"]
+    assert hc.relink_needed(campaign["master"], [run]) == []
+
+
+def test_collecting_a_container_the_master_still_links_asks_for_a_build(campaign):
+    """Review B2(b): a removal under a published link must not leave it dangling."""
+    read_path = _read_path(campaign["raw"])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    _republish(campaign)
+    # A master that still links 1045, though a later read has no file for it.
+    with h5py.File(campaign["master"], "r+") as master:
+        rows = master["entry/source_events"]
+        texts = [t.decode() for t in rows["metadata_json"][...]]
+        keys = [k.decode() for k in rows["shot_key"][...]]
+        rows["metadata_json"][...] = [
+            "{}" if k.endswith(":001045") else t
+            for k, t in zip(keys, texts, strict=True)
+        ]
+    run = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert run.removed == ["20251201_001045.nxs"]
+    assert hc.relink_needed(campaign["master"], [run]) == ["20251201_001045.nxs"]
+
+
+def test_another_campaigns_container_in_the_folder_is_never_collected(campaign):
+    """Review B3: one folder, two masters (single-campaign mode switched over)."""
+    read_path = _read_path(campaign["raw"])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    shots = hc.shots_dir(campaign["master"])
+    other = shots / "20240101_000007.nxs"
+    with h5py.File(other, "w") as handle:
+        handle.attrs["shot_key"] = "old-campaign:20240101:000007"
+        handle.create_group("entry")
+    (shots / "20240101_000008.nxs").write_bytes(b"unreadable")
+    run = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert run.removed == []
+    assert other.is_file()
+    assert (shots / "20240101_000008.nxs").is_file()
+
+
+def test_the_trash_is_purged_after_its_grace(campaign, monkeypatch):
+    """Review B4: a collected container is kept a while, then purged."""
+    read_path = _read_path(campaign["raw"])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    _republish(campaign, [e for e in campaign["events"] if e["shot_number"] != 1045])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    trash = hc.shots_dir(campaign["master"]) / ".trash"
+    assert len(list(trash.iterdir())) == 1
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert len(list(trash.iterdir())) == 1  # within the grace: kept
+    monkeypatch.setattr(hc, "TRASH_GRACE_S", -10)
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert list(trash.iterdir()) == []
+
+
+def test_a_preview_reads_one_frame_of_a_stack(tmp_path, monkeypatch):
+    """Review B5: a stack reached through a link is not read whole."""
+    from damnit_api.metadata.hzdr_sources import preview_hdf5_dataset
+
+    path = tmp_path / "stack.h5"
+    with h5py.File(path, "w") as handle:
+        handle.create_dataset("stack", data=np.arange(3 * 130 * 70).reshape(3, 130, 70))
+        handle.create_dataset("line", data=np.arange(1000))
+    reads: list = []
+    real = h5py.Dataset.__getitem__
+
+    def spy(self, selection):
+        reads.append(selection)
+        return real(self, selection)
+
+    monkeypatch.setattr(h5py.Dataset, "__getitem__", spy)
+    image = preview_hdf5_dataset(path, "stack")
+    # One read, of the first frame only (never `...` or the whole stack).
+    assert len(reads) == 1
+    assert reads[0][0] == 0
+    assert image.preview_kind == "image"
+    assert len(image.preview) <= 65
+    assert image.shape == [3, 130, 70]
+    line = preview_hdf5_dataset(path, "line")
+    assert len(line.preview) == 200
+
+
+def test_relink_asks_for_a_build_when_the_master_cannot_be_read(campaign, monkeypatch):
+    run = hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+
+    def busy(_master):
+        message = "being replaced"
+        raise OSError(message)
+
+    monkeypatch.setattr(hc, "linked_containers", busy)
+    assert hc.relink_needed(campaign["master"], [run]) == sorted(run.written)

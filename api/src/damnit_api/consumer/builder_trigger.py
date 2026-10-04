@@ -46,6 +46,9 @@ _DEFAULT_WORKER_SCRIPT = (
     Path(__file__).resolve().parents[3] / "scripts" / "hzdr-container-worker.py"
 )
 WORKER_LOG_NAME = ".hzdr-container-worker.log"
+# hzdr-container-worker.py's exit status for "containers written that the
+# published master does not link yet" (hzdr_containers.RELINK_EXIT).
+RELINK_EXIT = 3
 # Past this size the log is moved to ``<name>.1`` (one generation kept).
 WORKER_LOG_MAX_BYTES = 5 * 1024 * 1024
 
@@ -249,10 +252,18 @@ class BuilderTrigger:
         self._workers.add(task)
         task.add_done_callback(self._workers.discard)
 
-    @staticmethod
-    async def _reap_worker(proc: asyncio.subprocess.Process) -> None:
-        returncode = await proc.wait()
-        if returncode:
+    async def _reap_worker(self, proc: asyncio.subprocess.Process) -> None:
+        self.worker_finished(await proc.wait())
+
+    def worker_finished(self, returncode: int) -> None:
+        """Log a worker's exit; one that left unlinked containers asks for a build.
+
+        ``RELINK_EXIT`` (``+1`` when something also failed) means containers
+        are in place that the published master does not link. One more build
+        links them; its own workers then find nothing new, so this converges.
+        """
+        relink = returncode in {RELINK_EXIT, RELINK_EXIT + 1}
+        if returncode and returncode != RELINK_EXIT:
             logger.error(
                 "Auto-trigger: container worker exited %d; see %s",
                 returncode,
@@ -260,6 +271,9 @@ class BuilderTrigger:
             )
         else:
             logger.info("Auto-trigger: container worker finished")
+        if relink:
+            logger.info("Auto-trigger: new containers to link; rebuilding")
+            self.notify()
 
     async def wait_for_workers(self) -> None:
         """Wait for the workers this trigger started (tests, shutdown)."""

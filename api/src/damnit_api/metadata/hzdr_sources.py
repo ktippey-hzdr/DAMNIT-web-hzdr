@@ -246,6 +246,10 @@ class HZDRShotDetail(BaseModel):
     hdf5_exists: bool = False
     hdf5_datasets: list[HZDRHDF5Dataset] = Field(default_factory=list)
     hdf5_error: str | None = None
+    # The shot's container as the campaign file links it
+    # (`entry/shot_containers/<YYYYMMDD>_<number>`); its datasets are listed in
+    # `hdf5_datasets` under that prefix and preview through the same file.
+    container: str | None = None
 
 
 class HZDRDatasetPreview(BaseModel):
@@ -354,6 +358,11 @@ class HZDRSourceProvider:
 
         try:
             detail.hdf5_datasets = list_hdf5_datasets(local_path)
+            if shot.shot_key:
+                detail.container, datasets = list_container_datasets(
+                    local_path, shot.shot_key
+                )
+                detail.hdf5_datasets.extend(datasets)
         except OSError as exc:
             detail.hdf5_error = str(exc)
         return detail
@@ -403,6 +412,49 @@ def list_hdf5_datasets(path: Path) -> list[HZDRHDF5Dataset]:
     return datasets
 
 
+def list_container_datasets(
+    path: Path, shot_key: str
+) -> tuple[str | None, list[HZDRHDF5Dataset]]:
+    """The shot's container link in campaign file ``path``, and its datasets.
+
+    ``visititems`` does not follow external links, so the campaign file's own
+    listing stops at ``/entry/shot_containers``; this follows the one link for
+    this shot. ``(None, [])`` when the file links no container for it, or the
+    link does not resolve (the container is being replaced, or the folder was
+    copied without ``shots/``).
+    """
+    import h5py
+
+    from .hzdr_nexus import SHOT_CONTAINERS_GROUP, shot_container_name
+
+    try:
+        stem = shot_container_name(shot_key).removesuffix(".nxs")
+    except ValueError:
+        return None, []
+    link = f"entry/{SHOT_CONTAINERS_GROUP}/{stem}"
+    datasets: list[HZDRHDF5Dataset] = []
+    with h5py.File(path, "r") as handle:
+        if handle.get(link, getlink=True) is None:
+            return None, []
+        try:
+            container = handle[link]
+        except (KeyError, OSError):
+            return None, []
+
+        def collect_dataset(name, item):
+            if isinstance(item, h5py.Dataset):
+                datasets.append(
+                    HZDRHDF5Dataset(
+                        name=f"{link}/{name}",
+                        shape=[int(value) for value in item.shape],
+                        dtype=str(item.dtype),
+                    )
+                )
+
+        container.visititems(collect_dataset)  # pyright: ignore[reportAttributeAccessIssue]
+    return link, datasets
+
+
 def preview_hdf5_dataset(path: Path, dataset_name: str) -> HZDRDatasetPreview:
     """Read a small preview from a HDF5 dataset for UI display."""
     import h5py
@@ -410,20 +462,24 @@ def preview_hdf5_dataset(path: Path, dataset_name: str) -> HZDRDatasetPreview:
 
     with h5py.File(path, "r") as handle:
         dataset = handle[dataset_name]
-        data = np.asarray(dataset[...])  # pyright: ignore[reportIndexIssue]
-        if data.ndim == 0 or (data.ndim == 1 and data.size == 1):
+        shape = tuple(int(n) for n in dataset.shape)  # pyright: ignore[reportAttributeAccessIssue]
+        # Read only what the preview shows: through /entry/shot_containers a
+        # name can reach a camera stack of gigabytes, so the leading axes are
+        # indexed to their first frame and the frame is read strided.
+        if len(shape) == 0 or (len(shape) == 1 and shape[0] == 1):
+            data = np.asarray(dataset[()])  # pyright: ignore[reportIndexIssue]
             preview = data.reshape(-1)[0].item()
             preview_kind = "scalar"
-        elif data.ndim == 1:
-            preview = data[: min(data.shape[0], 200)].astype(float).tolist()
+        elif len(shape) == 1:
+            data = np.asarray(dataset[: min(shape[0], 200)])  # pyright: ignore[reportIndexIssue]
+            preview = data.astype(float).tolist()
             preview_kind = "line"
         else:
-            image_source = data
-            while image_source.ndim > 2:
-                image_source = image_source[0]
-            y_stride = max(1, image_source.shape[0] // 64)
-            x_stride = max(1, image_source.shape[1] // 64)
-            image = image_source[::y_stride, ::x_stride].astype(float)
+            lead = (0,) * (len(shape) - 2)
+            y_stride = max(1, shape[-2] // 64)
+            x_stride = max(1, shape[-1] // 64)
+            window = (*lead, slice(None, None, y_stride), slice(None, None, x_stride))
+            image = np.asarray(dataset[window]).astype(float)  # pyright: ignore[reportIndexIssue]
             image = image[:64, :64]
             minimum = float(np.nanmin(image))
             maximum = float(np.nanmax(image))

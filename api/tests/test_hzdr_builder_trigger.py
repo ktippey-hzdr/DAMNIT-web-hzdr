@@ -527,3 +527,24 @@ async def test_the_worker_log_is_rotated_when_it_grows(tmp_path, monkeypatch):
         encoding="utf-8"
     ) == "x" * 200
     assert log.read_text(encoding="utf-8").strip() == "fresh"
+
+
+# --- Phase 4: a worker that left unlinked containers asks for one more build --
+
+
+def test_the_relink_exit_matches_the_workers():
+    from damnit_api.consumer import builder_trigger
+    from damnit_api.metadata import hzdr_containers
+
+    assert builder_trigger.RELINK_EXIT == hzdr_containers.RELINK_EXIT
+
+
+@pytest.mark.parametrize(
+    ("returncode", "rebuilds"), [(0, False), (1, False), (3, True), (4, True)]
+)
+def test_a_worker_that_left_containers_to_link_asks_for_a_build(
+    tmp_path, returncode, rebuilds
+):
+    trigger = BuilderTrigger(_settings(tmp_path))
+    trigger.worker_finished(returncode)
+    assert trigger._wake.is_set() is rebuilds

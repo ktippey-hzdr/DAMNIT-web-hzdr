@@ -228,10 +228,8 @@ lives in `damnit_api.metadata.hzdr_containers`.
   checkout and any `/opt` install (and a manual builder) must run the same
   version. A crashed builder's lock whose host name has since changed (a
   container restart) looks foreign and is removed by hand.
-- **Not here**: the master's links (phase 4), garbage collection of containers
-  the master no longer names (phase 4, after publish; it must leave
-  `.convert.lock`, `.convert.lock.guard`, `.convert.pending`, the manifest and
-  `*.stale`/`*.tmp` alone), validation (phase 5),
+- **Not here**: the master's links and garbage collection (phase 4, section 8
+  below), validation (phase 5),
   the mapping rows (review decision e: a phase of its own, planned by the
   coordinator).
 
@@ -249,3 +247,69 @@ Deferred: the LabFrog shot parameters with registry units (shot-aligner's
 `shot_parameters`), the target sample and laser groups (they stay in the
 master), backgrounds (`<campaign>_backgrounds.nxs`), and an entry-level plot
 (decision 6 keeps only each detector's default).
+
+## 8. Phase 4: the master links the containers
+
+- **Links.** The builder writes `/entry/shot_containers` (`NXcollection`,
+  `damnit_source="shot_containers"`) inside its temp file, before the atomic
+  rename: one relative `ExternalLink("shots/<YYYYMMDD>_<number>.nxs",
+  "/entry")` per shot, named by the container's stem, plus `shot_key` and
+  `container` string datasets so a reader joins `/entry/shots` on `shot_key`
+  rather than parsing names. A shot is linked when **this build** has an
+  acquisition event for it (`metadata.instrument.format`, the rule the worker
+  plans containers by, `hzdr_nexus.is_acquisition`) **and** its container is
+  in place: the file opens as HDF5, holds `/entry` and its root `shot_key` is
+  this shot's. So a shot whose files a ruling moved elsewhere keeps its row
+  but is not linked to a stale container, and a foreign file or another
+  campaign's shot under the same name is not linked. The group is rewritten
+  whole each build and is an `NXcollection`, so validating the master does not
+  descend into the containers. The bridge profile is unchanged (no table
+  column changed). Relative links resolve against the master's own folder
+  (checked with a decoy `shots/` in the working directory; `HDF5_EXT_PREFIX`
+  would override it), so the campaign folder travels as one unit and
+  `silx view` and h5py follow them.
+- **The master never links a missing container**: it links only files already
+  renamed into place, and is itself renamed last.
+- **Catching up.** Containers are written outside the campaign lock, so a new
+  shot's container lands after the master that introduced it. When the worker
+  is done with a campaign it compares what *this invocation* did with the
+  master as published *then* (`relink_needed`): a container it wrote that the
+  master does not link, or one it collected that the master still links. Any
+  such container makes it exit `RELINK_EXIT` (3; 4 when a container also
+  failed), and the trigger asks for one more build
+  (`BuilderTrigger.worker_finished`). Judging at the end, across every pass,
+  matters: a build that publishes during a long pass makes `run_conversion`
+  run a second pass that writes nothing, and the containers the first pass
+  finished after that build looked must still be linked. Only this
+  invocation's containers count, so it converges (at most about two extra
+  builds when the before- and after-build workers both ask; their wakes
+  coalesce).
+- **Garbage collection.** After each pass, from the master as published, the
+  worker collects `<YYYYMMDD|unknown>_<number>.nxs` files whose shot has no
+  acquisition in that master (moved to another campaign, or its files ruled
+  onto another shot), and drops their manifest records. Only a container
+  whose own root `shot_key` names this master's campaign is collected, so a
+  folder shared by two masters (single-campaign mode after `OUTPUT_NEXUS`
+  moved to a new campaign in the same directory) keeps the other's
+  containers; an unreadable file is left for a person. A collected container
+  is **moved to `shots/.trash/<name>.<unix time>`, not deleted**, and purged
+  after `TRASH_GRACE_S` (7 days): a build that missed a producer for once
+  costs a reconversion, never the containers. A shot that comes back is
+  converted again from its raw files; restoring one from `.trash` instead is
+  a manual move. It never
+  touches the lock, its guard, the pending marker, the manifest, temp or
+  tombstone files, or any other name. A master with no acquisition at all
+  collects nothing. A file held open on Windows is retried on a later pass.
+  Only campaigns the worker converts are collected, so the `_unassigned`
+  bucket keeps its containers unless it is converted (`--include-unassigned`).
+- **API.** `hzdr_sources.list_container_datasets(campaign file, shot_key)`
+  follows that shot's link (`visititems` does not), and shot detail lists
+  the container's datasets as `entry/shot_containers/<stem>/...` with the
+  link in `container`; previews read them through the same campaign file.
+  A preview reads only what it shows (the first frame of a stack, strided; the
+  first 200 values of a line), since a name can now reach a camera stack.
+- **Cost.** Each build opens the container of every shot with an acquisition
+  to check it is in place: O(shots) opens per build, worth caching by
+  (size, mtime) if it shows on the SMB share at campaign scale.
+- **SciCat** still registers the campaign file; registering the folder
+  (master + `shots/`) belongs with the side-by-side run (phase 6).
