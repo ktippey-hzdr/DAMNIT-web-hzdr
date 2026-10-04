@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import hashlib
 import json
 import logging
@@ -134,54 +135,251 @@ def _process_start_token(pid: int) -> str:
 
 
 def _lock_record() -> str:
+    """``host:pid:process-start:nonce``; the nonce makes every acquisition unique."""
     pid = os.getpid()
-    return f"{socket.gethostname()}:{pid}:{_process_start_token(pid)}"
+    nonce = uuid.uuid4().hex[:12]
+    return f"{socket.gethostname()}:{pid}:{_process_start_token(pid)}:{nonce}"
 
 
 def _parse_lock(text: str) -> tuple[str | None, int, str] | None:
     """``(host, pid, start)``; ``host`` None for a legacy bare-PID lock."""
-    text = text.strip()
+    parts = text.strip().split(":")
     try:
-        if ":" not in text:
-            return None, int(text), ""
-        host, pid, start = text.rsplit(":", 2)
-        return host, int(pid), start
+        if len(parts) == 1:
+            return None, int(parts[0]), ""
+        if len(parts) >= 3:  # host:pid:start, and :nonce since the reclaim fix
+            return parts[0], int(parts[1]), parts[2]
     except ValueError:
         return None
+    return None
 
 
-def _lock_holder(lock_path: Path, stale_after: float | None) -> str | None:
-    """Who holds ``lock_path``, or None when it is stale and may be reclaimed."""
+def _judge_lock(
+    lock_path: Path, stale_after: float | None
+) -> tuple[str | None, str | None]:
+    """``(holder, text)``: who holds the lock (None: stale) and what it said.
+
+    ``text`` None means the lock vanished while being looked at.
+    """
     try:
         text = lock_path.read_text(encoding="utf-8")
         age = time.time() - lock_path.stat().st_mtime
+    except FileNotFoundError:
+        return None, None
     except OSError:
-        return None
+        return "a process this host cannot read", ""
     if stale_after is not None and age > stale_after:
-        return None
+        return None, text
     parsed = _parse_lock(text)
     if parsed is None:
-        return "a process still writing it" if age < LOCK_EMPTY_GRACE_S else None
+        holder = "a process still writing it" if age < LOCK_EMPTY_GRACE_S else None
+        return holder, text
     host, pid, start = parsed
     if host is not None and host != socket.gethostname():
         # Another host's PID cannot be checked from here; only age reclaims it.
-        return f"pid {pid} on {host}"
+        return f"pid {pid} on {host}", text
     if not _pid_is_alive(pid):
-        return None
+        return None, text
     if start and _process_start_token(pid) not in {"", start}:
-        return None  # the PID was reused
-    return f"pid {pid}"
+        return None, text  # the PID was reused
+    return f"pid {pid}", text
+
+
+# How long an acquirer waits for another's create/reclaim/release step, which
+# takes milliseconds; the guard is never held while a lock is held.
+GUARD_TIMEOUT_S = 10.0
+_GUARD_UNSUPPORTED = {
+    getattr(errno, name)
+    for name in ("ENOLCK", "EOPNOTSUPP", "ENOTSUP", "ENOSYS", "EINVAL")
+    if hasattr(errno, name)
+}
+
+
+def _lock_fd(fd: int) -> bool:
+    """Take an exclusive kernel lock on ``fd``; False where none is available.
+
+    ``flock`` on POSIX (per open file, so threads exclude each other too, and
+    released by the kernel when the holder dies: it never goes stale), one
+    byte through ``msvcrt.locking`` on Windows. Waits up to
+    ``GUARD_TIMEOUT_S`` for another process's step to finish.
+    """
+    deadline = time.monotonic() + GUARD_TIMEOUT_S
+    while True:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            pass  # POSIX: another process is in its step
+        except OSError as error:
+            if error.errno in _GUARD_UNSUPPORTED:
+                return False
+            if os.name != "nt" or error.errno not in {errno.EACCES, errno.EDEADLK}:
+                raise
+        else:
+            return True
+        if time.monotonic() > deadline:
+            message = f"Lock guard busy for {GUARD_TIMEOUT_S:.0f} s: fd {fd}"
+            raise BuilderAlreadyRunningError(message)
+        time.sleep(0.002)
+
+
+def _unlock_fd(fd: int) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
+    else:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+@contextlib.contextmanager
+def _guard(lock_path: Path) -> Iterator[bool]:
+    """Serialize every create, reclaim and release of ``lock_path``.
+
+    A kernel lock on the sidecar ``<lock>.guard`` (kept, never removed, so
+    its identity never changes), held for the few milliseconds of one step,
+    never while the lock itself is held. Yields whether it is guarded: where
+    the filesystem has no kernel locks (``ENOLCK``: NFS without lockd) it is
+    not, and :func:`_acquire` then reclaims nothing (fails closed), because
+    the tombstone check alone does not exclude two reclaimers.
+
+    The guard is per host on a FUSE mount such as sshfs (the kernel emulates
+    the lock locally): it serializes every process on this host, which is
+    where the worker and the builder run, not processes on two hosts.
+    """
+    guard = lock_path.with_name(f"{lock_path.name}.guard")
+    fd = os.open(guard, os.O_CREAT | os.O_RDWR | getattr(os, "O_BINARY", 0))
+    try:
+        if not _lock_fd(fd):
+            logger.warning(
+                "No kernel lock on %s; stale locks are not reclaimed automatically",
+                guard,
+            )
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            _unlock_fd(fd)
+    finally:
+        os.close(fd)
+
+
+def _reclaim(lock_path: Path, judged: str) -> None:
+    """Remove the stale lock that said ``judged``, and nothing else.
+
+    Renamed to a unique tombstone first (one atomic step on POSIX and Windows;
+    the tombstone name is new, so ``rename`` never overwrites). Only one
+    reclaimer's rename can move a given lock; the others find nothing
+    (``FileNotFoundError``) and try to create again. If the tombstone does not
+    say what was judged, a live lock was moved after the judgment: it is put
+    back with ``os.link`` (which never overwrites) and the reclaimer gives up.
+    Called only under :func:`_guard`; on its own it narrows the race but does
+    not close it (a third process can create while a moved lock is out).
+    """
+    tombstone = lock_path.with_name(f"{lock_path.name}.{uuid.uuid4().hex}.stale")
+    try:
+        lock_path.rename(tombstone)
+    except FileNotFoundError:
+        return  # another reclaimer moved it first
+    try:
+        moved = tombstone.read_text(encoding="utf-8")
+    except OSError:
+        moved = None
+    if moved == judged:
+        tombstone.unlink(missing_ok=True)
+        return
+    try:
+        os.link(tombstone, lock_path)
+    except FileExistsError:
+        logger.error(
+            "Lock %s was replaced while being reclaimed; the moved lock (%r) "
+            "could not be put back",
+            lock_path,
+            moved,
+        )
+    except OSError:
+        if not lock_path.exists():
+            tombstone.rename(lock_path)
+    tombstone.unlink(missing_ok=True)
+    message = f"Builder output is locked by another process: {lock_path}"
+    raise BuilderAlreadyRunningError(message)
+
+
+def _acquire(
+    lock_path: Path,
+    record: str,
+    stale_after: float | None,
+    *,
+    may_reclaim: bool = True,
+) -> None:
+    for _ in range(3):
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            pass
+        else:
+            try:
+                os.write(fd, record.encode("utf-8"))
+            finally:
+                os.close(fd)
+            return
+        holder, text = _judge_lock(lock_path, stale_after)
+        if holder is not None:
+            message = (
+                f"Builder output is locked by {holder}: {lock_path}. "
+                "If that process is no longer running, remove the lock file "
+                "and retry."
+            )
+            raise BuilderAlreadyRunningError(message)
+        if text is not None and not may_reclaim:
+            message = (
+                f"Builder output lock {lock_path} looks stale, but this filesystem "
+                "has no kernel locks to reclaim it safely; remove it by hand if "
+                "its holder is gone."
+            )
+            raise BuilderAlreadyRunningError(message)
+        if text is not None:
+            _reclaim(lock_path, text)  # stale: move it aside, then create again
+    message = f"Builder output is locked by another process: {lock_path}"
+    raise BuilderAlreadyRunningError(message)
 
 
 class WriterLock:
     """A held ``single_writer_lock``; ``refresh()`` marks it as still in use."""
 
-    def __init__(self, path: Path) -> None:
+    def __init__(self, path: Path, record: str = "") -> None:
         self.path = path
+        self.record = record
 
     def refresh(self) -> None:
         with contextlib.suppress(OSError):
             os.utime(self.path)
+
+
+def _release(lock_path: Path, record: str) -> None:
+    """Remove the lock if it is still this holder's (an expired one is not)."""
+    try:
+        current = lock_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    if current != record:
+        logger.warning(
+            "Lock %s was reclaimed from this holder; left to %r", lock_path, current
+        )
+        return
+    with contextlib.suppress(OSError):
+        lock_path.unlink()
 
 
 @contextlib.contextmanager
@@ -194,44 +392,36 @@ def single_writer_lock(
     above it; two invocations for the same --output-nexus would otherwise
     race on the same NeXus/catalog files. This takes an exclusive lock file
     next to `output_path` (atomic create via O_EXCL on both POSIX and Windows)
-    holding ``host:pid:process-start`` and removes it on exit. A lock left
-    behind by a crashed/killed process is reclaimed automatically: an empty
-    one older than ``LOCK_EMPTY_GRACE_S``, one whose PID is dead on this host
-    or was reused (another start time), and, with ``stale_after``, one not
-    refreshed (``WriterLock.refresh``) for that many seconds. Another host's
-    lock is reclaimed only by age; the builder passes no ``stale_after`` and
-    never steals one. This is single-writer locking only - it does not replace
-    write_json_atomic's protection for concurrent *readers*.
+    holding ``host:pid:process-start:nonce`` and removes it on exit if it is
+    still its own. A lock left behind by a crashed/killed process is reclaimed
+    automatically: an empty one older than ``LOCK_EMPTY_GRACE_S``, one whose
+    PID is dead on this host or was reused (another start time), and, with
+    ``stale_after``, one not refreshed (``WriterLock.refresh``) for that many
+    seconds. Another host's lock is reclaimed only by age; the builder passes
+    no ``stale_after`` and never steals one.
+
+    Every create, reclaim and release runs under :func:`_guard` (a kernel
+    lock, so two reclaimers of one stale lock cannot both win), and a reclaim
+    moves the stale file to a tombstone it then checks (:func:`_reclaim`)
+    rather than unlinking whatever is at the path. Without kernel locks a
+    stale lock is not reclaimed at all: two holders are worse than a lock to
+    remove by hand. This is single-writer
+    locking only - it does not replace write_json_atomic's protection for
+    concurrent *readers*.
     """
     lock_path = output_path.with_name(f"{output_path.name}.lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
+    record = _lock_record()
+    with _guard(lock_path) as guarded:
+        _acquire(lock_path, record, stale_after, may_reclaim=guarded)
     try:
-        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
-        holder = _lock_holder(lock_path, stale_after)
-        if holder is not None:
-            message = (
-                f"Builder output is locked by {holder}: {lock_path}. "
-                "If that process is no longer running, remove the lock file "
-                "and retry."
-            )
-            raise BuilderAlreadyRunningError(message) from None
-        # Stale lock - the holder is gone; reclaim it.
-        with contextlib.suppress(OSError):
-            lock_path.unlink()
-        try:
-            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError as exc:
-            # Lost the race to reclaim it - someone else got there first.
-            message = f"Builder output is locked by another process: {lock_path}"
-            raise BuilderAlreadyRunningError(message) from exc
-    try:
-        os.write(fd, _lock_record().encode("utf-8"))
-        os.close(fd)
-        yield WriterLock(lock_path)
+        yield WriterLock(lock_path, record)
     finally:
-        with contextlib.suppress(OSError):
-            lock_path.unlink()
+        try:
+            with _guard(lock_path):
+                _release(lock_path, record)
+        except (BuilderAlreadyRunningError, OSError):
+            _release(lock_path, record)
 
 
 MATCH_RANK = {

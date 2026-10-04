@@ -146,7 +146,20 @@ lives in `damnit_api.metadata.hzdr_containers`.
   lock once per container and reclaims one not refreshed for 30 minutes; the
   builder passes no age and never steals another host's lock (before, it
   checked that PID locally and could). A legacy bare-PID lock behaves as
-  before.
+  before. The record ends in a per-acquisition nonce, and a holder removes the
+  lock on release only while it still holds its own record.
+- **Reclaiming a stale lock is serialized.** Every create, reclaim and release
+  runs under a kernel lock on a sidecar `<lock>.guard` (`flock` on POSIX,
+  `msvcrt.locking` on Windows; held for milliseconds, released by the kernel
+  if its holder dies, kept on disk so its identity never changes). Under it a
+  reclaim renames the stale lock to a unique tombstone, checks that the
+  tombstone says what was judged stale, and only then creates. Without the
+  guard the tombstone alone is not enough: a third process can create while a
+  moved lock is out, and measured with six contenders it double-held in most
+  rounds. So where the filesystem has no kernel locks (`ENOLCK`) a stale lock
+  is **not** reclaimed automatically and must be removed by hand. On sshfs the
+  kernel emulates the guard per host: it excludes every process on the API
+  host, where the worker and builder run, not processes on two hosts.
 - **Atomic and resumable**: each container is written to `<name>.nxs.tmp`,
   fsynced, and renamed into place, retried up to 10 x 0.5 s while Windows
   refuses the rename because a reader holds the target (review decision c; the
