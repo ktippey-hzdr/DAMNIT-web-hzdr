@@ -15,6 +15,7 @@ import uuid
 from collections import defaultdict
 from datetime import UTC, datetime, timedelta
 from operator import itemgetter
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -28,10 +29,12 @@ from .hzdr_event import (
     check_values_size,
     lint_metadata_keys,
 )
+from .hzdr_paths import map_path
 
 if TYPE_CHECKING:
     from collections.abc import Container, Iterable, Iterator, Mapping
-    from pathlib import Path
+
+    from .hzdr_paths import PathRule
 
 logger = logging.getLogger(__name__)
 
@@ -1739,6 +1742,7 @@ def write_nexus_bridge(
     source_nexus: Path | None = None,
     laser_config: dict[str, Any] | None = None,
     seed_from_output: bool = True,
+    path_rules: list[PathRule] | None = None,
 ) -> list[dict[str, Any]]:
     """Preserve a LabFrog NeXus file and add the DAMNIT bridge tables.
 
@@ -1758,6 +1762,10 @@ def write_nexus_bridge(
     unseeded, every build is written like the first one. A previous output
     whose shot table DAMNIT wrote itself (`SHOT_IDENTITY_ATTR`) is not seeded
     either: only a LabFrog-owned table has rows other groups refer to.
+
+    `path_rules` (`DW_API_METADATA__PATH_MAP`) map the bulk-file paths events
+    record onto this host's mount, so `/entry/data_product_links` can link the
+    HDF5 ones; see `_write_data_product_links()`.
     """
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temp_path = output_path.with_name(f"{output_path.name}.{uuid.uuid4().hex}.tmp.nxs")
@@ -1818,6 +1826,10 @@ def write_nexus_bridge(
             _fill_default_product_paths(products, output_path)
             _write_source_events(entry, events)
             _write_instrument_event_groups(entry, events)
+            # Before the table: it records each link's status in metadata_json.
+            _write_data_product_links(
+                entry, products, output_path=output_path, path_rules=path_rules or []
+            )
             _write_data_products(entry, products, output_path=output_path)
             write_nexus_detector_groups(entry, products)
 
@@ -4124,6 +4136,132 @@ def _write_data_products(
     }
     for name, values in columns.items():
         _replace_dataset(group, name, values)
+
+
+# External links (hzdr/docs/plans/external-links-plan.md). An HDF5 external
+# link can only target an HDF5 file, so only these suffixes (or a row naming a
+# dataset) are candidates; every other reference stays a string row.
+HDF5_SUFFIXES = (".h5", ".hdf5", ".nxs", ".nx5")
+DATA_PRODUCT_LINKS_GROUP = "data_product_links"
+_URL_PATTERN = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]+://")
+
+
+def _write_data_product_links(
+    entry: h5py.Group,
+    products: list[dict[str, Any]],
+    *,
+    output_path: Path,
+    path_rules: list[PathRule],
+) -> None:
+    """Link each HDF5 bulk file a data-product row names, one link per row.
+
+    Members of `/entry/data_product_links` are named by the row's
+    `product_index`, so a reader joins the row (and its `shot_key`) rather than
+    zipping by position, and `/entry/data_products` stays a flat table. Each
+    candidate row records the outcome in `metadata["link"]`. A target that is
+    missing, unreadable or lacks its dataset is skipped and recorded, never
+    linked dangling, and never fails the build.
+    """
+    group = _replace_group(entry, DATA_PRODUCT_LINKS_GROUP)
+    group.attrs["NX_class"] = "NXcollection"
+    group.attrs["damnit_source"] = "data_products"
+    group.attrs["description"] = (
+        "HDF5 external links to the bulk files rows of /entry/data_products "
+        "name; member name = product_index. Join on that row's shot_key."
+    )
+    campaign_file = output_path.resolve()
+    probes: dict[tuple[Path, str], str] = {}
+    for index, product in enumerate(products):
+        recorded = product.get("path")
+        if not recorded or not isinstance(recorded, str):
+            continue
+        local = map_path(recorded, path_rules)
+        if local is None or local.resolve() == campaign_file:
+            continue  # inline values / LabFrog rows already live in this file
+        try:
+            link = _data_product_link(
+                recorded,
+                local,
+                product.get("dataset_name"),
+                campaign_dir=campaign_file.parent,
+                probes=probes,
+            )
+            if link.get("status") == "linked":
+                group[str(index)] = h5py.ExternalLink(
+                    link["target_file"], link["target_path"]
+                )
+                link["name"] = f"/entry/{DATA_PRODUCT_LINKS_GROUP}/{index}"
+        except Exception:
+            logger.warning(
+                "Could not link data product %r to %s",
+                product.get("product_id"),
+                recorded,
+                exc_info=True,
+            )
+            link = {"status": "unreadable"}
+        metadata = product.get("metadata")
+        if not isinstance(metadata, dict):
+            metadata = {}
+            product["metadata"] = metadata
+        metadata["link"] = link
+
+
+def _data_product_link(
+    recorded: str,
+    local: Path,
+    dataset_name: Any,
+    *,
+    campaign_dir: Path,
+    probes: dict[tuple[Path, str], str],
+) -> dict[str, Any]:
+    """Decide one row's link: the status, and where it points when linked."""
+    if _URL_PATTERN.match(recorded):
+        return {"status": "not_local_path"}
+    dataset = dataset_name if isinstance(dataset_name, str) and dataset_name else None
+    if dataset is None and not recorded.lower().endswith(HDF5_SUFFIXES):
+        return {"status": "not_hdf5"}
+    target = local.resolve()
+    if not target.is_file():
+        return {"status": "missing_target"}
+    target_path = "/" + dataset.strip("/") if dataset else "/"
+    key = (target, target_path)
+    if key not in probes:
+        probes[key] = _probe_hdf5(target, target_path)
+    if probes[key] != "linked":
+        return {"status": probes[key]}
+    return {
+        "status": "linked",
+        "target_file": _link_filename(target, campaign_dir),
+        "target_path": target_path,
+    }
+
+
+def _probe_hdf5(path: Path, member: str) -> str:
+    """`linked` when `path` is an HDF5 file holding `member`, else why not."""
+    try:
+        if not h5py.is_hdf5(path):
+            return "unreadable"
+        with h5py.File(path, "r") as handle:
+            return "linked" if member == "/" or member in handle else "missing_dataset"
+    except OSError:
+        return "unreadable"
+
+
+def _link_filename(target: Path, campaign_dir: Path) -> str:
+    """The target relative to the campaign file's directory, when one exists.
+
+    HDF5 resolves a relative external link against the linking file's own
+    directory, so it survives a different mount point of the share. A target
+    sharing only the filesystem root (or on another drive) gets the absolute
+    path instead; no portable form exists for it.
+    """
+    try:
+        common = os.path.commonpath([target, campaign_dir])
+    except ValueError:  # different Windows drives
+        return target.as_posix()
+    if Path(common) == Path(common).parent:  # only the root in common
+        return target.as_posix()
+    return Path(os.path.relpath(target, campaign_dir)).as_posix()
 
 
 def _replace_group(parent: h5py.Group, name: str) -> h5py.Group:

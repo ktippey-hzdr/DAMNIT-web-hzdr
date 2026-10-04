@@ -43,6 +43,7 @@ from damnit_api.metadata.hzdr_nexus import (
     write_nexus_bridge,
     write_sources_catalog,
 )
+from damnit_api.metadata.hzdr_paths import PathRule, parse_path_map
 
 
 def load_mongo_shots(args: argparse.Namespace) -> list[dict[str, Any]]:
@@ -250,6 +251,7 @@ def build(
             events=normalized_events,
             source_nexus=args.labfrog_nexus,
             laser_config=_laser_config(),
+            path_rules=_path_rules(args),
             # A shared-catalog build's shots move between campaigns; see
             # write_nexus_bridge. The single-campaign build is unchanged.
             seed_from_output=not merge_catalog,
@@ -428,6 +430,22 @@ def _laser_config() -> dict[str, Any]:
     return settings.hzdr_laser.as_metadata()
 
 
+def _path_rules(args: argparse.Namespace) -> list[PathRule]:
+    """Where this host mounts the share bulk-file paths name (--path-map).
+
+    Defaults to DW_API_METADATA__PATH_MAP, the same translation the API uses
+    to open a shot's hdf5_path, read lazily like _laser_config(). It decides
+    which bulk HDF5 files /entry/data_product_links can link; see
+    hzdr/docs/plans/external-links-plan.md.
+    """
+    spec = getattr(args, "path_map", None)
+    if spec is None:
+        from damnit_api.shared.settings import settings
+
+        spec = settings.metadata.path_map
+    return parse_path_map(spec)
+
+
 def _register_scicat(
     output_nexus: Path,
     sources_file: Path,
@@ -586,6 +604,15 @@ def main() -> None:
         help=(
             "Extra review sidecar(s) to read campaign rulings from, in addition "
             "to this build's own; repeat as needed."
+        ),
+    )
+    parser.add_argument(
+        "--path-map",
+        help=(
+            "'from=to' prefixes, comma separated, mapping recorded bulk-file "
+            "paths (/bigdata/..., Z:/bigdata/...) onto this host's mount, so "
+            "HDF5 ones get external links. Defaults to "
+            "DW_API_METADATA__PATH_MAP."
         ),
     )
     parser.add_argument(

@@ -181,7 +181,9 @@ auto-trigger for a rebuild (`builder_trigger.request_rebuild`).
 translates the file paths events and the catalog record (`/bigdata/...`,
 `Z:/bigdata/...`) onto this host's mount of the same share
 (`metadata/hzdr_paths.py`). It is applied where the API opens a shot's
-`hdf5_path` (dataset listing and previews); it never rewrites what is stored.
+`hdf5_path` (dataset listing and previews), and by the builder (which reads
+the same setting, or `--path-map`) to find the bulk HDF5 files it links from
+`/entry/data_product_links`; it never rewrites what is stored.
 Structured JSON logging turns on when `DW_API_DEBUG=false`.
 `hzdr/scripts/damnit-api.service` is the systemd unit for an `/opt` install;
 `hzdr/scripts/damnit-api-checkout.service.example` is the one in use on
@@ -422,6 +424,14 @@ arrays still describe that LabFrog prefix. `/entry/instrument/<instrument.id>`
 is an `NXcollection` index of source-event rows for a declared instrument; its
 `event_index` points into `/entry/source_events`. Unregistered files get no
 instrument group. These additive views keep the v4 table columns unchanged.
+`/entry/data_product_links/<product_index>` holds one HDF5 external link per
+`/entry/data_products` row whose target is another HDF5 file (`.h5`/`.hdf5`/
+`.nxs`/`.nx5`, or a row with a `dataset_path`), relative to the campaign file's
+directory so it resolves on any mount of the share. A missing or unreadable
+target is skipped (never a dangling link, never a failed build) and each
+candidate row records `link.status` in its existing `metadata_json`. No table
+column changes, so the profile stays v5; see
+[hzdr/docs/plans/external-links-plan.md](hzdr/docs/plans/external-links-plan.md).
 
 ### Shared Pydantic field constraints (`api/src/damnit_api/shared/models.py`)
 

@@ -321,7 +321,8 @@ The LabFrog NeXus structure is preserved and DAMNIT adds:
                                      experiment_id_source (bridge v4), labfrog_local_count (v5)
 /entry/source_events                 normalized events, including unmatched events;
                                      producer_instance_id (v3), instrument_id (v4) columns
-/entry/data_products                 files and internal dataset references
+/entry/data_products                 files and internal dataset references (flat table)
+/entry/data_product_links            HDF5 external links to bulk files, one per row (NXcollection)
 /entry/laserdata                     embedded small event arrays
 /entry/watchdog                      Watchdog-derived values when present
 /entry/instrument/laser              campaign laser snapshot (NXsource + nested NXbeam)
@@ -338,6 +339,21 @@ table after the preserved LabFrog rows. `labfrog_shot_count` marks that prefix;
 the preserved `/entry/derived` arrays still refer only to its rows. An
 instrument group contains `event_index` values that join to
 `/entry/source_events`, not copies of the producer data.
+
+**Links to bulk files.** When a `/entry/data_products` row names an HDF5 file
+other than the campaign file (`.h5`/`.hdf5`/`.nxs`/`.nx5`, or a row with a
+`dataset_path`), the builder writes a real HDF5 external link to it as
+`/entry/data_product_links/<product_index>`, pointing at the row's
+`dataset_path` (or the file root). Follow it with `h5py` or `silx view`; reach
+the shot through that row's `shot_key`. The link filename is relative to the
+campaign file's directory, so it resolves wherever the bigdata share is
+mounted; the builder finds the target through `DW_API_METADATA__PATH_MAP`
+(builder `--path-map`). A target that is missing, unreadable or lacks the
+dataset is not linked, and never fails the build; every candidate row records
+the outcome in its `metadata_json` as `link.status` (`linked`,
+`missing_target`, `missing_dataset`, `unreadable`, `not_hdf5`,
+`not_local_path`), and the next build retries. Non-HDF5 rows stay string
+references. Design: [plans/external-links-plan.md](plans/external-links-plan.md).
 
 The semantic `metadata.*` promotions (laser, target, vacuum, diagnostics,
 per-kind detectors) are documented field-by-field in
