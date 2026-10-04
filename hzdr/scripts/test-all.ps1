@@ -205,11 +205,18 @@ if ($invalid) {
 # Skip when only specific repos are selected (the check spans all repos).
 if ($Repos.Count -eq 0) {
     Write-Host ""
-    Write-Host "--- Contract sync (hzdr_event.py + fixtures) ---" -ForegroundColor Cyan
+    # The script prints its own header, and signals drift with `exit 1`,
+    # which sets $LASTEXITCODE and never throws: a try/catch alone let drift
+    # through. The catch is kept for an error the script does throw.
     try {
         & "$PSScriptRoot\sync-hzdr-event.ps1"
     } catch {
         Write-Host "  Contract sync failed: $_" -ForegroundColor Red
+        Write-Host "  Run: pwsh hzdr/scripts/sync-hzdr-event.ps1 -Apply  to fix." -ForegroundColor Yellow
+        exit 1
+    }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Contract drift." -ForegroundColor Red
         Write-Host "  Run: pwsh hzdr/scripts/sync-hzdr-event.ps1 -Apply  to fix." -ForegroundColor Yellow
         exit 1
     }
@@ -221,7 +228,7 @@ if ($Repos.Count -eq 0) {
 # its SOURCE.json. Same rule as above: only when every repo is selected.
 if ($Repos.Count -eq 0) {
     Write-Host ""
-    Write-Host "--- Reference fixture sync (shot-aligner -> hzdr-reference) ---" -ForegroundColor Cyan
+    # The helper prints its own header.
     & "$PSScriptRoot\sync-hzdr-reference.ps1"
     if ($LASTEXITCODE -ne 0) {
         Write-Host "  Reference fixture drift." -ForegroundColor Red

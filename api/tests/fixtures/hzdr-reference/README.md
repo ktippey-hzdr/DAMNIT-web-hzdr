@@ -63,7 +63,8 @@ that opts in to attribution, replicated rather than imported:
   `metadata.instrument.format`**, and that is what a consumer routes on.
 - `event_id` is `watchdog-<24 hex>`, from the identity hash watchdog uses.
 - `payload_ref` is the dumped `HZDRPayloadRef`: `path`, `uri`, `filename`,
-  `sha256`, `size_bytes`, unset fields as `null`. Only a rule with
+  `sha256`, `size_bytes`, `zmq_topic` (the attached trigger's topic,
+  `Draco01`), unset fields as `null`. Only a rule with
   `group_by_stem` adds `members`, sorted by path, so the camera's CSV comes
   before its PNG; the primary file (`payload_ref.path`) is the measurement
   file (`_original.png`), not `members[0]`.
@@ -124,6 +125,7 @@ this input, and they are left as they are:
 
 ```sh
 uv run shot_aligner/scripts/make_reference_fixture.py          # manifest from raw/
+uv run shot_aligner/scripts/make_reference_fixture.py --events # events too, raw/ untouched
 uv run shot_aligner/scripts/make_reference_fixture.py --raws   # raw/ and events too
 ```
 
