@@ -269,24 +269,29 @@ master), backgrounds (`<campaign>_backgrounds.nxs`), and an entry-level plot
 
 ## 8. Phase 4: the master links the containers
 
-- **Links.** The builder writes `/entry/shot_containers` (`NXcollection`,
-  `damnit_source="shot_containers"`) inside its temp file, before the atomic
-  rename: one relative `ExternalLink("shots/<YYYYMMDD>_<number>.nxs",
-  "/entry")` per shot, named by the container's stem, plus `shot_key` and
-  `container` string datasets so a reader joins `/entry/shots` on `shot_key`
-  rather than parsing names. A shot is linked when **this build** has an
-  acquisition event for it (`metadata.instrument.format`, the rule the worker
-  plans containers by, `hzdr_nexus.is_acquisition`) **and** its container is
-  in place: the file opens as HDF5, holds `/entry` and its root `shot_key` is
-  this shot's. So a shot whose files a ruling moved elsewhere keeps its row
-  but is not linked to a stale container, and a foreign file or another
-  campaign's shot under the same name is not linked. The group is rewritten
-  whole each build and is an `NXcollection`, so validating the master does not
-  descend into the containers. The bridge profile is unchanged (no table
+- **Links.** The builder links each container from the master's **root**:
+  one relative `ExternalLink("shots/<YYYYMMDD>_<number>.nxs", "/entry")` per
+  shot, named by the container's stem, so the master is a multi-entry NeXus
+  file: `/entry` (the campaign) beside one `NXentry` per shot, as
+  shot-aligner's masters are built. Under `/entry` (the first version) pynxtools
+  validated the containers as part of the campaign entry and declared it
+  invalid against NXhzdr_target; at the root each is an entry of its own and
+  the campaign entry stays valid (phase 5 found this). `/entry/shot_containers`
+  (`NXcollection`, `damnit_source="shot_containers"`) is the index: `shot_key`
+  and `container` string datasets, so a reader joins `/entry/shots` on
+  `shot_key` rather than parsing names. A shot is linked when **this build**
+  has an acquisition event for it (`metadata.instrument.format`, the rule the
+  worker plans containers by, `hzdr_nexus.is_acquisition`) **and** its
+  container is in place: the file opens as HDF5, holds `/entry` and its root
+  `shot_key` is this shot's. So a shot whose files a ruling moved elsewhere
+  keeps its row but is not linked to a stale container, and a foreign file or
+  another campaign's shot under the same name is not linked. Every build drops
+  the root links into `shots/` it finds (a seeded previous master's) and
+  writes them and the index whole. The bridge profile is unchanged (no table
   column changed). Relative links resolve against the master's own folder
-  (checked with a decoy `shots/` in the working directory; `HDF5_EXT_PREFIX`
-  would override it), so the campaign folder travels as one unit and
-  `silx view` and h5py follow them.
+  for h5py and silx (checked with a decoy `shots/` in the working directory;
+  `HDF5_EXT_PREFIX` would override it); pynxtools resolves them against its
+  working directory, so the validation gate runs from the master's folder.
 - **The master never links a missing container**: it links only files already
   renamed into place, and is itself renamed last.
 - **Catching up.** Containers are written outside the campaign lock, so a new
@@ -323,8 +328,7 @@ master), backgrounds (`<campaign>_backgrounds.nxs`), and an entry-level plot
   bucket keeps its containers unless it is converted (`--include-unassigned`).
 - **API.** `hzdr_sources.list_container_datasets(campaign file, shot_key)`
   follows that shot's link (`visititems` does not), and shot detail lists
-  the container's datasets as `entry/shot_containers/<stem>/...` with the
-  link in `container`; previews read them through the same campaign file.
+  the container's datasets as `<stem>/...` with the link in `container`; previews read them through the same campaign file.
   A preview reads only what it shows (the first frame of a stack, strided; the
   first 200 values of a line), since a name can now reach a camera stack.
 - **Cost.** Each build opens the container of every shot with an acquisition

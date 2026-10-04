@@ -43,12 +43,12 @@ import PIL
 from ..shared.hzdr_paths import map_path, parse_path_map
 from . import hzdr_packs
 from .hzdr_nexus import (
-    SHOT_CONTAINERS_GROUP,
     SHOTS_DIRNAME,
     BuilderAlreadyRunningError,
     LockLostError,
     is_acquisition,
     replace_with_retry,
+    shot_container_links,
     shot_container_name,
     single_writer_lock,
     write_json_atomic,
@@ -311,20 +311,13 @@ def read_master(master: Path) -> tuple[str, list[dict], list[dict]]:
 
 
 def linked_containers(master: Path) -> set[str]:
-    """Container stems the published master links (``/entry/shot_containers``).
+    """Container stems the published master links (root links into ``shots/``).
 
     Read as links, never followed, so a container being replaced does not
     matter here.
     """
     with h5py.File(master, "r") as handle:
-        group = _group(handle, f"entry/{SHOT_CONTAINERS_GROUP}")
-        if group is None:
-            return set()
-        return {
-            str(name)
-            for name in group
-            if isinstance(group.get(name, getlink=True), h5py.ExternalLink)
-        }
+        return set(shot_container_links(handle))
 
 
 def _rows(group: h5py.Group | None, names: Iterable[str]) -> list[dict]:

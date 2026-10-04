@@ -11,7 +11,7 @@ The builder's end product becomes a NeXus-valid folder per campaign:
 
 ```text
 <campaign>/<campaign>.nxs                      master: today's canonical file, same name,
-                                               + links in /entry/shot_containers
+                                               + root links to shots/, indexed in /entry/shot_containers
 <campaign>/shots/<YYYYMMDD>_<shot_number>.nxs  one NXentry per shot, the converted data
 <campaign>/<campaign>_backgrounds.nxs          backgrounds the detectors link to
 ```

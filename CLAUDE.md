@@ -144,10 +144,11 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     `hzdr_packs/vendor/mappings/` and fingerprinted per instrument). **Phase 4:** the builder
     links the container of every shot that has an acquisition in this build
     (`hzdr_nexus.is_acquisition`) and whose file is in place (it names the
-    shot's `shot_key`) from the master's `/entry/shot_containers`
-    (`NXcollection`, one relative `ExternalLink("shots/<name>", "/entry")` per
-    container, named by its stem, plus `shot_key`/`container` datasets to join
-    on), inside the temp file before the atomic rename. When a worker
+    shot's `shot_key`) from the master's **root**: one relative
+    `ExternalLink("shots/<name>", "/entry")` per container, named by its stem,
+    so the master is a multi-entry NeXus file and `/entry` stays valid against
+    NXhzdr_target; `/entry/shot_containers` (`NXcollection`) indexes them with
+    `shot_key`/`container` datasets to join on; inside the temp file before the atomic rename. When a worker
     invocation wrote a container the published master does not link, or
     collected one it still links (`relink_needed`, judged at the end against
     the master as it is then), it exits `RELINK_EXIT` (3; 4 with a failure) and
@@ -157,7 +158,7 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     purged after 7 days; never the lock, guard, pending marker, manifest or
     temp files, and nothing when the master has no acquisition at all. Shot
     detail follows the shot's link (`hzdr_sources.list_container_datasets`),
-    listing its datasets as `entry/shot_containers/<stem>/...`; previews read
+    listing its datasets as `<stem>/...`; previews read
     them through the campaign file, one strided frame at a time.
   - `scicat.py` — registers the canonical campaign NeXus file as a citable SciCat
     dataset via the `scicat_plugin` HTTP boundary; runs as a best-effort builder
@@ -504,8 +505,9 @@ arrays still describe that LabFrog prefix. `/entry/instrument/<instrument.id>`
 is an `NXcollection` index of source-event rows for a declared instrument; its
 `event_index` points into `/entry/source_events`. Unregistered files get no
 instrument group. `/entry/shot_containers` (campaign output phase 4) is an
-`NXcollection` of relative external links to the per-shot containers in
-`shots/`, with `shot_key`/`container` datasets to join on. These additive views
+`NXcollection` index (`shot_key`/`container` datasets) of the per-shot
+containers in `shots/`, which the file links at its root, one relative
+external link per container named by its stem. These additive views
 keep the v4 table columns unchanged.
 
 ### Shared Pydantic field constraints (`api/src/damnit_api/shared/models.py`)
