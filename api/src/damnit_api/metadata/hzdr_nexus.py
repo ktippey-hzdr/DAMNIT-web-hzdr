@@ -2174,7 +2174,7 @@ def write_nexus_bridge(
             write_nexus_detector_groups(entry, products)
             # Every link targets a container already renamed into place, and
             # the master is renamed last: it never names a missing container.
-            _write_shot_container_links(entry, shots, output_path=output_path)
+            _write_shot_container_links(entry, shots, events, output_path=output_path)
 
         replace_with_retry(temp_path, output_path)
     except BaseException:
@@ -2573,6 +2573,19 @@ def shot_container_name(shot_key: str) -> str:
     return f"{match['date']}_{int(match['number']):06d}.nxs"
 
 
+def is_acquisition(metadata: Any) -> bool:
+    """Whether an event's metadata names a file to convert (``instrument.format``).
+
+    The one rule for "this shot has a container": the worker plans containers
+    from these events, and the builder links only shots that have one, so a
+    shot whose files a ruling moved elsewhere is not linked to a stale file.
+    """
+    if not isinstance(metadata, dict):
+        return False
+    instrument = metadata.get("instrument")
+    return isinstance(instrument, dict) and bool(instrument.get("format"))
+
+
 def _container_in_place(path: Path, shot_key: str) -> bool:
     """True when ``path`` is a finished container of exactly this shot.
 
@@ -2594,7 +2607,11 @@ def _container_in_place(path: Path, shot_key: str) -> bool:
 
 
 def _write_shot_container_links(
-    entry: h5py.Group, shots: list[dict[str, Any]], *, output_path: Path
+    entry: h5py.Group,
+    shots: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+    *,
+    output_path: Path,
 ) -> int:
     """Link each shot's container from ``/entry/shot_containers``; return the count.
 
@@ -2619,6 +2636,11 @@ def _write_shot_container_links(
         "position in /entry/shots."
     )
     folder = output_path.parent / SHOTS_DIRNAME
+    with_files = {
+        event.get("shot_key")
+        for event in events
+        if event.get("shot_key") and is_acquisition(event.get("metadata"))
+    }
     linked_keys: list[str] = []
     linked_names: list[str] = []
     if folder.is_dir():
@@ -2627,6 +2649,8 @@ def _write_shot_container_links(
             shot_key = shot.get("shot_key")
             if not isinstance(shot_key, str) or shot_key in seen:
                 continue
+            if shot_key not in with_files:
+                continue  # no file to convert in this build: nothing to link
             seen.add(shot_key)
             try:
                 name = shot_container_name(shot_key)

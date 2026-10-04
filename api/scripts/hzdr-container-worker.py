@@ -32,6 +32,7 @@ from damnit_api.metadata.hzdr_containers import (
     RELINK_EXIT,
     campaign_masters,
     make_read_path,
+    relink_needed,
     run_conversion,
 )
 
@@ -120,12 +121,16 @@ def main(argv: list[str] | None = None) -> int:
         )
         removed = sorted({name for run in runs for name in run.removed})
         if removed:
-            print(f"  removed (no longer in the master): {', '.join(removed)}")
-        if runs[-1].unlinked:
+            print(
+                "  moved to shots/.trash (no longer in the master): "
+                + ", ".join(removed)
+            )
+        relink = relink_needed(master.resolve(), runs)
+        if relink:
             unlinked += 1
             print(
-                f"  {len(runs[-1].unlinked)} container(s) not linked by the "
-                "published master yet; the next build links them"
+                f"  {len(relink)} container(s) not linked (or no longer there) in "
+                "the published master; the next build fixes the links"
             )
         if failed:
             failures += 1

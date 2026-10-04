@@ -462,20 +462,24 @@ def preview_hdf5_dataset(path: Path, dataset_name: str) -> HZDRDatasetPreview:
 
     with h5py.File(path, "r") as handle:
         dataset = handle[dataset_name]
-        data = np.asarray(dataset[...])  # pyright: ignore[reportIndexIssue]
-        if data.ndim == 0 or (data.ndim == 1 and data.size == 1):
+        shape = tuple(int(n) for n in dataset.shape)  # pyright: ignore[reportAttributeAccessIssue]
+        # Read only what the preview shows: through /entry/shot_containers a
+        # name can reach a camera stack of gigabytes, so the leading axes are
+        # indexed to their first frame and the frame is read strided.
+        if len(shape) == 0 or (len(shape) == 1 and shape[0] == 1):
+            data = np.asarray(dataset[()])  # pyright: ignore[reportIndexIssue]
             preview = data.reshape(-1)[0].item()
             preview_kind = "scalar"
-        elif data.ndim == 1:
-            preview = data[: min(data.shape[0], 200)].astype(float).tolist()
+        elif len(shape) == 1:
+            data = np.asarray(dataset[: min(shape[0], 200)])  # pyright: ignore[reportIndexIssue]
+            preview = data.astype(float).tolist()
             preview_kind = "line"
         else:
-            image_source = data
-            while image_source.ndim > 2:
-                image_source = image_source[0]
-            y_stride = max(1, image_source.shape[0] // 64)
-            x_stride = max(1, image_source.shape[1] // 64)
-            image = image_source[::y_stride, ::x_stride].astype(float)
+            lead = (0,) * (len(shape) - 2)
+            y_stride = max(1, shape[-2] // 64)
+            x_stride = max(1, shape[-1] // 64)
+            window = (*lead, slice(None, None, y_stride), slice(None, None, x_stride))
+            image = np.asarray(dataset[window]).astype(float)  # pyright: ignore[reportIndexIssue]
             image = image[:64, :64]
             minimum = float(np.nanmin(image))
             maximum = float(np.nanmax(image))

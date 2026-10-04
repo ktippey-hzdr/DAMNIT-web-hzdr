@@ -1176,7 +1176,7 @@ def test_the_worker_converts_a_campaign(campaign):
     )
     # New containers the published master does not link yet: ask for a build.
     assert result.returncode == hc.RELINK_EXIT, result.stdout + result.stderr
-    assert "not linked by the published master yet" in result.stdout
+    assert "not linked (or no longer there) in the published master" in result.stdout
     assert "4 written" in result.stdout
     assert len(list(hc.shots_dir(campaign["master"]).glob("*.nxs"))) == 4
 
@@ -1335,7 +1335,8 @@ def _frame(handle: h5py.Group) -> str:
 def test_the_master_links_each_container_in_place(campaign):
     read_path = _read_path(campaign["raw"])
     first = hc.convert_campaign(campaign["master"], read_path=read_path)
-    assert sorted(first.unlinked) == sorted(first.written)  # nothing linked yet
+    # Nothing linked yet: the worker asks for a build.
+    assert hc.relink_needed(campaign["master"], [first]) == sorted(first.written)
 
     _republish(campaign)
     with h5py.File(campaign["master"], "r") as master:
@@ -1362,7 +1363,7 @@ def test_the_master_links_each_container_in_place(campaign):
     # Linked now: the next pass writes nothing and asks for no build.
     second = hc.convert_campaign(campaign["master"], read_path=read_path)
     assert second.written == []
-    assert second.unlinked == []
+    assert hc.relink_needed(campaign["master"], [second]) == []
 
 
 def test_a_master_built_before_any_container_links_none(campaign):
@@ -1397,6 +1398,10 @@ def test_a_shot_that_left_the_master_loses_its_container(campaign):
     run = hc.convert_campaign(campaign["master"], read_path=read_path, nonce="n0nce")
     assert run.removed == ["20251201_001045.nxs"]
     assert not (shots / "20251201_001045.nxs").exists()
+    # Kept a while in .trash, not deleted: a rebuild would read the raws again.
+    assert [p.name.rsplit(".", 1)[0] for p in (shots / ".trash").iterdir()] == [
+        "20251201_001045.nxs"
+    ]
     manifest = json.loads((shots / hc.MANIFEST_NAME).read_text(encoding="utf-8"))
     assert "20251201_001045.nxs" not in manifest["containers"]
     for keep in (".convert.pending", ".convert.lock.guard", "notes.nxs"):
@@ -1457,3 +1462,116 @@ def test_a_frame_previews_through_the_master(campaign):
         campaign["master"], f"entry/shot_containers/20251201_001042/{frame}"
     )
     assert preview.preview_kind == "image"
+
+
+def _without_files_for(events: list[dict], number: int) -> list[dict]:
+    """A ruling moved shot ``number``'s files away: its row stays, its files go."""
+    from damnit_api.metadata.hzdr_nexus import is_acquisition
+
+    return [
+        {**e, "metadata": {}}
+        if e["shot_number"] == number and is_acquisition(e.get("metadata"))
+        else e
+        for e in events
+    ]
+
+
+def test_a_build_published_mid_pass_still_gets_its_containers_linked(campaign):
+    """Review B1: a later pass that writes nothing must not hide the first's."""
+    published: list[str] = []
+
+    def republish_after_first(name: str) -> None:
+        if not published:
+            published.append(name)
+            _republish(campaign)  # the builder publishes while the pass runs
+
+    runs = hc.run_conversion(
+        campaign["master"],
+        read_path=_read_path(campaign["raw"]),
+        after_write=republish_after_first,
+    )
+    assert len(runs) == 2
+    assert runs[-1].written == []
+    missing = hc.relink_needed(campaign["master"], runs)
+    assert missing
+    assert published[0] not in missing  # the one the mid-pass build linked
+
+
+def test_a_shot_that_lost_its_files_is_not_linked_to_a_stale_container(campaign):
+    """Review B2: the row stays, its acquisitions went to another shot."""
+    read_path = _read_path(campaign["raw"])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    _republish(campaign)  # all four linked
+    _republish(campaign, _without_files_for(campaign["events"], 1045))
+    with h5py.File(campaign["master"], "r") as master:
+        stems = [c.decode() for c in master["entry/shot_containers/container"][...]]
+    assert "20251201_001045" not in stems
+    run = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert run.removed == ["20251201_001045.nxs"]
+    assert hc.relink_needed(campaign["master"], [run]) == []
+
+
+def test_collecting_a_container_the_master_still_links_asks_for_a_build(campaign):
+    """Review B2(b): a removal under a published link must not leave it dangling."""
+    read_path = _read_path(campaign["raw"])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    _republish(campaign)
+    # A master that still links 1045, though a later read has no file for it.
+    with h5py.File(campaign["master"], "r+") as master:
+        rows = master["entry/source_events"]
+        texts = [t.decode() for t in rows["metadata_json"][...]]
+        keys = [k.decode() for k in rows["shot_key"][...]]
+        rows["metadata_json"][...] = [
+            "{}" if k.endswith(":001045") else t
+            for k, t in zip(keys, texts, strict=True)
+        ]
+    run = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert run.removed == ["20251201_001045.nxs"]
+    assert hc.relink_needed(campaign["master"], [run]) == ["20251201_001045.nxs"]
+
+
+def test_another_campaigns_container_in_the_folder_is_never_collected(campaign):
+    """Review B3: one folder, two masters (single-campaign mode switched over)."""
+    read_path = _read_path(campaign["raw"])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    shots = hc.shots_dir(campaign["master"])
+    other = shots / "20240101_000007.nxs"
+    with h5py.File(other, "w") as handle:
+        handle.attrs["shot_key"] = "old-campaign:20240101:000007"
+        handle.create_group("entry")
+    (shots / "20240101_000008.nxs").write_bytes(b"unreadable")
+    run = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert run.removed == []
+    assert other.is_file()
+    assert (shots / "20240101_000008.nxs").is_file()
+
+
+def test_the_trash_is_purged_after_its_grace(campaign, monkeypatch):
+    """Review B4: a collected container is kept a while, then purged."""
+    read_path = _read_path(campaign["raw"])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    _republish(campaign, [e for e in campaign["events"] if e["shot_number"] != 1045])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    trash = hc.shots_dir(campaign["master"]) / ".trash"
+    assert len(list(trash.iterdir())) == 1
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert len(list(trash.iterdir())) == 1  # within the grace: kept
+    monkeypatch.setattr(hc, "TRASH_GRACE_S", -10)
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert list(trash.iterdir()) == []
+
+
+def test_a_preview_reads_one_frame_of_a_stack(tmp_path):
+    """Review B5: a stack reached through a link is not read whole."""
+    from damnit_api.metadata.hzdr_sources import preview_hdf5_dataset
+
+    path = tmp_path / "stack.h5"
+    with h5py.File(path, "w") as handle:
+        handle.create_dataset("stack", data=np.arange(3 * 130 * 70).reshape(3, 130, 70))
+        handle.create_dataset("line", data=np.arange(1000))
+    image = preview_hdf5_dataset(path, "stack")
+    assert image.preview_kind == "image"
+    assert len(image.preview) <= 65
+    assert image.shape == [3, 130, 70]
+    line = preview_hdf5_dataset(path, "line")
+    assert len(line.preview) == 200
