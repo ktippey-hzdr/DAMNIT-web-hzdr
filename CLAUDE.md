@@ -355,7 +355,7 @@ They are named for the geometry and the species because the number means
 nothing without them — a 90° Thomson-parabola reading for protons and for
 Si¹¹⁺ are two measurements, not one key with a label. Sourced from the
 December 2025 ShootSheet columns `TPS 90° - H`, `TPS 90° -Si 11` and `Dosis`
-in `laser_shot_nexus`, and registered **ahead of** any producer, which is the
+in `laser_shot_nexus` (since renamed shot-aligner, `tippey27/shot-aligner`), and registered **ahead of** any producer, which is the
 order this registry asks for: that repository is not wired to the Kafka pilot
 and emits no events today. The Thomson parabola was already named in
 [standards-alignment.md §3.5](hzdr/docs/standards-alignment.md) as an important
