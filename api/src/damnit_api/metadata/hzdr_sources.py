@@ -170,6 +170,9 @@ class HZDRDataProduct(BaseModel):
     dtype: str | None = None
     units: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # Set only in a shot detail: whether ``path`` exists on this host after the
+    # path map. None when there is nothing local to check (no path, a URI).
+    reachable: bool | None = None
 
 
 class HZDRShot(BaseModel):
@@ -318,7 +321,24 @@ class HZDRSourceProvider:
             return None
         return self._shot_detail(shot)
 
+    def _product_reachable(self, product: HZDRDataProduct) -> bool | None:
+        if not product.path or "://" in product.path:
+            return None
+        local = map_path(product.path, self._path_rules)
+        return None if local is None else local.exists()
+
     def _shot_detail(self, shot: HZDRShot) -> HZDRShotDetail:
+        # A view for this host; the stored shot keeps its recorded paths.
+        shot = shot.model_copy(
+            update={
+                "data_products": [
+                    product.model_copy(
+                        update={"reachable": self._product_reachable(product)}
+                    )
+                    for product in shot.data_products
+                ]
+            }
+        )
         detail = HZDRShotDetail(shot=shot)
         local_path = self._local_hdf5_path(shot)
         if local_path is None:

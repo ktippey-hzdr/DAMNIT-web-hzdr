@@ -370,6 +370,13 @@ export function ShotDetailPanel({
     )
   }
 
+  // The detail carries whether each file is reachable on the API host.
+  const dataProducts =
+    shotDetail?.shot.shot_number === shot.shot_number &&
+    shotDetail.shot.shot_key === shot.shot_key
+      ? shotDetail.shot.data_products
+      : (shot.data_products ?? [])
+
   return (
     <Stack gap="md">
       <Card withBorder radius={4} p="md">
@@ -575,10 +582,10 @@ export function ShotDetailPanel({
         <Stack gap="xs">
           <Group justify="space-between">
             <Title order={5}>Data products</Title>
-            <Badge variant="light">{shot.data_products?.length ?? 0}</Badge>
+            <Badge variant="light">{dataProducts.length}</Badge>
           </Group>
-          {shot.data_products?.length ? (
-            shot.data_products.map((product, index) => (
+          {dataProducts.length ? (
+            dataProducts.map((product, index) => (
               <Paper
                 key={product.product_id ?? `${product.source}-${index}`}
                 withBorder
@@ -592,6 +599,15 @@ export function ShotDetailPanel({
                       <Text size="sm" fw={600}>
                         {product.preview_kind ?? product.kind}
                       </Text>
+                      {product.reachable != null && (
+                        <Badge
+                          size="xs"
+                          variant="light"
+                          color={product.reachable ? 'teal' : 'red'}
+                        >
+                          {product.reachable ? 'on disk' : 'missing'}
+                        </Badge>
+                      )}
                     </Group>
                     <Text size="xs" style={{ overflowWrap: 'anywhere' }}>
                       {product.dataset_name ?? product.path ?? '-'}

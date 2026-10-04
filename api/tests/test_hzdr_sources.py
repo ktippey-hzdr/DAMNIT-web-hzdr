@@ -554,3 +554,81 @@ def test_recorded_path_without_a_map_is_looked_up_as_recorded(tmp_path: Path):
 def test_malformed_path_map_is_refused_when_the_provider_is_built(tmp_path: Path):
     with pytest.raises(ValueError, match="path map"):
         _provider_with_recorded_path(tmp_path, "/bigdata/x.h5", "not-a-rule")
+
+
+def _provider_with_products(tmp_path: Path, products: list[dict], path_map: str):
+    sources = tmp_path / "hzdr_sources.json"
+    sources.write_bytes(
+        orjson.dumps({
+            "sources": [
+                {
+                    "key": "hzdr-local",
+                    "title": "data product fixture",
+                    "damnit_path": "damnit/hzdr-local",
+                    "shots": [
+                        {
+                            "source_key": "hzdr-local",
+                            "shot_number": 1,
+                            "fired_at": "2026-05-05T08:15:00Z",
+                            "data_products": products,
+                        }
+                    ],
+                }
+            ]
+        })
+    )
+    return HZDRSourceProvider(
+        MetadataSettings(provider="local", sources_file=sources, path_map=path_map)
+    )
+
+
+def test_shot_detail_reports_which_data_product_files_are_reachable(
+    tmp_path: Path,
+):
+    """Each referenced file is checked on this host, through the path map."""
+    mount = tmp_path / "mnt" / "bigdata"
+    (mount / "cam").mkdir(parents=True)
+    (mount / "cam" / "frame.png").write_bytes(b"png")
+    products = [
+        {
+            "product_id": "on-disk",
+            "source": "cam",
+            "kind": "file",
+            "path": "Z:/bigdata/cam/frame.png",
+        },
+        {
+            "product_id": "missing",
+            "source": "cam",
+            "kind": "file",
+            "path": "/bigdata/cam/gone.png",
+        },
+        {
+            "product_id": "remote",
+            "source": "cam",
+            "kind": "file",
+            "path": "https://example.org/frame.png",
+        },
+        {
+            "product_id": "inline",
+            "source": "cam",
+            "kind": "hdf5_dataset",
+            "dataset_name": "/entry/cam/values",
+        },
+    ]
+    provider = _provider_with_products(
+        tmp_path, products, f"/bigdata={mount},Z:/bigdata={mount}"
+    )
+
+    detail = provider.get_shot_detail("hzdr-local", 1)
+
+    reachable = {p.product_id: p.reachable for p in detail.shot.data_products}
+    assert reachable == {
+        "on-disk": True,
+        "missing": False,
+        "remote": None,
+        "inline": None,
+    }
+    # The detail is a view: the stored record keeps the recorded path as-is.
+    stored = provider.list_shots("hzdr-local")[0].data_products[0]
+    assert stored.path == "Z:/bigdata/cam/frame.png"
+    assert stored.reachable is None

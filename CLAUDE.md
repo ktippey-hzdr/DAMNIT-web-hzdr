@@ -181,7 +181,10 @@ auto-trigger for a rebuild (`builder_trigger.request_rebuild`).
 translates the file paths events and the catalog record (`/bigdata/...`,
 `Z:/bigdata/...`) onto this host's mount of the same share
 (`metadata/hzdr_paths.py`). It is applied where the API opens a shot's
-`hdf5_path` (dataset listing and previews); it never rewrites what is stored.
+`hdf5_path` (dataset listing and previews) and to each data product's `path`,
+which a shot detail reports as `reachable` (true/false; null for URIs and
+in-file datasets) and the UI badges as on disk / missing. It never rewrites
+what is stored.
 Structured JSON logging turns on when `DW_API_DEBUG=false`.
 `hzdr/scripts/damnit-api.service` is the systemd unit for an `/opt` install;
 `hzdr/scripts/damnit-api-checkout.service.example` is the one in use on
