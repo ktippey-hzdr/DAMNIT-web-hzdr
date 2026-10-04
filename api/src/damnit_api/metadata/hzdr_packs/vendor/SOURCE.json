@@ -1,5 +1,5 @@
 {
-  "commit": "2b5af89",
+  "commit": "856d814",
   "files": {
     "camera_metadata.py": {
       "from": "shot_aligner/scripts/shotalign/camera_metadata.py",
@@ -9,9 +9,9 @@
       "from": "shot_aligner/scripts/shotalign/diagnostics/camera_png_csv.json",
       "sha256": "3235c5f20df0c0a05bfd73bf7ae60d56e277b706d5c200c313db408c574d4951"
     },
-    "hzdr-draco-0.1.0.json": {
-      "from": "shot_aligner/config/instrument-catalogue/hzdr-draco-0.1.0.json",
-      "sha256": "2a81fba97d155b865d49176b93c017a41078f46c777f064996a9e8786d5c7234"
+    "hzdr-draco-0.2.0.json": {
+      "from": "shot_aligner/config/instrument-catalogue/hzdr-draco-0.2.0.json",
+      "sha256": "bad5d3b2d87a70dad08321e92a3ba550cfa29a2ae7478a3176c9a10369d66e8d"
     },
     "img_csv.py": {
       "from": "polina/img_csv.py",

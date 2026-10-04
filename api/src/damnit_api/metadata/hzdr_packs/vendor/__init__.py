@@ -21,7 +21,7 @@ What DAMNIT uses from them:
     each pack's declarative manifest (which suffixes are the measurement,
     which scale a viewer is asked to use, the file-name patterns ``claim()``
     reads ``seq`` and ``label`` from), read by :func:`manifest`.
-``hzdr-draco-0.1.0.json``
+``hzdr-draco-0.2.0.json``
     NDS's DRACO instrument catalogue, the copy shot-aligner pins; the
     container writer names its groups from it (:func:`catalogue`).
 """
@@ -33,7 +33,7 @@ from functools import cache
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-CATALOGUE_FILE = "hzdr-draco-0.1.0.json"
+CATALOGUE_FILE = "hzdr-draco-0.2.0.json"
 
 
 @cache

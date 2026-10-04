@@ -112,7 +112,7 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     value for value to shot-aligner's per-pack references
     (`api/tests/fixtures/hzdr-reference/packs/`). Called by `hzdr_containers.py`.
     The vendor folder also pins NDS's instrument catalogue
-    (`hzdr-draco-0.1.0.json`, `vendor.catalogue()`).
+    (`hzdr-draco-0.2.0.json`, `vendor.catalogue()`).
   - `hzdr_containers.py` — the **shot containers** (campaign output phase 3,
     design in [hzdr/docs/plans/container-writer.md](hzdr/docs/plans/container-writer.md)):
     reads the published master's `/entry/source_events` + `/entry/shots`

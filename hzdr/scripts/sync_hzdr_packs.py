@@ -57,8 +57,8 @@ FILES = {
     # NDS's DRACO instrument catalogue as shot-aligner pins it: the container
     # writer names NXinstrument/NXdetector groups from its family,
     # instrument_name and detector_name (campaign output phase 3).
-    "hzdr-draco-0.1.0.json": (
-        "shot_aligner/config/instrument-catalogue/hzdr-draco-0.1.0.json"
+    "hzdr-draco-0.2.0.json": (
+        "shot_aligner/config/instrument-catalogue/hzdr-draco-0.2.0.json"
     ),
 }
 
