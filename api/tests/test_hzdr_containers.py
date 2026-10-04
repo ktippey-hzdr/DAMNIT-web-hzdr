@@ -47,7 +47,7 @@ WORKER = Path(__file__).resolve().parents[1] / "scripts" / "hzdr-container-worke
 CONTAINER = "20251201_001042.nxs"
 
 # The manifest nodes shot-aligner's reviewed mapping rows create
-# (`mappings.apply_to`), which phase 3 leaves out (design note, section 5).
+# (`mappings.apply_to`), ported in phase 4b (`hzdr_packs.mapping_rows`).
 CAMERA = "/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer"
 MAPPING_ROW_NODES = {
     "/entry/collection_M1_Spec_Fib_Cer",
@@ -69,6 +69,7 @@ MAPPING_ROW_ALIASES = {
 CONTAINER_OWN = (
     "/entry/experiment_identifier",
     "/entry/conversion_problems",
+    "/entry/mapping_problems",
     "/entry/labfrog_shot",
 )
 DETECTORS = {
@@ -196,23 +197,36 @@ def test_the_container_matches_the_manifest_contract(reference_container):
             key: node[key] for key in (*MANIFEST_KEYS, "default", "link") if key in node
         }
         for path, node in contract_nodes(_manifest()).items()
-        if path not in MAPPING_ROW_NODES
     }
-    for alias in MAPPING_ROW_ALIASES:
-        expected[alias].pop("link")
     nodes, _ = walk(reference_container)
+    # The same canonicalisation as the manifest's: a link into a subentry copy
+    # (outside the contract) is re-pointed at the first name inside it.
+    in_scope = contract_nodes({
+        "nodes": {path: node for path, node in nodes.items() if _contract_scope(path)}
+    })
     written = {
         path: {
             key: node[key] for key in (*MANIFEST_KEYS, "default", "link") if key in node
         }
-        for path, node in nodes.items()
-        if _contract_scope(path)
+        for path, node in in_scope.items()
     }
-    assert len(expected) > 90  # the three instruments, not an empty match
+    assert len(expected) > 100  # the three instruments and their mapping rows
     assert sorted(written) == sorted(expected)
     for path, node in expected.items():
         # walk() reports a missing units attribute as None, as the manifest does.
         assert written[path] == node, path
+
+
+# What a mapping row stamps on the dataset it links (phase 4b), not the pack's.
+MAPPING_STAMPS = (
+    "mapped_from",
+    "mapping_status",
+    "nds_local_name",
+    "nds_status",
+    "nds_confidence",
+    "registry_key",
+    "source_path",
+)
 
 
 def _as_pack_reference(node: dict, detector: str) -> dict:
@@ -220,6 +234,15 @@ def _as_pack_reference(node: dict, detector: str) -> dict:
     node = copy.deepcopy(node)
     attrs = node.pop("attrs", {})
     attrs.pop("detector_name", None)  # compose_shot's, not the pack's
+    if "mapped_from" in attrs:
+        for stamp in MAPPING_STAMPS:
+            attrs.pop(stamp, None)
+        node["mapped"] = True
+    if node.pop("nds_definition", None):  # a mapping's claim on the detector
+        for stamp in ("nds_definition_note", "nds_subentry", "mapping_status"):
+            attrs.pop(stamp, None)
+    if node.get("link") in MAPPING_ROW_NODES:
+        node.pop("link")  # a mapping row's second name for the pack's dataset
     if "target" in attrs:
         attrs["target"] = "/entry/detector" + attrs["target"].removeprefix(detector)
     if attrs:
@@ -229,24 +252,59 @@ def _as_pack_reference(node: dict, detector: str) -> dict:
     return node
 
 
+def _pack_subtree(nodes: dict, detector: str) -> dict:
+    """The detector's nodes as its pack wrote them, rebased to ``/entry/detector``.
+
+    Each object's canonical name is re-picked inside the pack's subtree: a
+    mapping row may give it a smaller name elsewhere (a subentry).
+    """
+    rebased = {}
+    aliases: dict[str, list[str]] = {}
+    for path, node in nodes.items():
+        if path != detector and not path.startswith(detector + "/"):
+            continue
+        relative = path.removeprefix(detector)
+        if relative.lstrip("/").split("/")[0] in AROUND_THE_PACK:
+            continue
+        if path in MAPPING_ROW_NODES:
+            continue
+        aliases.setdefault(node.get("link", path), []).append(path)
+        bare = {k: v for k, v in node.items() if k != "link"}
+        rebased["/entry/detector" + relative] = _as_pack_reference(bare, detector)
+    for paths in aliases.values():
+        canonical = "/entry/detector" + min(paths).removeprefix(detector)
+        for path in paths:
+            name = "/entry/detector" + path.removeprefix(detector)
+            if name != canonical:
+                rebased[name]["link"] = canonical
+    return rebased
+
+
+def _without_row_note(written: dict, node: dict) -> tuple[dict, dict]:
+    """A row's note becomes the dataset's description (as in shot-aligner)."""
+    node = copy.deepcopy(node)
+    for attrs in (written.get("attrs", {}), node.get("attrs", {})):
+        attrs.pop("description", None)
+    for each in (written, node):
+        if each.get("attrs") == {}:
+            each.pop("attrs")
+    return written, node
+
+
 def test_every_detector_subtree_equals_the_pack_reference(reference_container):
     nodes, _ = walk(reference_container)
     for pack, detector in DETECTORS.items():
         reference = json.loads(
             (FIXTURE / "packs" / f"{pack}.json").read_text(encoding="utf-8")
         )
-        rebased = {}
-        for path, node in nodes.items():
-            if path != detector and not path.startswith(detector + "/"):
-                continue
-            relative = path.removeprefix(detector)
-            if relative.lstrip("/").split("/")[0] in AROUND_THE_PACK:
-                continue
-            rebased["/entry/detector" + relative] = _as_pack_reference(node, detector)
+        rebased = _pack_subtree(nodes, detector)
         expected = {p: n for p, n in reference["nodes"].items() if p != "/entry"}
         assert sorted(rebased) == sorted(expected), pack
         for path, node in expected.items():
-            assert rebased[path] == node, (pack, path)
+            written = rebased[path]
+            if written.pop("mapped", False):
+                written, node = _without_row_note(written, node)
+            assert written == node, (pack, path)
 
 
 def test_the_container_names_its_shot(reference_container):
@@ -293,6 +351,14 @@ def test_the_container_names_its_shot(reference_container):
 def test_a_clean_shot_records_no_problems(reference_container):
     with h5py.File(reference_container, "r") as handle:
         assert "conversion_problems" not in handle["entry"]
+
+
+def test_mapping_rows_with_nothing_to_point_at_are_noted_apart(reference_container):
+    """As shot-aligner reports them; the fixture's raws lack those fields."""
+    with h5py.File(reference_container, "r") as handle:
+        note = handle["entry/mapping_problems/data"][()].decode()
+    assert "M1_Spec_Fib_Cer: mapping row 'peak_profile.roi' points at" in note
+    assert "which this acquisition did not write" in note
 
 
 # ---------------------------------------------------------------------------

@@ -24,6 +24,9 @@ What DAMNIT uses from them:
 ``hzdr-draco-0.2.0.json``
     NDS's DRACO instrument catalogue, the copy shot-aligner pins; the
     container writer names its groups from it (:func:`catalogue`).
+``mappings/*.json``
+    shot-aligner's per-instrument mapping rows (``config/mappings/``), read
+    by ``hzdr_packs.mapping_rows`` by ``instrument.id`` (phase 4b).
 """
 
 from __future__ import annotations

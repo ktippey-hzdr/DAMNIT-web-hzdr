@@ -1,0 +1,197 @@
+{
+  "$comment": "Reviewed NeXus mapping for one instrument. Rows are nexus-design-studio FieldMapping rows -- the same shape as its instrument-profile schema -- so they can be handed back to NDS as a profile. 'source' is ours: the path inside this instrument's detector group holding the value, which is what gets linked. A row with no source is a decision with nothing to point at yet. Edited here or in the review app's Formats tab.",
+  "instrument": "refl_spectrometer",
+  "instrumentId": "refl_spectrometer",
+  "instrumentIdStatus": "catalogue",
+  "$instrumentId": "The DRACO instrument catalogue's id for this instrument (NDS catalogs/instruments/hzdr-draco.yaml, hzdr-draco 0.2.0). 'catalogue': the catalogue has the entry. 'proposed': it does not yet, and the id is the catalogue's slug rule applied to the folder label, for the maintainer to add or correct.",
+  "ndsProfile": "profiles/irr8_spectrometer.yaml",
+  "$status": "'proposed' means NDS suggested these and nobody has checked them: they are recorded, shown in the app pre-filled, and DELIBERATELY NOT written into any container. 'reviewed' means a person went through them, and only then do they change the data.",
+  "status": "reviewed",
+  "definition": "NXoptical_spectroscopy",
+  "provenance": {
+    "decidedBy": "tippey27",
+    "decidedAt": "2026-09-28T11:43:33+00:00",
+    "rowCount": 11,
+    "basis": {
+      "autoAccepted": true,
+      "date": "2026_06_18",
+      "nds": "0.3.0",
+      "lowConfidence": [
+        "NDS confidence is low or advice was unavailable",
+        "absolute_irradiance: low confidence",
+        "averaging: low confidence",
+        "dark: low confidence",
+        "photon_counts: low confidence",
+        "reference: low confidence",
+        "smoothing: low confidence",
+        "spectrometer_name: low confidence"
+      ]
+    },
+    "firstDecidedAt": "2026-09-28T07:19:40+00:00",
+    "reconciliations": [
+      {
+        "at": "2026-10-04T10:27:58+00:00",
+        "automated": true,
+        "why": "phase 2a of HZDR_combo planning/NEXUS_OUTPUT_PLAN.md (decision 5): keyed by the catalogue's instrument.id and held to the NDS profile",
+        "instrumentId": "refl_spectrometer",
+        "instrumentIdStatus": "proposed",
+        "ndsProfile": "profiles/irr8_spectrometer.yaml",
+        "pack": "spectrometer_irr8"
+      },
+      {
+        "at": "2026-10-04T11:44:34+00:00",
+        "automated": true,
+        "why": "hzdr-draco 0.2.0 lists this id; the status follows the vendored catalogue",
+        "instrumentId": "refl_spectrometer",
+        "instrumentIdStatus": "catalogue",
+        "ndsProfile": "profiles/irr8_spectrometer.yaml",
+        "pack": "spectrometer_irr8"
+      }
+    ]
+  },
+  "mappings": [
+    {
+      "local_name": "integration_time",
+      "nexus_path": "/entry/Detector/start_time",
+      "nexus_class": "NXentry",
+      "nexus_attribute": "",
+      "status": "mapped",
+      "confidence": 0.78,
+      "note": "Matched by lightweight semantic token hint; review before production use.",
+      "units": "",
+      "source": "",
+      "nexus_path_template": "/entry/{instance}/start_time",
+      "group_instance": "Detector"
+    },
+    {
+      "local_name": "averaging",
+      "nexus_path": "/entry/Detector/collection/averaging",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "status": "custom",
+      "confidence": 0.35,
+      "note": "No seed mapping found; documented as custom field for review. AUTO DEFAULT: LOW CONFIDENCE",
+      "units": "",
+      "source": "",
+      "nexus_path_template": "/entry/{instance}/collection/averaging",
+      "group_instance": "Detector"
+    },
+    {
+      "local_name": "smoothing",
+      "nexus_path": "/entry/Detector/collection/smoothing",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "status": "custom",
+      "confidence": 0.35,
+      "note": "No seed mapping found; documented as custom field for review. AUTO DEFAULT: LOW CONFIDENCE",
+      "units": "",
+      "source": "",
+      "nexus_path_template": "/entry/{instance}/collection/smoothing",
+      "group_instance": "Detector"
+    },
+    {
+      "local_name": "spectrometer_name",
+      "nexus_path": "/entry/Detector/collection/spectrometer_name",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "status": "custom",
+      "confidence": 0.35,
+      "note": "No seed mapping found; documented as custom field for review. AUTO DEFAULT: LOW CONFIDENCE",
+      "units": "",
+      "source": "",
+      "nexus_path_template": "/entry/{instance}/collection/spectrometer_name",
+      "group_instance": "Detector"
+    },
+    {
+      "local_name": "detector_channel_type",
+      "nexus_path": "/entry/Detector/instrument/Detector/data",
+      "nexus_class": "NXdetector",
+      "nexus_attribute": "",
+      "status": "mapped",
+      "confidence": 0.78,
+      "note": "Matched by lightweight semantic token hint; review before production use.",
+      "units": "",
+      "source": "",
+      "nexus_path_template": "/entry/{instance}/instrument/Detector/data",
+      "group_instance": "Detector"
+    },
+    {
+      "local_name": "wavelength",
+      "nexus_path": "/entry/Detector/instrument/Detector/beam_refl_spectrometer/incident_wavelength",
+      "nexus_class": "NXbeam",
+      "nexus_attribute": "",
+      "status": "mapped",
+      "confidence": 0.78,
+      "note": "Matched by lightweight semantic token hint; review before production use.",
+      "units": "",
+      "source": "",
+      "nexus_path_template": "/entry/{instance}/instrument/Detector/beam_refl_spectrometer/incident_wavelength",
+      "group_instance": "Detector"
+    },
+    {
+      "local_name": "sample",
+      "nexus_path": "/entry/Detector/sample/name",
+      "nexus_class": "NXsample",
+      "nexus_attribute": "",
+      "status": "mapped",
+      "confidence": 0.78,
+      "note": "Matched by lightweight semantic token hint; review before production use.",
+      "units": "",
+      "source": "",
+      "nexus_path_template": "/entry/{instance}/sample/name",
+      "group_instance": "Detector"
+    },
+    {
+      "local_name": "dark",
+      "nexus_path": "/entry/Detector/collection/dark",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "status": "custom",
+      "confidence": 0.35,
+      "note": "No seed mapping found; documented as custom field for review. AUTO DEFAULT: LOW CONFIDENCE",
+      "units": "",
+      "source": "",
+      "nexus_path_template": "/entry/{instance}/collection/dark",
+      "group_instance": "Detector"
+    },
+    {
+      "local_name": "reference",
+      "nexus_path": "/entry/Detector/collection/reference",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "status": "custom",
+      "confidence": 0.35,
+      "note": "No seed mapping found; documented as custom field for review. AUTO DEFAULT: LOW CONFIDENCE",
+      "units": "",
+      "source": "",
+      "nexus_path_template": "/entry/{instance}/collection/reference",
+      "group_instance": "Detector"
+    },
+    {
+      "local_name": "absolute_irradiance",
+      "nexus_path": "/entry/Detector/collection/absolute_irradiance",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "status": "custom",
+      "confidence": 0.35,
+      "note": "No seed mapping found; documented as custom field for review. AUTO DEFAULT: LOW CONFIDENCE",
+      "units": "",
+      "source": "",
+      "nexus_path_template": "/entry/{instance}/collection/absolute_irradiance",
+      "group_instance": "Detector"
+    },
+    {
+      "local_name": "photon_counts",
+      "nexus_path": "/entry/Detector/collection/photon_counts",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "status": "custom",
+      "confidence": 0.35,
+      "note": "No seed mapping found; documented as custom field for review. AUTO DEFAULT: LOW CONFIDENCE",
+      "units": "",
+      "source": "",
+      "nexus_path_template": "/entry/{instance}/collection/photon_counts",
+      "group_instance": "Detector"
+    }
+  ]
+}

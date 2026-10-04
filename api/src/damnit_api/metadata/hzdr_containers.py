@@ -53,7 +53,7 @@ from .hzdr_nexus import (
     single_writer_lock,
     write_json_atomic,
 )
-from .hzdr_packs import _h5, vendor
+from .hzdr_packs import _h5, mapping_rows, vendor
 from .hzdr_packs.vendor.nxwrite import _safe, container_groups
 
 if TYPE_CHECKING:
@@ -589,10 +589,15 @@ def plan_shots(
 
 def _source_files() -> list[Path]:
     packs = Path(hzdr_packs.__file__).resolve().parent
+    # The mapping rows are data, fingerprinted per instrument (see
+    # fingerprint()), so a change to one rebuilds only the shots holding it.
     found = [
         p
         for p in packs.rglob("*")
-        if p.is_file() and p.suffix in {".py", ".json"} and "__pycache__" not in p.parts
+        if p.is_file()
+        and p.suffix in {".py", ".json"}
+        and "__pycache__" not in p.parts
+        and p.parent != mapping_rows.MAPPING_DIR
     ]
     return [*sorted(found), Path(__file__).resolve()]
 
@@ -680,6 +685,11 @@ def fingerprint(
             "labfrog": plan.labfrog,
             "problems": plan.problems,
         },
+        "mappings": {
+            iid: mapping.sha256
+            for iid in sorted({a.instrument_id for a in plan.acquisitions})
+            if (mapping := mapping_rows.for_instrument(iid)) is not None
+        },
         "acquisitions": [
             {
                 **a.facts(),
@@ -705,6 +715,11 @@ class ShotResult:
     missing: list[str] = field(default_factory=list)
     detectors: int = 0
     omitted: int = 0
+    # (detector path, instrument.id) of each detector kept, for the mapping rows.
+    kept: list[tuple[str, str]] = field(default_factory=list)
+    # Mapping rows that could not be written (phase 4b): notes about the
+    # mapping files, kept apart from what could not be converted.
+    mapping_problems: list[str] = field(default_factory=list)
 
 
 def _keeps(detector: h5py.Group) -> bool:
@@ -835,6 +850,7 @@ def _write_acquisition(
         )
         return
     result.detectors += 1
+    result.kept.append((detector.name, acquisition.instrument_id))
     role = acquisition.timing_role
     _h5.field(
         detector,
@@ -845,6 +861,30 @@ def _write_acquisition(
         ),
     )
     _write_file_metadata(detector, acquisition)
+
+
+def _apply_mapping_rows(handle: h5py.File, plan: ShotPlan, result: ShotResult) -> None:
+    """shot-aligner's per-instrument mapping rows, applied last (phase 4b).
+
+    As in shot-aligner's build: after every detector and the shot's own fields
+    are written, so a row links what is there. An instrument with no vendored
+    mapping gets none; a row that cannot be written is a problem, not a
+    failure.
+    """
+    sole = len({a.instrument_id for a in plan.acquisitions}) == 1
+    for detector_path, instrument_id in result.kept:
+        mapping = mapping_rows.for_instrument(instrument_id)
+        if mapping is None:
+            continue
+        try:
+            result.mapping_problems += mapping_rows.apply_to(
+                handle, detector_path, mapping, sole_instrument=sole
+            )
+        except Exception as error:  # one mapping costs its rows, not the shot
+            result.mapping_problems.append(
+                f"{mapping.instrument}: mapping rows failed: "
+                f"{type(error).__name__}: {error}"
+            )
 
 
 def _write_shot(
@@ -895,6 +935,17 @@ def _write_shot(
     result = ShotResult(problems=[*plan.problems, *notes])
     for acquisition in plan.acquisitions:
         _write_acquisition(entry, acquisition, read_path, result)
+    _apply_mapping_rows(handle, plan, result)
+    if result.mapping_problems:
+        _h5.note(
+            entry,
+            "mapping_problems",
+            type="text/plain",
+            data="\n".join(result.mapping_problems),
+            description="mapping rows (shot-aligner config/mappings, vendored) "
+            "that were not written for this shot, one line each: a source this "
+            "acquisition did not write, a target already taken, a stale placement",
+        )
     if result.problems:
         _h5.note(
             entry,

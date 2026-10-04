@@ -38,10 +38,13 @@ sync = _load()
 
 def test_source_json_pins_every_vendored_file():
     record = json.loads((sync.DEST / "SOURCE.json").read_text(encoding="utf-8"))
-    assert set(record["files"]) == set(sync.FILES)
+    files = sync._files(None, record)
+    assert set(record["files"]) == set(files)
+    assert set(sync.FILES) < set(files)  # plus the mapping rows (phase 4b)
+    assert any(name.startswith("mappings/") for name in files)
     assert record["commit"]
     for name, entry in record["files"].items():
-        assert entry["from"] == sync.FILES[name]
+        assert entry["from"] == files[name]
         digest = hashlib.sha256((sync.DEST / name).read_bytes()).hexdigest()
         assert digest == entry["sha256"], name
 
@@ -52,7 +55,8 @@ def test_without_the_sibling_only_the_hashes_are_checked(tmp_path, capsys):
 
 
 def _fake_shot_aligner(root: Path) -> Path:
-    for name, source in sync.FILES.items():
+    record = json.loads((sync.DEST / "SOURCE.json").read_text(encoding="utf-8"))
+    for name, source in sync._files(None, record).items():
         target = root / source
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(sync.DEST / name, target)
@@ -89,3 +93,25 @@ def test_apply_copies_and_repins(tmp_path):
         record["files"]["nxwrite.py"]["sha256"]
         == hashlib.sha256((repo / sync.FILES["nxwrite.py"]).read_bytes()).hexdigest()
     )
+
+
+def test_a_mapping_added_upstream_is_drift_and_apply_brings_it(tmp_path):
+    repo = _fake_shot_aligner(tmp_path / "repo")
+    (repo / sync._MAPPINGS / "New_Camera.json").write_text("{}", encoding="utf-8")
+    dest = tmp_path / "vendor"
+    shutil.copytree(sync.DEST, dest)
+    assert any("New_Camera.json" in p for p in sync.check(repo, dest))
+    sync.apply(repo, force=True, dest=dest)
+    assert (dest / "mappings" / "New_Camera.json").is_file()
+    assert sync.check(repo, dest) == []
+
+
+def test_a_mapping_removed_upstream_is_removed_by_apply(tmp_path):
+    repo = _fake_shot_aligner(tmp_path / "repo")
+    (repo / sync._MAPPINGS / "BAM.json").unlink()
+    dest = tmp_path / "vendor"
+    shutil.copytree(sync.DEST, dest)
+    assert sync.check(repo, dest)
+    sync.apply(repo, force=True, dest=dest)
+    assert not (dest / "mappings" / "BAM.json").exists()
+    assert sync.check(repo, dest) == []

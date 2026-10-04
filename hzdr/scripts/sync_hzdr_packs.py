@@ -63,15 +63,37 @@ FILES = {
 }
 
 
+# shot-aligner's per-instrument mapping rows (campaign output phase 4b), every
+# file in its config/mappings/ but the README, vendored as mappings/<name>.
+_MAPPINGS = "shot_aligner/config/mappings"
+
+
+def _files(repo: Path | None, recorded: dict | None = None) -> dict[str, str]:
+    """``FILES`` plus the mapping files: shot-aligner's when it is there, else
+    the ones ``SOURCE.json`` records (so a check without the sibling still
+    finds a missing or changed copy)."""
+    files = dict(FILES)
+    if repo is not None and (repo / _MAPPINGS).is_dir():
+        for path in sorted((repo / _MAPPINGS).glob("*.json")):
+            files[f"mappings/{path.name}"] = f"{_MAPPINGS}/{path.name}"
+    elif recorded is not None:
+        for name, entry in recorded["files"].items():
+            if name.startswith("mappings/"):
+                files[name] = entry["from"]
+    return files
+
+
 def check(repo: Path, dest: Path = DEST) -> list[str]:
     problems = []
     recorded = json.loads((dest / MANIFEST).read_text(encoding="utf-8"))
-    if set(recorded["files"]) != set(FILES):
+    present = (repo / FILES["img_csv.py"]).is_file()
+    files_now = _files(repo if present else None, recorded)
+    if set(recorded["files"]) != set(files_now):
         problems.append(
-            f"{MANIFEST} lists {sorted(set(recorded['files']) ^ set(FILES))} "
+            f"{MANIFEST} lists {sorted(set(recorded['files']) ^ set(files_now))} "
             "differently from the files this script vendors"
         )
-    for name in FILES:
+    for name in files_now:
         path = dest / name
         if not path.is_file():
             problems.append(f"{name}: not vendored")
@@ -81,16 +103,16 @@ def check(repo: Path, dest: Path = DEST) -> list[str]:
         ):
             problems.append(f"{name}: does not match its hash in {MANIFEST}")
 
-    if not (repo / FILES["img_csv.py"]).is_file():
+    if not present:
         print(f"  Skipped the shot-aligner comparison (not found at {repo})")
         return problems
-    for name, source in FILES.items():
+    for name, source in files_now.items():
         upstream, vendored = repo / source, dest / name
         if not upstream.is_file():
             problems.append(f"{name}: {source} no longer in shot-aligner")
         elif vendored.is_file() and upstream.read_bytes() != vendored.read_bytes():
             problems.append(f"{name}: differs from shot-aligner's {source}")
-    head = _git(repo, "log", "-1", "--format=%h", "--", *FILES.values())
+    head = _git(repo, "log", "-1", "--format=%h", "--", *files_now.values())
     if not problems and head and head != recorded.get("commit"):
         print(
             f"  Note: files agree, but {MANIFEST} names commit "
@@ -101,26 +123,30 @@ def check(repo: Path, dest: Path = DEST) -> list[str]:
 
 
 def apply(repo: Path, force: bool, dest: Path = DEST) -> None:
-    missing = [s for s in FILES.values() if not (repo / s).is_file()]
+    wanted = _files(repo)
+    missing = [s for s in wanted.values() if not (repo / s).is_file()]
     if missing:
         sys.exit(f"not found in {repo}: {', '.join(missing)}")
-    if not force and _git(repo, "status", "--porcelain", "--", *FILES.values()):
+    if not force and _git(repo, "status", "--porcelain", "--", *wanted.values()):
         sys.exit(
             f"Refusing to apply: uncommitted changes to the vendored sources in "
             f"{repo}. Commit there first, or re-run with --force."
         )
-    dest.mkdir(parents=True, exist_ok=True)
+    (dest / "mappings").mkdir(parents=True, exist_ok=True)
+    for stale in (dest / "mappings").glob("*.json"):
+        if f"mappings/{stale.name}" not in wanted:
+            stale.unlink()  # a mapping shot-aligner removed
     files = {}
-    for name, source in FILES.items():
+    for name, source in wanted.items():
         shutil.copyfile(repo / source, dest / name)
         files[name] = {"from": source, "sha256": _sha256(dest / name)}
     record = {
-        "commit": _git(repo, "log", "-1", "--format=%h", "--", *FILES.values()),
+        "commit": _git(repo, "log", "-1", "--format=%h", "--", *wanted.values()),
         "files": files,
         "repository": REPOSITORY,
         "source": (
-            "shot-aligner readers, pack helpers, pack manifests and the "
-            "instrument catalogue"
+            "shot-aligner readers, pack helpers, pack manifests, the "
+            "instrument catalogue and the per-instrument mapping rows"
         ),
     }
     with (dest / MANIFEST).open("w", encoding="utf-8", newline="\n") as stream:
