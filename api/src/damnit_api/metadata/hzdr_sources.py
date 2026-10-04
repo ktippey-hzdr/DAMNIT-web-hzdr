@@ -7,9 +7,9 @@ from typing import Any
 import orjson
 from pydantic import BaseModel, Field, JsonValue, computed_field
 
+from ..shared.hzdr_paths import map_path, parse_path_map
 from ..shared.settings import MetadataSettings
 from .hzdr_event import HZDRPayloadRef
-from .hzdr_paths import map_path, parse_path_map
 
 
 class HZDRSource(BaseModel):
@@ -263,12 +263,16 @@ class HZDRSourceProvider:
         self.settings = settings
         self._path_rules = parse_path_map(settings.path_map)
 
-    def _local_hdf5_path(self, shot: HZDRShot) -> Path | None:
+    def local_hdf5_path(self, shot: HZDRShot) -> Path | None:
         """The shot's HDF5 path as this host can open it (see hzdr_paths)."""
         return map_path(
             None if shot.hdf5_path is None else str(shot.hdf5_path),
             self._path_rules,
         )
+
+    def with_local_paths(self, shot: HZDRShot) -> HZDRShot:
+        """A copy of ``shot`` whose ``hdf5_path`` is the one this host opens."""
+        return shot.model_copy(update={"hdf5_path": self.local_hdf5_path(shot)})
 
     def list_sources(self) -> list[HZDRSource]:
         """List available HZDR sources from local files or MongoDB."""
@@ -340,7 +344,7 @@ class HZDRSourceProvider:
             }
         )
         detail = HZDRShotDetail(shot=shot)
-        local_path = self._local_hdf5_path(shot)
+        local_path = self.local_hdf5_path(shot)
         if local_path is None:
             return detail
 
@@ -361,7 +365,7 @@ class HZDRSourceProvider:
         shot = self.get_shot(key, shot_number)
         if shot is None:
             return None
-        local_path = self._local_hdf5_path(shot)
+        local_path = self.local_hdf5_path(shot)
         if local_path is None or not local_path.exists():
             return None
         return preview_hdf5_dataset(local_path, dataset_name)

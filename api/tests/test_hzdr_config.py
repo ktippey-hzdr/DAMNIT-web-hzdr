@@ -91,11 +91,14 @@ def test_app_starts_without_mymdc():
     assert damnit_api._mymdc.CLIENT is None
 
 
-def test_path_map_env_var_reaches_the_metadata_settings(monkeypatch):
+def test_path_map_env_var_reaches_the_metadata_settings(monkeypatch, tmp_path):
     """The documented knob is DW_API_METADATA__PATH_MAP and defaults to empty."""
     spec = "/bigdata=/mnt/bigdata,Z:/bigdata=/mnt/bigdata"
-    assert Settings().metadata.path_map == ""
+    # Independent of a deployment's api/.env and the shell environment.
+    monkeypatch.delenv("DW_API_METADATA__PATH_MAP", raising=False)
+    monkeypatch.setenv("DW_API_DAMNIT_PATH", str(tmp_path))  # local mode
+    assert Settings(_env_file=None).metadata.path_map == ""
 
     monkeypatch.setenv("DW_API_METADATA__PATH_MAP", spec)
 
-    assert Settings().metadata.path_map == spec
+    assert Settings(_env_file=None).metadata.path_map == spec
