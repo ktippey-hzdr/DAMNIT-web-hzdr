@@ -1409,23 +1409,27 @@ def test_the_master_links_each_container_in_place(campaign):
 
     _republish(campaign)
     with h5py.File(campaign["master"], "r") as master:
-        links = master["entry/shot_containers"]
-        assert links.attrs["NX_class"] == "NXcollection"
-        names = sorted(n for n in links if n not in {"shot_key", "container"})
+        # One entry per shot at the root, beside the campaign's /entry.
+        names = sorted(n for n in master if n != "entry")
         assert names == [f"20251201_{n:06d}" for n in range(1042, 1046)]
-        link = links.get("20251201_001042", getlink=True)
+        link = master.get("20251201_001042", getlink=True)
         assert isinstance(link, h5py.ExternalLink)
         assert link.filename == "shots/20251201_001042.nxs"
         assert link.path == "/entry"
-        keys = [k.decode() for k in links["shot_key"][...]]
-        stems = [c.decode() for c in links["container"][...]]
+        assert master["20251201_001042"].attrs["NX_class"] == "NXentry"
+        index = master["entry/shot_containers"]
+        assert index.attrs["NX_class"] == "NXcollection"
+        assert sorted(index) == ["container", "shot_key"]  # an index, no links
+        keys = [k.decode() for k in index["shot_key"][...]]
+        stems = [c.decode() for c in index["container"][...]]
+        assert stems == names
         assert (
             dict(zip(stems, keys, strict=True))["20251201_001042"]
-            == (links["20251201_001042"].attrs["shot_key"])
+            == master["20251201_001042"].attrs["shot_key"]
         )
         # A frame read through the master is the container's own.
-        frame = _frame(links["20251201_001042"])
-        through_master = links["20251201_001042"][frame][...]
+        frame = _frame(master["20251201_001042"])
+        through_master = master["20251201_001042"][frame][...]
     with h5py.File(hc.shots_dir(campaign["master"]) / CONTAINER, "r") as container:
         assert np.array_equal(through_master, container["entry"][frame][...])
 
@@ -1437,9 +1441,8 @@ def test_the_master_links_each_container_in_place(campaign):
 
 def test_a_master_built_before_any_container_links_none(campaign):
     with h5py.File(campaign["master"], "r") as master:
-        links = master["entry/shot_containers"]
-        assert list(links["container"][...]) == []
-        assert [n for n in links if n not in {"shot_key", "container"}] == []
+        assert list(master["entry/shot_containers/container"][...]) == []
+        assert list(master) == ["entry"]
 
 
 def test_a_file_of_another_shot_under_the_name_is_not_linked(campaign):
@@ -1476,7 +1479,7 @@ def test_a_shot_that_left_the_master_loses_its_container(campaign):
     for keep in (".convert.pending", ".convert.lock.guard", "notes.nxs"):
         assert (shots / keep).exists(), keep
     with h5py.File(campaign["master"], "r") as master:
-        assert "20251201_001045" not in master["entry/shot_containers"]
+        assert "20251201_001045" not in master
 
 
 def test_a_master_with_no_acquisition_removes_nothing(campaign, tmp_path):
@@ -1499,9 +1502,9 @@ def test_the_shot_detail_lists_its_container_through_the_master(campaign):
     hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
     _republish(campaign)
     with h5py.File(campaign["master"], "r") as master:
-        shot_key = master["entry/shot_containers"]["20251201_001042"].attrs["shot_key"]
+        shot_key = master["20251201_001042"].attrs["shot_key"]
     link, datasets = list_container_datasets(campaign["master"], shot_key)
-    assert link == "entry/shot_containers/20251201_001042"
+    assert link == "20251201_001042"
     names = {d.name for d in datasets}
     assert names
     # A dataset a mapping row linked into the definition subentry is listed
@@ -1535,10 +1538,8 @@ def test_a_frame_previews_through_the_master(campaign):
     hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
     _republish(campaign)
     with h5py.File(campaign["master"], "r") as master:
-        frame = _frame(master["entry/shot_containers/20251201_001042"])
-    preview = preview_hdf5_dataset(
-        campaign["master"], f"entry/shot_containers/20251201_001042/{frame}"
-    )
+        frame = _frame(master["20251201_001042"])
+    preview = preview_hdf5_dataset(campaign["master"], f"20251201_001042/{frame}")
     assert preview.preview_kind == "image"
 
 
@@ -1675,3 +1676,24 @@ def test_relink_asks_for_a_build_when_the_master_cannot_be_read(campaign, monkey
 
     monkeypatch.setattr(hc, "linked_containers", busy)
     assert hc.relink_needed(campaign["master"], [run]) == sorted(run.written)
+
+
+def test_a_rebuild_drops_the_previous_masters_links(campaign):
+    """A seeded previous master's root links are replaced, never kept."""
+    from damnit_api.metadata.hzdr_nexus import (
+        _write_shot_container_links,
+        shot_container_links,
+    )
+
+    hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    _republish(campaign)
+    with h5py.File(campaign["master"], "r+") as master:
+        master["20240101_000001"] = h5py.ExternalLink(
+            "shots/20240101_000001.nxs", "/entry"
+        )
+        master["notes"] = h5py.ExternalLink("elsewhere.h5", "/")  # not a container
+        assert "20240101_000001" in shot_container_links(master)
+        assert "notes" not in shot_container_links(master)
+        _write_shot_container_links(master, [], [], output_path=campaign["master"])
+        assert shot_container_links(master) == {}
+        assert "notes" in master  # only links into shots/ are the builder's

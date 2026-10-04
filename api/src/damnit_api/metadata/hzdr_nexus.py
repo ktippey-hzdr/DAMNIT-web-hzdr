@@ -2174,7 +2174,7 @@ def write_nexus_bridge(
             write_nexus_detector_groups(entry, products)
             # Every link targets a container already renamed into place, and
             # the master is renamed last: it never names a missing container.
-            _write_shot_container_links(entry, shots, events, output_path=output_path)
+            _write_shot_container_links(handle, shots, events, output_path=output_path)
 
         replace_with_retry(temp_path, output_path)
     except BaseException:
@@ -2552,7 +2552,8 @@ LABFROG_LOCAL_COUNT_DESCRIPTION = (
 SHOT_IDENTITY_ATTR = "damnit_shot_identity"
 
 # Shot containers (campaign output phases 3-4): one file per shot under
-# <campaign folder>/shots/, linked from the master's /entry/shot_containers.
+# <campaign folder>/shots/, linked from the master's root (indexed in
+# /entry/shot_containers).
 SHOTS_DIRNAME = "shots"
 SHOT_CONTAINERS_GROUP = "shot_containers"
 _SHOT_KEY_PARTS = re.compile(
@@ -2606,34 +2607,53 @@ def _container_in_place(path: Path, shot_key: str) -> bool:
         return False
 
 
+def shot_container_links(handle: h5py.File) -> dict[str, h5py.ExternalLink]:
+    """The master's links to its containers: root members linking into ``shots/``."""
+    links = {}
+    for name in handle:
+        link = handle.get(name, getlink=True)
+        if isinstance(link, h5py.ExternalLink) and link.filename.startswith(
+            f"{SHOTS_DIRNAME}/"
+        ):
+            links[str(name)] = link
+    return links
+
+
 def _write_shot_container_links(
-    entry: h5py.Group,
+    handle: h5py.File,
     shots: list[dict[str, Any]],
     events: list[dict[str, Any]],
     *,
     output_path: Path,
 ) -> int:
-    """Link each shot's container from ``/entry/shot_containers``; return the count.
+    """Link each shot's container from the master's root; return the count.
 
-    One relative ``ExternalLink`` per container already in place, named by the
-    container's stem (``20251201_001044``) and pointing at its ``/entry``, so
-    the campaign folder travels as one unit and ``silx``/h5py follow the links
-    from the master. ``shot_key`` and ``container`` datasets beside the links
-    let a reader join ``/entry/shots`` without parsing names. The group is an
-    ``NXcollection`` so validating the master does not descend into the
-    containers, and it is rewritten whole on every build, so it never names a
-    container the shot table no longer holds. Containers are written by the
-    worker, outside this lock; one not yet in place is linked by the next
-    build (the worker asks for it).
+    One relative ``ExternalLink("shots/<name>", "/entry")`` per container in
+    place, at the root and named by the container's stem (``20251201_001044``),
+    so the master is a multi-entry NeXus file: ``/entry`` (the campaign,
+    certified against NXhzdr_target) beside one ``NXentry`` per shot, the way
+    shot-aligner's masters are built. Under ``/entry`` a validator would read
+    the containers as part of the campaign entry and refuse them; at the root
+    each is an entry of its own. Relative, so the campaign folder travels as
+    one unit and ``silx``/h5py follow the links. ``/entry/shot_containers``
+    (``NXcollection``) indexes them with ``shot_key``/``container`` datasets,
+    so a reader joins ``/entry/shots`` without parsing names. Both are
+    rewritten whole on every build (a seeded previous master's links are
+    dropped first), so neither names a container the shot table no longer
+    holds. Containers are written by the worker, outside this lock; one not
+    yet in place is linked by the next build (the worker asks for it).
     """
+    for name in shot_container_links(handle):
+        del handle[name]
+    entry = handle["entry"]
     group = _replace_group(entry, SHOT_CONTAINERS_GROUP)
     group.attrs["NX_class"] = "NXcollection"
     group.attrs["damnit_source"] = "shot_containers"
     group.attrs["description"] = (
-        "HDF5 external links to the per-shot NeXus containers in "
-        f"{SHOTS_DIRNAME}/, one per shot whose container is in place; member "
-        "name = container stem. Join on the shot_key dataset here, never by "
-        "position in /entry/shots."
+        "Index of the per-shot NeXus containers in "
+        f"{SHOTS_DIRNAME}/ this file links: each is an external link at the "
+        "file's root named by its container stem, pointing at the container's "
+        "/entry. Join /entry/shots on shot_key here, never by position."
     )
     folder = output_path.parent / SHOTS_DIRNAME
     with_files = {
@@ -2656,10 +2676,10 @@ def _write_shot_container_links(
                 name = shot_container_name(shot_key)
             except ValueError:
                 continue
-            if not _container_in_place(folder / name, shot_key):
-                continue
             stem = name.removesuffix(".nxs")
-            group[stem] = h5py.ExternalLink(f"{SHOTS_DIRNAME}/{name}", "/entry")
+            if stem in handle or not _container_in_place(folder / name, shot_key):
+                continue
+            handle[stem] = h5py.ExternalLink(f"{SHOTS_DIRNAME}/{name}", "/entry")
             linked_keys.append(shot_key)
             linked_names.append(stem)
     string = h5py.string_dtype(encoding="utf-8")
