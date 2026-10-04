@@ -46,6 +46,10 @@ _DEFAULT_WORKER_SCRIPT = (
     Path(__file__).resolve().parents[3] / "scripts" / "hzdr-container-worker.py"
 )
 WORKER_LOG_NAME = ".hzdr-container-worker.log"
+_DEFAULT_VALIDATION_SCRIPT = (
+    Path(__file__).resolve().parents[3] / "scripts" / "hzdr-nexus-validate.py"
+)
+VALIDATION_LOG_NAME = ".hzdr-validation.log"
 # hzdr-container-worker.py's exit status for "containers written that the
 # published master does not link yet" (hzdr_containers.RELINK_EXIT).
 RELINK_EXIT = 3
@@ -88,6 +92,7 @@ class BuilderTrigger:
         events_spools: Sequence[tuple[Path, str]] = (),
         trigger_spools: Sequence[tuple[Path, str]] = (),
         worker_launcher: WorkerLauncher | None = None,
+        validation_launcher: WorkerLauncher | None = None,
     ) -> None:
         self._settings = settings
         self._events_jsonl = list(events_jsonl)
@@ -103,6 +108,7 @@ class BuilderTrigger:
         self._trigger_spools = list(trigger_spools)
         self._runner = runner or self._run_subprocess
         self._worker_launcher = worker_launcher or self._spawn_worker
+        self._validation_launcher = validation_launcher or self._spawn_validation
         self._workers: set[asyncio.Task] = set()
         self._wake = asyncio.Event()
 
@@ -131,12 +137,22 @@ class BuilderTrigger:
             return cmd
         return [python, str(script), "--master", str(s.output_nexus)]
 
-    def _worker_log(self) -> Path:
+    def validation_command(self) -> list[str]:
+        """The ``hzdr-nexus-validate.py`` command, run in NDS's environment."""
+        s = self._settings
+        script = s.validation_script or _DEFAULT_VALIDATION_SCRIPT
+        if s.output_root is not None:
+            where = ["--output-root", str(s.output_root)]
+        else:
+            where = ["--master", str(s.output_nexus)]
+        return [s.validation_python, str(script), *where]
+
+    def _worker_log(self, name: str = WORKER_LOG_NAME) -> Path:
         s = self._settings
         if s.output_root is not None:
-            return s.output_root / WORKER_LOG_NAME
+            return s.output_root / name
         folder = s.output_nexus.parent if s.output_nexus is not None else Path()
-        return folder / WORKER_LOG_NAME
+        return folder / name
 
     def _single_campaign_args(self) -> list[str]:
         """The one configured campaign (``OUTPUT_NEXUS``), as before plan C2."""
@@ -234,26 +250,66 @@ class BuilderTrigger:
         not to a pipe, so it outlives an API restart without blocking on a
         full pipe; conversion is resumable either way.
         """
-        log_path = self._worker_log()
+        proc = await self._spawn(cmd, self._worker_log())
+        task = asyncio.create_task(self._reap_worker(proc))
+        self._workers.add(task)
+        task.add_done_callback(self._workers.discard)
+
+    async def _spawn_validation(self, cmd: Sequence[str]) -> None:
+        """Start the validation gate like the worker, logging to its own file."""
+        proc = await self._spawn(cmd, self._worker_log(VALIDATION_LOG_NAME))
+        task = asyncio.create_task(self._reap_validation(proc))
+        self._workers.add(task)
+        task.add_done_callback(self._workers.discard)
+
+    @staticmethod
+    def _rotate(log_path: Path) -> None:
+        """Make the log's folder; past the size limit keep one older generation."""
         log_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             if log_path.stat().st_size > WORKER_LOG_MAX_BYTES:
                 log_path.replace(log_path.with_name(log_path.name + ".1"))
         except OSError:
             pass  # no log yet, or another start rotated it first
+
+    async def _spawn(
+        self, cmd: Sequence[str], log_path: Path
+    ) -> asyncio.subprocess.Process:
+        self._rotate(log_path)
         with log_path.open("ab") as log:
-            proc = await asyncio.create_subprocess_exec(
+            return await asyncio.create_subprocess_exec(
                 *cmd,
                 stdout=log,
                 stderr=asyncio.subprocess.STDOUT,
                 start_new_session=True,
             )
-        task = asyncio.create_task(self._reap_worker(proc))
-        self._workers.add(task)
-        task.add_done_callback(self._workers.discard)
 
     async def _reap_worker(self, proc: asyncio.subprocess.Process) -> None:
         self.worker_finished(await proc.wait())
+        # The containers are as this worker left them: check them and the master.
+        await self._start_validation("after the container worker")
+
+    @staticmethod
+    async def _reap_validation(proc: asyncio.subprocess.Process) -> None:
+        returncode = await proc.wait()
+        if returncode:
+            logger.error(
+                "Auto-trigger: NeXus validation failed (exit %d); see %s",
+                returncode,
+                VALIDATION_LOG_NAME,
+            )
+        else:
+            logger.info("Auto-trigger: NeXus validation passed")
+
+    async def _start_validation(self, when: str) -> None:
+        if not self._settings.validation_python:
+            return
+        cmd = self.validation_command()
+        logger.info("Auto-trigger: starting NeXus validation (%s)", when)
+        try:
+            await self._validation_launcher(cmd)
+        except Exception:
+            logger.exception("Auto-trigger: NeXus validation failed to start")
 
     def worker_finished(self, returncode: int) -> None:
         """Log a worker's exit; one that left unlinked containers asks for a build.
@@ -304,7 +360,10 @@ class BuilderTrigger:
             return
         if returncode == 0:
             logger.info("Auto-trigger: builder finished successfully")
-            await self._start_container_worker("after")
+            if self._settings.containers_enabled:
+                await self._start_container_worker("after")  # validates when done
+            else:
+                await self._start_validation("after the build")
         else:
             logger.error(
                 "Auto-trigger: builder exited %d: %s",

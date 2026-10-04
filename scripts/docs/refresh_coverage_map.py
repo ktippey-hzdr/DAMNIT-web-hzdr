@@ -115,6 +115,7 @@ AREAS = (
         tests=(
             f"{T}/test_hzdr_containers.py",
             f"{T}/test_hzdr_mapping_rows.py",
+            f"{T}/test_hzdr_nexus_validate.py",
             f"{T}/test_hzdr_packs.py",
             f"{T}/test_hzdr_pack_readers.py",
             f"{T}/test_hzdr_packs_sync.py",

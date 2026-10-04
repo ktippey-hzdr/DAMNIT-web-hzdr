@@ -548,3 +548,74 @@ def test_a_worker_that_left_containers_to_link_asks_for_a_build(
     trigger = BuilderTrigger(_settings(tmp_path))
     trigger.worker_finished(returncode)
     assert trigger._wake.is_set() is rebuilds
+
+
+# --- Phase 5: the NeXus validation gate after each build's worker -------------
+
+
+class _Proc:
+    def __init__(self, returncode: int) -> None:
+        self.returncode = returncode
+
+    async def wait(self) -> int:
+        return self.returncode
+
+
+def test_validation_is_off_by_default(tmp_path):
+    assert HZDRBuilderSettings().validation_python == ""
+
+
+@pytest.mark.asyncio
+async def test_without_containers_validation_follows_the_build(tmp_path):
+    log: list[str] = []
+    validations = _RecordingLauncher(log)
+    trigger = BuilderTrigger(
+        _settings(tmp_path, validation_python="/nds/.venv/bin/python"),
+        runner=_ordered_runner(log),
+        validation_launcher=validations,
+    )
+    await trigger._run_builder_once()
+    assert len(validations.calls) == 1
+    cmd = validations.calls[0]
+    assert cmd[0] == "/nds/.venv/bin/python"
+    assert cmd[1].endswith("hzdr-nexus-validate.py")
+    assert cmd[2:] == ["--master", str(tmp_path / "campaign.nxs")]
+
+
+@pytest.mark.asyncio
+async def test_with_containers_validation_follows_the_worker(tmp_path):
+    log: list[str] = []
+    validations = _RecordingLauncher([])
+    trigger = BuilderTrigger(
+        _settings(tmp_path, containers_enabled=True, validation_python="/nds/python"),
+        runner=_ordered_runner(log),
+        worker_launcher=_RecordingLauncher(log),
+        validation_launcher=validations,
+    )
+    await trigger._run_builder_once()
+    assert validations.calls == []  # not before the containers are done
+    await trigger._reap_worker(_Proc(0))
+    assert validations.calls == [trigger.validation_command()]
+
+
+@pytest.mark.asyncio
+async def test_no_validation_unless_configured(tmp_path):
+    validations = _RecordingLauncher([])
+    trigger = BuilderTrigger(
+        _settings(tmp_path), runner=_ordered_runner([]), validation_launcher=validations
+    )
+    await trigger._run_builder_once()
+    await trigger._reap_worker(_Proc(0))
+    assert validations.calls == []
+
+
+def test_multi_campaign_validation_covers_the_root(tmp_path):
+    trigger = BuilderTrigger(
+        _settings(
+            tmp_path,
+            output_nexus=None,
+            output_root=tmp_path / "out",
+            validation_python="py",
+        )
+    )
+    assert trigger.validation_command()[2:] == ["--output-root", str(tmp_path / "out")]

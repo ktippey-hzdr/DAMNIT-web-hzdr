@@ -277,6 +277,14 @@ class HZDRBuilderSettings(BaseModel):
     # are converted again once a campaign claims them.
     containers_include_unassigned: bool = False
     container_worker_script: Path | None = None
+    # NeXus validation gate (campaign output plan phase 5): a Python that has
+    # nexus-design-studio and pynxtools (NDS's own environment, e.g.
+    # <nexus-design-studio>/.venv/bin/python). Set, the trigger runs
+    # hzdr-nexus-validate.py after each build's container worker (or after the
+    # build, without containers), writing <campaign folder>/.validation.json
+    # and logging to .hzdr-validation.log. Empty (default): off.
+    validation_python: str = ""
+    validation_script: Path | None = None
 
     @property
     def multi_campaign(self) -> bool:
