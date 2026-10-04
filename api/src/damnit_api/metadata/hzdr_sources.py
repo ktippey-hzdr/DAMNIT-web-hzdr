@@ -246,6 +246,10 @@ class HZDRShotDetail(BaseModel):
     hdf5_exists: bool = False
     hdf5_datasets: list[HZDRHDF5Dataset] = Field(default_factory=list)
     hdf5_error: str | None = None
+    # The shot's container as the campaign file links it
+    # (`entry/shot_containers/<YYYYMMDD>_<number>`); its datasets are listed in
+    # `hdf5_datasets` under that prefix and preview through the same file.
+    container: str | None = None
 
 
 class HZDRDatasetPreview(BaseModel):
@@ -354,6 +358,11 @@ class HZDRSourceProvider:
 
         try:
             detail.hdf5_datasets = list_hdf5_datasets(local_path)
+            if shot.shot_key:
+                detail.container, datasets = list_container_datasets(
+                    local_path, shot.shot_key
+                )
+                detail.hdf5_datasets.extend(datasets)
         except OSError as exc:
             detail.hdf5_error = str(exc)
         return detail
@@ -401,6 +410,49 @@ def list_hdf5_datasets(path: Path) -> list[HZDRHDF5Dataset]:
 
         handle.visititems(collect_dataset)
     return datasets
+
+
+def list_container_datasets(
+    path: Path, shot_key: str
+) -> tuple[str | None, list[HZDRHDF5Dataset]]:
+    """The shot's container link in campaign file ``path``, and its datasets.
+
+    ``visititems`` does not follow external links, so the campaign file's own
+    listing stops at ``/entry/shot_containers``; this follows the one link for
+    this shot. ``(None, [])`` when the file links no container for it, or the
+    link does not resolve (the container is being replaced, or the folder was
+    copied without ``shots/``).
+    """
+    import h5py
+
+    from .hzdr_nexus import SHOT_CONTAINERS_GROUP, shot_container_name
+
+    try:
+        stem = shot_container_name(shot_key).removesuffix(".nxs")
+    except ValueError:
+        return None, []
+    link = f"entry/{SHOT_CONTAINERS_GROUP}/{stem}"
+    datasets: list[HZDRHDF5Dataset] = []
+    with h5py.File(path, "r") as handle:
+        if handle.get(link, getlink=True) is None:
+            return None, []
+        try:
+            container = handle[link]
+        except (KeyError, OSError):
+            return None, []
+
+        def collect_dataset(name, item):
+            if isinstance(item, h5py.Dataset):
+                datasets.append(
+                    HZDRHDF5Dataset(
+                        name=f"{link}/{name}",
+                        shape=[int(value) for value in item.shape],
+                        dtype=str(item.dtype),
+                    )
+                )
+
+        container.visititems(collect_dataset)  # pyright: ignore[reportAttributeAccessIssue]
+    return link, datasets
 
 
 def preview_hdf5_dataset(path: Path, dataset_name: str) -> HZDRDatasetPreview:

@@ -2172,6 +2172,9 @@ def write_nexus_bridge(
             _write_instrument_event_groups(entry, events)
             _write_data_products(entry, products, output_path=output_path)
             write_nexus_detector_groups(entry, products)
+            # Every link targets a container already renamed into place, and
+            # the master is renamed last: it never names a missing container.
+            _write_shot_container_links(entry, shots, output_path=output_path)
 
         replace_with_retry(temp_path, output_path)
     except BaseException:
@@ -2547,6 +2550,99 @@ LABFROG_LOCAL_COUNT_DESCRIPTION = (
 )
 # On /entry/shots when DAMNIT wrote its identity rows itself, not LabFrog.
 SHOT_IDENTITY_ATTR = "damnit_shot_identity"
+
+# Shot containers (campaign output phases 3-4): one file per shot under
+# <campaign folder>/shots/, linked from the master's /entry/shot_containers.
+SHOTS_DIRNAME = "shots"
+SHOT_CONTAINERS_GROUP = "shot_containers"
+_SHOT_KEY_PARTS = re.compile(
+    r"^(?P<campaign>.+):(?P<date>\d{8}|unknown):(?P<number>\d{6,})$"
+)
+
+
+def shot_container_name(shot_key: str) -> str:
+    """``<YYYYMMDD>_<shot_number:06d>.nxs`` from ``campaign:YYYYMMDD:NNNNNN``.
+
+    Not the ``shot_key`` itself: its colons are illegal on Windows and on the
+    ``Z:`` share, and its campaign part changes when a ruling moves the shot.
+    """
+    match = _SHOT_KEY_PARTS.match(shot_key)
+    if match is None:
+        msg = f"not a shot_key (campaign:YYYYMMDD:NNNNNN): {shot_key!r}"
+        raise ValueError(msg)
+    return f"{match['date']}_{int(match['number']):06d}.nxs"
+
+
+def _container_in_place(path: Path, shot_key: str) -> bool:
+    """True when ``path`` is a finished container of exactly this shot.
+
+    The worker renames a container into place only when it is whole, so a
+    file that opens, names this ``shot_key`` and holds ``/entry`` is one the
+    master may link; anything else (a shot that moved here from another
+    campaign under the same date and number, a foreign file) is not linked.
+    """
+    try:
+        if not path.is_file() or not h5py.is_hdf5(path):
+            return False
+        with h5py.File(path, "r") as handle:
+            recorded = handle.attrs.get("shot_key")
+            if isinstance(recorded, bytes):
+                recorded = recorded.decode("utf-8")
+            return recorded == shot_key and "entry" in handle
+    except OSError:
+        return False
+
+
+def _write_shot_container_links(
+    entry: h5py.Group, shots: list[dict[str, Any]], *, output_path: Path
+) -> int:
+    """Link each shot's container from ``/entry/shot_containers``; return the count.
+
+    One relative ``ExternalLink`` per container already in place, named by the
+    container's stem (``20251201_001044``) and pointing at its ``/entry``, so
+    the campaign folder travels as one unit and ``silx``/h5py follow the links
+    from the master. ``shot_key`` and ``container`` datasets beside the links
+    let a reader join ``/entry/shots`` without parsing names. The group is an
+    ``NXcollection`` so validating the master does not descend into the
+    containers, and it is rewritten whole on every build, so it never names a
+    container the shot table no longer holds. Containers are written by the
+    worker, outside this lock; one not yet in place is linked by the next
+    build (the worker asks for it).
+    """
+    group = _replace_group(entry, SHOT_CONTAINERS_GROUP)
+    group.attrs["NX_class"] = "NXcollection"
+    group.attrs["damnit_source"] = "shot_containers"
+    group.attrs["description"] = (
+        "HDF5 external links to the per-shot NeXus containers in "
+        f"{SHOTS_DIRNAME}/, one per shot whose container is in place; member "
+        "name = container stem. Join on the shot_key dataset here, never by "
+        "position in /entry/shots."
+    )
+    folder = output_path.parent / SHOTS_DIRNAME
+    linked_keys: list[str] = []
+    linked_names: list[str] = []
+    if folder.is_dir():
+        seen: set[str] = set()
+        for shot in shots:
+            shot_key = shot.get("shot_key")
+            if not isinstance(shot_key, str) or shot_key in seen:
+                continue
+            seen.add(shot_key)
+            try:
+                name = shot_container_name(shot_key)
+            except ValueError:
+                continue
+            if not _container_in_place(folder / name, shot_key):
+                continue
+            stem = name.removesuffix(".nxs")
+            group[stem] = h5py.ExternalLink(f"{SHOTS_DIRNAME}/{name}", "/entry")
+            linked_keys.append(shot_key)
+            linked_names.append(stem)
+    string = h5py.string_dtype(encoding="utf-8")
+    group.create_dataset("shot_key", data=linked_keys, dtype=string)
+    group.create_dataset("container", data=linked_names, dtype=string)
+    return len(linked_names)
+
 
 # All 118 IUPAC element symbols, for the conservative formula check below.
 _ELEMENTS = (

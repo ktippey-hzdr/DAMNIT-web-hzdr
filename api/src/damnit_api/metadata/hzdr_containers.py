@@ -43,9 +43,12 @@ import PIL
 from ..shared.hzdr_paths import map_path, parse_path_map
 from . import hzdr_packs
 from .hzdr_nexus import (
+    SHOT_CONTAINERS_GROUP,
+    SHOTS_DIRNAME,
     BuilderAlreadyRunningError,
     LockLostError,
     replace_with_retry,
+    shot_container_name,
     single_writer_lock,
     write_json_atomic,
 )
@@ -60,9 +63,13 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 CONTAINER_PROFILE = "hzdr-shot-container-v1"
-SHOTS_DIRNAME = "shots"
 MANIFEST_NAME = ".build-manifest.json"
 PENDING_NAME = ".convert.pending"
+# The worker's exit status when it left containers in place that the published
+# master does not link yet; the builder trigger answers with one more build.
+# RELINK_EXIT + 1 when some container also failed. builder_trigger keeps its
+# own copy (it does not import this module's h5py/Pillow); a test ties them.
+RELINK_EXIT = 3
 # single_writer_lock(<shots>/.convert) holds <shots>/.convert.lock.
 _LOCK_STEM = ".convert"
 _TMP_SUFFIX = ".tmp"
@@ -87,7 +94,6 @@ RESERVED_ENTRY_NAMES = frozenset({
 })
 RESERVED_INSTRUMENT_NAMES = frozenset({"name"})
 
-_SHOT_KEY = re.compile(r"^(?P<campaign>.+):(?P<date>\d{8}|unknown):(?P<number>\d{6,})$")
 
 TIMING_ROLE_DESCRIPTIONS = {
     "pre_shot": "recorded before the laser event; this stamp precedes the "
@@ -107,17 +113,7 @@ OFFSET_DESCRIPTION = (
 # ---------------------------------------------------------------------------
 
 
-def container_name(shot_key: str) -> str:
-    """``<YYYYMMDD>_<shot_number:06d>.nxs`` from ``campaign:YYYYMMDD:NNNNNN``.
-
-    Not the ``shot_key`` itself: its colons are illegal on Windows and on the
-    ``Z:`` share, and its campaign part changes when a ruling moves the shot.
-    """
-    match = _SHOT_KEY.match(shot_key)
-    if match is None:
-        msg = f"not a shot_key (campaign:YYYYMMDD:NNNNNN): {shot_key!r}"
-        raise ValueError(msg)
-    return f"{match['date']}_{int(match['number']):06d}.nxs"
+container_name = shot_container_name
 
 
 def shots_dir(master: Path) -> Path:
@@ -311,6 +307,23 @@ def read_master(master: Path) -> tuple[str, list[dict], list[dict]]:
         )
         events = _acquisition_events(_group(handle, "entry/source_events"))
     return str(experiment_id), shots, events
+
+
+def linked_containers(master: Path) -> set[str]:
+    """Container stems the published master links (``/entry/shot_containers``).
+
+    Read as links, never followed, so a container being replaced does not
+    matter here.
+    """
+    with h5py.File(master, "r") as handle:
+        group = _group(handle, f"entry/{SHOT_CONTAINERS_GROUP}")
+        if group is None:
+            return set()
+        return {
+            name
+            for name in group
+            if isinstance(group.get(name, getlink=True), h5py.ExternalLink)
+        }
 
 
 def _rows(group: h5py.Group | None, names: Iterable[str]) -> list[dict]:
@@ -951,6 +964,11 @@ class ConversionSummary:
     skipped: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
     problems: int = 0
+    # Containers written in this pass that the published master does not link
+    # yet: the next build links them (the worker exits RELINK_EXIT to ask).
+    unlinked: list[str] = field(default_factory=list)
+    # Containers removed because the published master no longer has them.
+    removed: list[str] = field(default_factory=list)
 
 
 def _load_manifest(path: Path) -> dict:
@@ -1044,11 +1062,14 @@ def convert_campaign(
     records: dict = manifest["containers"]
 
     experiment_id, shots, events = read_master(master)
+    linked = linked_containers(master)
     summary = ConversionSummary()
+    planned: list[str] = []
     flushed, dirty = time.monotonic(), False
     for plan in plan_shots(experiment_id, shots, events):
         _checked(heartbeat)
         name = plan.name
+        planned.append(name)
         target = folder / name
         try:
             written = _convert_one(
@@ -1086,10 +1107,61 @@ def convert_campaign(
             _checked(heartbeat)
             write_json_atomic(manifest_path, manifest)
             flushed, dirty = time.monotonic(), False
+    summary.removed = _collect_garbage(folder, set(planned), records, heartbeat)
+    dirty = dirty or bool(summary.removed)
+    # Only containers written in this pass: one the builder will not link
+    # (it checks the file itself) asks for one build, never for one per pass.
+    summary.unlinked = [
+        name for name in summary.written if name.removesuffix(".nxs") not in linked
+    ]
     if dirty or not manifest_path.exists():
         _checked(heartbeat)
         write_json_atomic(manifest_path, manifest)
     return summary
+
+
+# A container's own name; everything else in shots/ (the lock, its guard, the
+# pending marker, the manifest, temp and tombstone files) is never collected.
+_CONTAINER_FILE = re.compile(r"^(?:\d{8}|unknown)_\d{6,}\.nxs$")
+
+
+def _collect_garbage(
+    folder: Path,
+    planned: set[str],
+    records: dict,
+    heartbeat: Callable[[], None] | None,
+) -> list[str]:
+    """Remove containers the published master no longer has a shot for.
+
+    Runs after the pass, from the master as published, so a container goes
+    only once a master without its shot is in place (a shot moved to another
+    campaign, or whose files a ruling moved to another shot). A master with no
+    acquisition at all removes nothing: that is more likely a master read
+    wrong than a campaign whose every shot left, and a person can delete the
+    folder.
+    """
+    if not planned:
+        logger.warning(
+            "No shot in %s's master has an acquisition; not collecting %s",
+            folder.parent.name,
+            folder,
+        )
+        return []
+    removed: list[str] = []
+    for path in sorted(folder.iterdir()):
+        if not _CONTAINER_FILE.match(path.name) or path.name in planned:
+            continue
+        _checked(heartbeat)
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError as error:  # held open on Windows: the next pass retries
+            logger.warning("Could not remove container %s: %s", path, error)
+            continue
+        records.pop(path.name, None)
+        removed.append(path.name)
+    return removed
 
 
 def _clear_earlier_temps(folder: Path, nonce: str) -> None:
@@ -1262,6 +1334,7 @@ __all__ = [
     "CONTAINER_PROFILE",
     "MANIFEST_NAME",
     "PENDING_NAME",
+    "RELINK_EXIT",
     "SHOTS_DIRNAME",
     "Acquisition",
     "ConversionSummary",
@@ -1273,6 +1346,7 @@ __all__ = [
     "convert_campaign",
     "fingerprint",
     "library_versions",
+    "linked_containers",
     "make_read_path",
     "member_stats",
     "plan_shots",

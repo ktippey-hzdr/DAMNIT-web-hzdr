@@ -228,10 +228,8 @@ lives in `damnit_api.metadata.hzdr_containers`.
   checkout and any `/opt` install (and a manual builder) must run the same
   version. A crashed builder's lock whose host name has since changed (a
   container restart) looks foreign and is removed by hand.
-- **Not here**: the master's links (phase 4), garbage collection of containers
-  the master no longer names (phase 4, after publish; it must leave
-  `.convert.lock`, `.convert.lock.guard`, `.convert.pending`, the manifest and
-  `*.stale`/`*.tmp` alone), validation (phase 5),
+- **Not here**: the master's links and garbage collection (phase 4, section 8
+  below), validation (phase 5),
   the mapping rows (review decision e: a phase of its own, planned by the
   coordinator).
 
@@ -249,3 +247,49 @@ Deferred: the LabFrog shot parameters with registry units (shot-aligner's
 `shot_parameters`), the target sample and laser groups (they stay in the
 master), backgrounds (`<campaign>_backgrounds.nxs`), and an entry-level plot
 (decision 6 keeps only each detector's default).
+
+## 8. Phase 4: the master links the containers
+
+- **Links.** The builder writes `/entry/shot_containers` (`NXcollection`,
+  `damnit_source="shot_containers"`) inside its temp file, before the atomic
+  rename: one relative `ExternalLink("shots/<YYYYMMDD>_<number>.nxs",
+  "/entry")` per shot whose container is in place, named by the container's
+  stem, plus `shot_key` and `container` string datasets so a reader joins
+  `/entry/shots` on `shot_key` rather than parsing names. "In place" means the
+  file opens as HDF5, holds `/entry` and its root `shot_key` is this shot's,
+  so a foreign file or another campaign's shot under the same name is not
+  linked. The group is rewritten whole each build. It is an `NXcollection` so
+  validating the master does not descend into the containers. The bridge
+  profile is unchanged (no table column changed). Relative links resolve
+  against the master's own folder, so the campaign folder travels as one unit
+  and `silx view` and h5py follow them.
+- **The master never links a missing container**: it links only files already
+  renamed into place, and is itself renamed last.
+- **Catching up.** Containers are written outside the campaign lock, so a new
+  shot's container lands after the master that introduced it. A worker pass
+  that *wrote* containers the published master does not link exits
+  `RELINK_EXIT` (3; 4 when a container also failed); the trigger logs it and
+  asks for one more build (`BuilderTrigger.worker_finished`). That build
+  links them, and its workers write nothing new, so it converges. Only
+  containers written in the pass count, so one the builder refuses to link
+  asks once, never on every pass.
+- **Garbage collection.** After each pass, from the master as published, the
+  worker removes `<YYYYMMDD|unknown>_<number>.nxs` files whose shot has no
+  acquisition in that master (moved to another campaign, or its files ruled
+  onto another shot), and their manifest records. It never touches the lock,
+  its guard, the pending marker, the manifest, temp or tombstone files, or any
+  other name. A master with no acquisition at all removes nothing (more likely
+  a master read wrong than a campaign emptied; delete the folder by hand). A
+  file held open on Windows is retried on the next pass. Only campaigns the
+  worker converts are collected, so the `_unassigned` bucket keeps its
+  containers unless it is converted (`--include-unassigned`).
+  Known window: a build running while the worker removes a container whose
+  shot has just come back can link the removed name; the link dangles until
+  the next pass rewrites the container under the same name, and readers
+  treat a dangling link as no container.
+- **API.** `hzdr_sources.list_container_datasets(campaign file, shot_key)`
+  follows that shot's link (``visititems`` does not), and shot detail lists
+  the container's datasets as `entry/shot_containers/<stem>/...` with the
+  link in `container`; previews read them through the same campaign file.
+- **SciCat** still registers the campaign file; registering the folder
+  (master + `shots/`) belongs with the side-by-side run (phase 6).

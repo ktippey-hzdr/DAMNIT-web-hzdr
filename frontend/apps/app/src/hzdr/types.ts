@@ -76,6 +76,9 @@ export type HZDRShotDetail = {
   hdf5_exists: boolean
   hdf5_datasets: HZDRHDF5Dataset[]
   hdf5_error?: string
+  // The shot's container as the campaign file links it; its datasets are
+  // listed in hdf5_datasets under this prefix.
+  container?: string | null
 }
 
 export type HZDRHDF5Dataset = {

@@ -11,6 +11,10 @@ for the running one and exits. Started by the builder auto-trigger when
 ``DW_API_HZDR_BUILDER__CONTAINERS_ENABLED=true``; safe to run by hand. Raw
 files are read through ``DW_API_METADATA__PATH_MAP`` unless ``--path-map`` is
 given. Design: ``hzdr/docs/plans/container-writer.md``.
+
+Exit status: 0 done; 1 a campaign or container failed; 3 (``RELINK_EXIT``)
+containers are in place that the published master does not link yet, so a
+build should run to link them; 4 both of the last two.
 """
 
 from __future__ import annotations
@@ -25,6 +29,7 @@ os.environ.setdefault("DW_API_DAMNIT_PATH", str(Path.cwd()))
 
 from damnit_api.consumer.campaign_builds import campaign_dir_name
 from damnit_api.metadata.hzdr_containers import (
+    RELINK_EXIT,
     campaign_masters,
     make_read_path,
     run_conversion,
@@ -89,6 +94,7 @@ def main(argv: list[str] | None = None) -> int:
     )
 
     failures = 0
+    unlinked = 0
     for master in masters:
         if not master.is_file():
             print(f"Containers ({master.name}): no published master yet")
@@ -112,12 +118,23 @@ def main(argv: list[str] | None = None) -> int:
             f"{len(failed)} failed, {problems} problem(s) recorded, "
             f"{len(runs)} pass(es)"
         )
+        removed = sorted({name for run in runs for name in run.removed})
+        if removed:
+            print(f"  removed (no longer in the master): {', '.join(removed)}")
+        if runs[-1].unlinked:
+            unlinked += 1
+            print(
+                f"  {len(runs[-1].unlinked)} container(s) not linked by the "
+                "published master yet; the next build links them"
+            )
         if failed:
             failures += 1
             print(
                 f"  failed (see shots/.build-manifest.json): {', '.join(failed)}",
                 file=sys.stderr,
             )
+    if unlinked:
+        return RELINK_EXIT + (1 if failures else 0)
     return 1 if failures else 0
 
 
