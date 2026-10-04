@@ -191,22 +191,33 @@ def _from_raw(relative: str) -> Path:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.parametrize("pack", PACK_IDS)
-def test_the_pack_writes_what_shot_aligners_pack_writes(tmp_path, pack):
-    reference = _reference(pack)
-    acquisition = {
-        **reference["acquisition"],
-        "instrument": reference["instrument"]["label"],
-    }
-    path, problems, plottable = _write(tmp_path, pack, acquisition, _from_raw)
+# Every reference shot-aligner wrote: the fixture's three acquisitions
+# (`<pack>.json`) and the cases beyond the happy path (`<pack>__<case>.json`).
+REFERENCES = sorted(p.stem for p in (FIXTURE / "packs").glob("*.json"))
+
+
+def test_every_reference_is_compared():
+    assert set(PACK_IDS) <= set(REFERENCES)
+    assert len([r for r in REFERENCES if "__" in r]) >= 14
+    assert {r.split("__")[0] for r in REFERENCES} == set(PACK_IDS)
+
+
+@pytest.mark.parametrize("name", REFERENCES)
+def test_the_pack_writes_what_shot_aligners_pack_writes(tmp_path, name):
+    reference = _reference(name)
+    root = FIXTURE / reference["root"]
+    path, problems, plottable = _write(
+        tmp_path, reference["pack"], reference["acquisition"], lambda f: root / f
+    )
     nodes, volatile = walk(path, reference["small"])
 
-    assert problems == reference["problems"]
+    root_text = str(root)
+    assert [p.replace(root_text, "<root>") for p in problems] == reference["problems"]
     assert plottable == reference["plottable"]
     assert volatile == reference["volatile"]
     assert sorted(nodes) == sorted(reference["nodes"])
-    for name, expected in reference["nodes"].items():
-        assert nodes[name] == expected, name
+    for node, expected in reference["nodes"].items():
+        assert nodes[node] == expected, node
 
 
 @pytest.mark.parametrize("pack", PACK_IDS)
@@ -713,3 +724,24 @@ def test_a_spectrum_without_a_wavelength_is_stored_raw(tmp_path):
     with h5py.File(out, "r") as handle:
         assert "pixel" in handle["entry/detector/raw_data"]
         assert "data" not in handle["entry/detector"]
+
+
+# ---------------------------------------------------------------------------
+# nexusformat's text normalisation (tree.text): NULs dropped, trailing
+# whitespace stripped, bytes decoded as UTF-8; on fields and attributes alike.
+# ---------------------------------------------------------------------------
+
+
+def test_text_is_stored_as_nexusformat_stores_it(tmp_path):
+    from damnit_api.metadata.hzdr_packs import _h5
+
+    with h5py.File(tmp_path / "t.h5", "w") as handle:
+        crlf = _h5.field(handle, "crlf", "a\r\nb\r\n\x00 ", description="x \n")
+        _h5.field(handle, "empty", "")
+        _h5.field(handle, "raw", b"by\xc3\xa9 ")
+        note = _h5.note(handle, "note", data="line\r\n\r\n")
+        assert crlf.asstr()[()] == "a\r\nb"
+        assert crlf.attrs["description"] == "x"
+        assert handle["empty"].asstr()[()] == ""
+        assert handle["raw"].asstr()[()] == "byé"
+        assert note["data"].asstr()[()] == "line"

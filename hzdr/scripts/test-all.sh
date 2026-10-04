@@ -16,6 +16,7 @@ DAMNIT_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 WITH_ACCEPTANCE=0
 SELECTED_REPOS=()
+REPOS_GIVEN=1
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -144,6 +145,7 @@ repo_fn() {
 }
 
 if [[ ${#SELECTED_REPOS[@]} -eq 0 ]]; then
+    REPOS_GIVEN=
     SELECTED_REPOS=(damnit labfrog sqlite-tools planet-watchdog shotcounter asapo)
 fi
 
@@ -153,6 +155,97 @@ for key in "${SELECTED_REPOS[@]}"; do
         exit 1
     fi
 done
+
+# -- Contract, reference fixture and pack code sync checks -------------------
+# The same three checks as test-all.ps1, in check mode, failing on drift, and
+# only when every repo is selected (each spans repos):
+#   1. hzdr_event.py + its fixtures vendored into planet-watchdog/shotcounter,
+#      and the topic-registry defaults (sync-hzdr-event.ps1; run through pwsh
+#      when present, otherwise the same comparisons below);
+#   2. shot-aligner's reference fixture (sync-hzdr-reference.sh);
+#   3. shot-aligner's readers, pack helpers and manifests (sync-hzdr-packs.sh).
+check_event_contract() {
+    if command -v pwsh >/dev/null 2>&1; then
+        pwsh -NoProfile -File "$SCRIPT_DIR/sync-hzdr-event.ps1"
+        return $?
+    fi
+    local drift=0 api="$DAMNIT_ROOT/api"
+    local watchdog="$GITLAB_ROOT/planet-watchdog" shot="$GITLAB_ROOT/shotcounter"
+    echo ""
+    echo -e "${CYAN}--- Contract sync (hzdr_event.py + fixtures) ---${RESET}"
+    compare() {  # canonical copy label
+        if [[ ! -f "$2" ]]; then
+            echo -e "${RED}  DRIFT: $3 - not found at: $2${RESET}"; drift=1
+        elif ! cmp -s "$1" "$2"; then
+            echo -e "${RED}  DRIFT: $3 - differs from canonical${RESET}"; drift=1
+        fi
+    }
+    if [[ -d "$watchdog" ]]; then
+        compare "$api/src/damnit_api/metadata/hzdr_event.py" \
+            "$watchdog/watchdog_core/hzdr_event.py" "planet-watchdog/watchdog_core/hzdr_event.py"
+    else
+        echo "  Skipped planet-watchdog (not found at $watchdog)"
+    fi
+    local root label file
+    for root in "$watchdog" "$shot"; do
+        label="$(basename "$root")"
+        if [[ ! -d "$root" ]]; then
+            echo "  Skipped $label (not found at $root)"; continue
+        fi
+        for file in hzdr-event-v1.schema.json hzdr-event-v1.sample.json; do
+            compare "$api/tests/fixtures/$file" "$root/tests/fixtures/$file" \
+                "$label/tests/fixtures/$file"
+        done
+    done
+    local topics="$GITLAB_ROOT/kafka-broker-docker/topics.env"
+    if [[ -f "$topics" ]]; then
+        local draco watchdog_topic found
+        draco="$(sed -n 's/^TOPIC_DRACO_TRIGGER=//p' "$topics" | tr -d '[:space:]')"
+        watchdog_topic="$(sed -n 's/^TOPIC_WATCHDOG_EVENTS=//p' "$topics" | tr -d '[:space:]')"
+        topic_check() {  # file pattern expected label
+            [[ -f "$1" ]] || return 0
+            found="$(grep -oP "$2" "$1" | head -1)"
+            if [[ -n "$found" && "$found" != "$3" ]]; then
+                echo -e "${RED}  DRIFT: $4 '$found' != registry '$3'${RESET}"; drift=1
+            fi
+        }
+        topic_check "$shot/scripts/add_server.py" \
+            '"KafkaTopic"[^"]*environ\.get\("[^"]+",\s*"\K[^"]+' "$draco" \
+            "shotcounter/scripts/add_server.py KafkaTopic default"
+        topic_check "$shot/scripts/start_local.sh" 'topic=\K\S+' "$draco" \
+            "shotcounter/scripts/start_local.sh topic default"
+        topic_check "$watchdog/watchdog_core/config.py" '"output_topic":\s*"\K[^"]+' \
+            "$watchdog_topic" "planet-watchdog/watchdog_core/config.py output_topic"
+        topic_check "$api/src/damnit_api/metadata/routers.py" \
+            'WATCHDOG_KAFKA_TOPIC\s*=\s*"\K[^"]+' "$watchdog_topic" \
+            "DAMNIT metadata/routers.py WATCHDOG_KAFKA_TOPIC"
+    else
+        echo "  Skipped topic-registry check (kafka-broker-docker not found)"
+    fi
+    if [[ $drift -ne 0 ]]; then
+        echo -e "${YELLOW}  Run: pwsh hzdr/scripts/sync-hzdr-event.ps1 -Apply  to fix.${RESET}"
+        return 1
+    fi
+    echo -e "${GREEN}  All contract copies and topic defaults in sync.${RESET}"
+}
+
+if [[ -z "${REPOS_GIVEN:-}" ]]; then
+    if ! check_event_contract; then
+        echo -e "${RED}  Contract drift.${RESET}"; exit 1
+    fi
+    echo ""
+    if ! "$SCRIPT_DIR/sync-hzdr-reference.sh"; then
+        echo -e "${RED}  Reference fixture drift.${RESET}"
+        echo -e "${YELLOW}  Run: hzdr/scripts/sync-hzdr-reference.sh --apply  to fix.${RESET}"
+        exit 1
+    fi
+    echo ""
+    if ! "$SCRIPT_DIR/sync-hzdr-packs.sh"; then
+        echo -e "${RED}  Vendored pack code drift.${RESET}"
+        echo -e "${YELLOW}  Run: hzdr/scripts/sync-hzdr-packs.sh --apply  to fix.${RESET}"
+        exit 1
+    fi
+fi
 
 # -- Run -----------------------------------------------------------------------
 START_ALL=$(date +%s)

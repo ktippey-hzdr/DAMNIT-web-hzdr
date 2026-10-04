@@ -47,7 +47,7 @@ dependencies = [
     "motor>=3.7.1",
     # hzdr_packs reads PNG/TIFF/BMP frames with it (already installed for
     # matplotlib); 12 opens 16-bit grey PNGs as I;16, as the packs rely on.
-    "pillow>=12",
+    "pillow~=12.2",
 ]
 
 [project.urls]

@@ -1,0 +1,260 @@
+{
+  "acquisition": {
+    "files": [
+      "Set1_2024-08-28_10h-00m-18s_32.bmp"
+    ],
+    "instrument": "Ar profiler",
+    "label": "Set1",
+    "seq": 32,
+    "when": "2024-08-28T10:00:18"
+  },
+  "detector_path": "entry/detector",
+  "fixture": "hzdr reference pack output",
+  "instrument": {
+    "id": null,
+    "label": "Ar profiler"
+  },
+  "nodes": {
+    "/entry": {
+      "NX_class": "NXentry",
+      "type": "group"
+    },
+    "/entry/detector": {
+      "NX_class": "NXdetector",
+      "default": "data",
+      "type": "group"
+    },
+    "/entry/detector/data": {
+      "NX_class": "NXdata",
+      "signal": "image",
+      "type": "group"
+    },
+    "/entry/detector/data/image": {
+      "NX_class": null,
+      "attrs": {
+        "interpretation": "image",
+        "source_file": "Set1_2024-08-28_10h-00m-18s_32.bmp",
+        "source_format": "bmp",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "|u1",
+      "shape": [
+        6,
+        8
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        [
+          0,
+          3,
+          6,
+          9,
+          12,
+          15,
+          18,
+          21
+        ],
+        [
+          24,
+          27,
+          30,
+          33,
+          36,
+          39,
+          42,
+          45
+        ],
+        [
+          48,
+          51,
+          54,
+          57,
+          60,
+          63,
+          66,
+          69
+        ],
+        [
+          72,
+          75,
+          78,
+          81,
+          84,
+          87,
+          90,
+          93
+        ],
+        [
+          96,
+          99,
+          102,
+          105,
+          108,
+          111,
+          114,
+          117
+        ],
+        [
+          120,
+          123,
+          126,
+          129,
+          132,
+          135,
+          138,
+          141
+        ]
+      ]
+    },
+    "/entry/detector/metadata_limitations": {
+      "NX_class": "NXnote",
+      "type": "group"
+    },
+    "/entry/detector/metadata_limitations/data": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "8-bit BMP export with no sidecar. The label, date, time and sequence number come from the file name, and nothing else about this acquisition was recorded with it: exposure, gain, black level, gamma, chip size, pixel size, camera model and the vendor's analysis tools are absent, not zero. The export is 8-bit, so if the camera digitised more bits than that they were not kept, and its counts are not comparable with a 16-bit frame's. Included because the campaign config opts this instrument in with bmpFrames."
+    },
+    "/entry/detector/metadata_limitations/date": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
+    "/entry/detector/metadata_limitations/description": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "what this frame's metadata is, and what it is not"
+    },
+    "/entry/detector/metadata_limitations/type": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "text/plain"
+    },
+    "/entry/detector/raw_data": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/raw_data/image": {
+      "NX_class": null,
+      "attrs": {
+        "interpretation": "image",
+        "source_file": "Set1_2024-08-28_10h-00m-18s_32.bmp",
+        "source_format": "bmp",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "|u1",
+      "link": "/entry/detector/data/image",
+      "shape": [
+        6,
+        8
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        [
+          0,
+          3,
+          6,
+          9,
+          12,
+          15,
+          18,
+          21
+        ],
+        [
+          24,
+          27,
+          30,
+          33,
+          36,
+          39,
+          42,
+          45
+        ],
+        [
+          48,
+          51,
+          54,
+          57,
+          60,
+          63,
+          66,
+          69
+        ],
+        [
+          72,
+          75,
+          78,
+          81,
+          84,
+          87,
+          90,
+          93
+        ],
+        [
+          96,
+          99,
+          102,
+          105,
+          108,
+          111,
+          114,
+          117
+        ],
+        [
+          120,
+          123,
+          126,
+          129,
+          132,
+          135,
+          138,
+          141
+        ]
+      ]
+    },
+    "/entry/detector/raw_data/name": {
+      "NX_class": null,
+      "attrs": {
+        "source": "file name"
+      },
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "Set1"
+    },
+    "/entry/detector/raw_data/sequence_number": {
+      "NX_class": null,
+      "attrs": {
+        "source": "file name"
+      },
+      "dtype": "<i8",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": 32
+    }
+  },
+  "pack": "camera_png_csv",
+  "plottable": "entry/detector/data",
+  "problems": [],
+  "root": "packs/cases/camera_png_csv__bmp_name_only",
+  "small": 64,
+  "volatile": [
+    "/entry/detector/metadata_limitations/date"
+  ],
+  "writer": "shot-aligner diagnostics.camera_png_csv.write"
+}

@@ -1,0 +1,19 @@
+Tool;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;
+Peak Profile;Pos x;0.084;mm;Pos y;0.064;mm;ROI;inv. Polygon;;Peak Determination Method;Calculate Centroid;a.u.;Averaging;1;Pixel;FWHM horiz;0.00872;mm;1/e² horiz;0.01482;mm;µ horiz;0.08431;mm;Amplitude horiz;21328.1;a.u.;Offset horiz;1778.2;a.u.;FWHM vert;0.00852;mm;1/e² vert;0.01447;mm;µ vert;1542.9;mm;Amplitude vert;0;a.u.;Offset vert;457.9;a.u.
+Statistics;Sum;900;a.u.;Max;3500;a.u.;Mean;12.5;a.u.;ROI;Image;
+Profile;
+Profile;
+Profile;
+Profile;
+Profile;
+Profile;
+Profile;
+Profile;
+Profile;
+
+Name;acA640-120gm;Label;beam
+Comment;synthetic case
+Exposure;0.035000 s;Gain;12.00 dB
+Gamma;1.00;Black Level Offset;0.00
+Chip Size X;3.69 mm;Chip Size Y;2.77 mm
+Image No.;7

@@ -1,0 +1,143 @@
+{
+  "acquisition": {
+    "files": [
+      "set10_00001.tif"
+    ],
+    "instrument": "Probe135",
+    "label": "set10",
+    "seq": 1
+  },
+  "detector_path": "entry/detector",
+  "fixture": "hzdr reference pack output",
+  "instrument": {
+    "id": null,
+    "label": "Probe135"
+  },
+  "nodes": {
+    "/entry": {
+      "NX_class": "NXentry",
+      "type": "group"
+    },
+    "/entry/detector": {
+      "NX_class": "NXdetector",
+      "default": "data",
+      "type": "group"
+    },
+    "/entry/detector/data": {
+      "NX_class": "NXdata",
+      "signal": "image",
+      "type": "group"
+    },
+    "/entry/detector/data/image": {
+      "NX_class": null,
+      "attrs": {
+        "interpretation": "image",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "<u2",
+      "shape": [
+        4,
+        5
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        [
+          0,
+          100,
+          200,
+          300,
+          400
+        ],
+        [
+          500,
+          600,
+          700,
+          800,
+          900
+        ],
+        [
+          1000,
+          1100,
+          1200,
+          1300,
+          1400
+        ],
+        [
+          1500,
+          1600,
+          1700,
+          1800,
+          1900
+        ]
+      ]
+    },
+    "/entry/detector/raw_data": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/raw_data/image": {
+      "NX_class": null,
+      "attrs": {
+        "interpretation": "image",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "<u2",
+      "link": "/entry/detector/data/image",
+      "shape": [
+        4,
+        5
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        [
+          0,
+          100,
+          200,
+          300,
+          400
+        ],
+        [
+          500,
+          600,
+          700,
+          800,
+          900
+        ],
+        [
+          1000,
+          1100,
+          1200,
+          1300,
+          1400
+        ],
+        [
+          1500,
+          1600,
+          1700,
+          1800,
+          1900
+        ]
+      ]
+    },
+    "/entry/detector/raw_data/sequence_number": {
+      "NX_class": null,
+      "attrs": {
+        "description": "the ordinal in the file name; this diagnostic records no clock, so this is what places the frame in its set"
+      },
+      "dtype": "<i8",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": 1
+    }
+  },
+  "pack": "sequence_frames",
+  "plottable": "entry/detector/data",
+  "problems": [],
+  "root": "packs/cases/sequence_frames__single_frame",
+  "small": 64,
+  "volatile": [],
+  "writer": "shot-aligner diagnostics.sequence_frames.write"
+}

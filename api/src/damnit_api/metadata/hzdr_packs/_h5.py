@@ -33,6 +33,18 @@ def group(parent: h5py.Group, name: str, nx_class: str) -> h5py.Group:
     return created
 
 
+def text(value: str | bytes) -> str:
+    """Text as nexusformat stores it (``tree.text``): NULs dropped, right-stripped.
+
+    nexusformat applies this to every text field and attribute it writes, so a
+    CRLF-terminated sidecar loses its last line end there; bytes are decoded as
+    UTF-8 first.
+    """
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", "replace")
+    return value.replace("\x00", "").rstrip()
+
+
 def subgroup(parent: h5py.Group, name: str) -> h5py.Group:
     """``parent[name]``, which must be a group."""
     found = parent[name]
@@ -60,11 +72,12 @@ def field(
 ) -> h5py.Dataset:
     """``parent[name] = NXfield(value, units=...)``, with the dtype nexusformat picks.
 
-    Text is variable-length UTF-8, ``bool`` is ``bool``, ``int`` is int64 and
+    Text is variable-length UTF-8, normalised by :func:`text` (as are text
+    attributes), ``bool`` is ``bool``, ``int`` is int64 and
     ``float`` float64; an array keeps its own dtype.
     """
-    if isinstance(value, str):
-        created = parent.create_dataset(name, data=value, dtype=TEXT)
+    if isinstance(value, (str, bytes)):
+        created = parent.create_dataset(name, data=text(value), dtype=TEXT)
     elif isinstance(value, (bool, np.bool_)):
         created = parent.create_dataset(name, data=np.bool_(value))
     elif isinstance(value, (int, np.integer)):
@@ -74,9 +87,9 @@ def field(
     else:
         created = parent.create_dataset(name, data=np.asarray(value))
     if units:
-        created.attrs["units"] = units
-    for key, text in attrs.items():
-        created.attrs[key] = text
+        created.attrs["units"] = text(units)
+    for key, given in attrs.items():
+        created.attrs[key] = text(given) if isinstance(given, (str, bytes)) else given
     return created
 
 
@@ -115,8 +128,8 @@ def image(parent: h5py.Group, name: str, frame: np.ndarray, **attrs) -> h5py.Dat
         compression_opts=GZIP_LEVEL,
         shuffle=True,
     )
-    for key, text in attrs.items():
-        created.attrs[key] = text
+    for key, given in attrs.items():
+        created.attrs[key] = text(given) if isinstance(given, (str, bytes)) else given
     return created
 
 
