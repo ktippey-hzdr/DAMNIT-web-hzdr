@@ -80,6 +80,7 @@ AREAS = (
             f"{T}/test_hzdr_event.py",
             f"{T}/test_hzdr_sources.py",
             f"{T}/test_hzdr_path_map.py",
+            f"{T}/test_hzdr_reference_fixture.py",
             f"{T}/test_hzdr_labfrog_sqlite.py",
             f"{T}/test_hzdr_producer_status.py",
             f"{T}/test_hzdr_scicat.py",
