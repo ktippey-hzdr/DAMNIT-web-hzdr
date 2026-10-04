@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field, JsonValue, computed_field
 
 from ..shared.settings import MetadataSettings
 from .hzdr_event import HZDRPayloadRef
+from .hzdr_paths import map_path, parse_path_map
 
 
 class HZDRSource(BaseModel):
@@ -257,6 +258,14 @@ class HZDRSourceProvider:
 
     def __init__(self, settings: MetadataSettings):
         self.settings = settings
+        self._path_rules = parse_path_map(settings.path_map)
+
+    def _local_hdf5_path(self, shot: HZDRShot) -> Path | None:
+        """The shot's HDF5 path as this host can open it (see hzdr_paths)."""
+        return map_path(
+            None if shot.hdf5_path is None else str(shot.hdf5_path),
+            self._path_rules,
+        )
 
     def list_sources(self) -> list[HZDRSource]:
         """List available HZDR sources from local files or MongoDB."""
@@ -311,15 +320,16 @@ class HZDRSourceProvider:
 
     def _shot_detail(self, shot: HZDRShot) -> HZDRShotDetail:
         detail = HZDRShotDetail(shot=shot)
-        if shot.hdf5_path is None:
+        local_path = self._local_hdf5_path(shot)
+        if local_path is None:
             return detail
 
-        detail.hdf5_exists = shot.hdf5_path.exists()
+        detail.hdf5_exists = local_path.exists()
         if not detail.hdf5_exists:
             return detail
 
         try:
-            detail.hdf5_datasets = list_hdf5_datasets(shot.hdf5_path)
+            detail.hdf5_datasets = list_hdf5_datasets(local_path)
         except OSError as exc:
             detail.hdf5_error = str(exc)
         return detail
@@ -329,9 +339,12 @@ class HZDRSourceProvider:
     ) -> HZDRDatasetPreview | None:
         """Return a small JSON-safe preview for one HDF5 dataset."""
         shot = self.get_shot(key, shot_number)
-        if shot is None or shot.hdf5_path is None or not shot.hdf5_path.exists():
+        if shot is None:
             return None
-        return preview_hdf5_dataset(shot.hdf5_path, dataset_name)
+        local_path = self._local_hdf5_path(shot)
+        if local_path is None or not local_path.exists():
+            return None
+        return preview_hdf5_dataset(local_path, dataset_name)
 
 
 def load_sources_file(path: Path | None) -> list[HZDRSource]:

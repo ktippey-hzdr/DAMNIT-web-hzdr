@@ -177,6 +177,11 @@ Consumers spool
 `unassigned` events to a shared `<spool>/_unassigned/` file that every
 campaign's build reads. A ruling posted from Review matches asks the running
 auto-trigger for a rebuild (`builder_trigger.request_rebuild`).
+`DW_API_METADATA__PATH_MAP` (`from=to` prefixes, comma separated; default empty)
+translates the file paths events and the catalog record (`/bigdata/...`,
+`Z:/bigdata/...`) onto this host's mount of the same share
+(`metadata/hzdr_paths.py`). It is applied where the API opens a shot's
+`hdf5_path` (dataset listing and previews); it never rewrites what is stored.
 Structured JSON logging turns on when `DW_API_DEBUG=false`.
 `hzdr/scripts/damnit-api.service` is the systemd unit for an `/opt` install;
 `hzdr/scripts/damnit-api-checkout.service.example` is the one in use on

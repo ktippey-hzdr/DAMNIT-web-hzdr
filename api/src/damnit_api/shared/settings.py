@@ -113,6 +113,9 @@ class MetadataSettings(BaseModel):
     mongo_shots_source_field: str = "source_key"
     mongo_shots_number_field: str = "shot_number"
     mongo_shots_fired_at_field: str = "fired_at"
+    # "from=to" prefixes, comma separated, translating the paths events record
+    # (/bigdata/..., Z:/bigdata/...) onto this host's mount of the same share.
+    path_map: str = ""
 
 
 class TerminologySettings(BaseModel):
