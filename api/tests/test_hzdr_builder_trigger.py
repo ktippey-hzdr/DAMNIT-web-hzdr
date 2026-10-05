@@ -12,6 +12,7 @@ import json
 import os
 import sys
 import time
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -706,31 +707,40 @@ def test_the_gate_s_counts_reach_the_api_log(tmp_path, caplog):
 
 
 def test_a_report_older_than_the_run_is_not_logged_as_its_result(tmp_path, caplog):
-    """Under OUTPUT_ROOT a campaign the gate skipped keeps an old report."""
+    """Under OUTPUT_ROOT a campaign the gate skipped keeps an old report.
 
-    def report(name: str, passed: bool) -> Path:
+    Judged by the report's validated_at (this host's clock), not by the
+    file's mtime, which a share's server sets from its own clock.
+    """
+    started = time.time()
+
+    def report(name: str, passed: bool, at: float | None) -> Path:
         folder = tmp_path / name
         folder.mkdir()
         path = folder / ".validation.json"
-        path.write_text(
-            json.dumps({"master": f"{name}.nxs", "summary": {"passed": passed}})
-        )
+        body = {"master": f"{name}.nxs", "summary": {"passed": passed}}
+        if at is not None:
+            body["validated_at"] = datetime.fromtimestamp(at, UTC).isoformat()
+        path.write_text(json.dumps(body))
         return path
 
-    old = report("old", False)
-    week_ago = time.time() - 7 * 24 * 3600
-    os.utime(old, (week_ago, week_ago))
-    report("new", True)
+    report("old", False, started - 7 * 24 * 3600)
+    report("unstamped", False, None)
+    fresh = report("new", True, started + 1)
+    # A share whose clock runs behind: the fresh file looks a week old.
+    week_ago = started - 7 * 24 * 3600
+    os.utime(fresh, (week_ago, week_ago))
     trigger = BuilderTrigger(
         _settings(
             tmp_path, output_nexus=None, output_root=tmp_path, validation_python="py"
         )
     )
-    trigger._validation_started = time.time() - 1
+    trigger._validation_started = started
     with caplog.at_level("INFO"):
         trigger.validation_finished(0)
     assert "new.nxs: passed" in caplog.text
     assert "old.nxs" not in caplog.text
+    assert "unstamped.nxs" not in caplog.text
 
 
 def test_a_busy_worker_is_not_logged_as_an_error(tmp_path, caplog):

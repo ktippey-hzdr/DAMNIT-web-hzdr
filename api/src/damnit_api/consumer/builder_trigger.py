@@ -27,6 +27,7 @@ import logging
 import sys
 import time
 from collections.abc import Awaitable, Callable, Sequence
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -82,6 +83,17 @@ def request_rebuild() -> bool:
         return False
     trigger.notify()
     return True
+
+
+def _written_since(report: dict, since: float) -> bool:
+    """Whether the gate stamped ``report`` at or after ``since`` (epoch s)."""
+    try:
+        stamped = datetime.fromisoformat(str(report["validated_at"]))
+    except (KeyError, TypeError, ValueError):
+        return False  # no stamp: not this run's
+    if stamped.tzinfo is None:
+        return False
+    return stamped.timestamp() >= since
 
 
 class BuilderTrigger:
@@ -366,6 +378,9 @@ class BuilderTrigger:
         Under ``OUTPUT_ROOT`` the gate checks only campaigns whose master is
         published, so a campaign folder left without one keeps the report of
         an earlier run; logging it would pass it off as this run's result.
+        Judged by the report's own ``validated_at``, which the gate stamps
+        with this host's clock, never by the file's mtime, which a share's
+        server stamps with its own.
         """
         s = self._settings
         if s.output_root is not None:
@@ -378,11 +393,10 @@ class BuilderTrigger:
         since = self._validation_started
         for path in paths:
             try:
-                # Slack for shares that keep mtime to one or two seconds.
-                if since is not None and path.stat().st_mtime < since - 2:
-                    continue
                 report = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
+                continue
+            if since is not None and not _written_since(report, since):
                 continue
             found.append((
                 str(report.get("master", path.parent.name)),
