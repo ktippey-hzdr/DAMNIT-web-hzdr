@@ -25,6 +25,7 @@ import asyncio
 import json
 import logging
 import sys
+import time
 from collections.abc import Awaitable, Callable, Sequence
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -117,6 +118,8 @@ class BuilderTrigger:
         # One validation at a time; a request while one runs is remembered once.
         self._validating = False
         self._validate_again = False
+        # When the running gate started: an older report is not its result.
+        self._validation_started: float | None = None
         self._workers: set[asyncio.Task] = set()
         self._wake = asyncio.Event()
 
@@ -274,6 +277,7 @@ class BuilderTrigger:
             self._validate_again = True
             return
         self._validating = True
+        self._validation_started = time.time()
         try:
             proc = await self._spawn(cmd, self._worker_log(VALIDATION_LOG_NAME))
         except BaseException:
@@ -357,6 +361,12 @@ class BuilderTrigger:
             logger.info("Auto-trigger: NeXus validation passed")
 
     def _validation_reports(self) -> list[tuple[str, dict]]:
+        """The reports this run wrote: one older than its start is stale.
+
+        Under ``OUTPUT_ROOT`` the gate checks only campaigns whose master is
+        published, so a campaign folder left without one keeps the report of
+        an earlier run; logging it would pass it off as this run's result.
+        """
         s = self._settings
         if s.output_root is not None:
             paths = sorted(s.output_root.glob("*/.validation.json"))
@@ -365,8 +375,12 @@ class BuilderTrigger:
         else:
             paths = []
         found = []
+        since = self._validation_started
         for path in paths:
             try:
+                # Slack for shares that keep mtime to one or two seconds.
+                if since is not None and path.stat().st_mtime < since - 2:
+                    continue
                 report = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError):
                 continue

@@ -24,8 +24,9 @@ known gaps is reported as *not certified* and gates only with
 ``--strict-subentries``: the concepts it lacks are mapping decisions
 (shot-aligner ``config/mappings``), not something a converter may invent.
 Exit 2: the gate could not run (no nexus-design-studio or pynxtools in this
-Python, a missing ``--output-root`` or definitions directory); it writes a
-report saying so, so an older passing one is not read as current.
+Python, a missing ``--output-root`` or definitions directory, a ``--master``
+that is not there); it writes a report saying so, so an older passing one is
+not read as current. A failing campaign still makes it exit 1.
 
 Writes ``<campaign folder>/.validation.json`` (atomically) and prints one line
 per campaign. ``--json`` prints the whole report as well.
@@ -56,18 +57,22 @@ CANNOT_RUN = 2
 
 # What every Irr8 NXoptical_spectroscopy subentry lacks today, in shot-aligner's
 # own build as in DAMNIT's (container-writer.md section 9): mapping decisions
-# for a person. Any other subentry finding is new, and gates.
-KNOWN_SUBENTRY_GAPS = tuple(
-    re.compile(pattern)
-    for pattern in (
-        r"required group \S+/instrument/beam_TYPE hasn't been supplied",
-        r"required group \S+/instrument/detector_TYPE hasn't been supplied",
-        r"required attribute \S+/definition/@URL hasn't been supplied",
-        r"required attribute \S+/definition/@version hasn't been supplied",
-        r"required field \S+/experiment_type hasn't been supplied",
-        r"/number_of_cycles should be one of the following Python types: .*NX_INT",
-    )
-)
+# for a person. Keyed by the definition the subentry declares, so a gap known
+# for one definition is still a new finding under another. Any other subentry
+# finding is new, and gates.
+KNOWN_SUBENTRY_GAPS: dict[str, tuple[re.Pattern[str], ...]] = {
+    "NXoptical_spectroscopy": tuple(
+        re.compile(pattern)
+        for pattern in (
+            r"required group \S+/instrument/beam_TYPE hasn't been supplied",
+            r"required group \S+/instrument/detector_TYPE hasn't been supplied",
+            r"required attribute \S+/definition/@URL hasn't been supplied",
+            r"required attribute \S+/definition/@version hasn't been supplied",
+            r"required field \S+/experiment_type hasn't been supplied",
+            r"/number_of_cycles should be one of the following Python types: .*NX_INT",
+        )
+    ),
+}
 
 
 class _Capture(logging.Handler):
@@ -80,17 +85,29 @@ class _Capture(logging.Handler):
 
 
 @contextlib.contextmanager
-def _captured():
-    capture = _Capture()
+def _quiet_pynxtools(*handlers: logging.Handler):
+    """pynxtools' logger with only ``handlers``, not its own stderr echo.
+
+    pynxtools prints every finding to stderr itself, and the trigger's log
+    takes stderr as well as this script's report of the same findings, so
+    each one appeared twice. NDS adds and removes its own capture handler
+    inside ``run_pynxtools_validation``, which still works in here.
+    """
     logger = logging.getLogger("pynxtools")
-    # pynxtools prints every finding to stderr itself; the report has them all.
     saved = (logger.handlers[:], logger.propagate)
-    logger.handlers[:] = [capture]
+    logger.handlers[:] = list(handlers)
     logger.propagate = False
     try:
-        yield capture.messages
+        yield
     finally:
         logger.handlers[:], logger.propagate = saved
+
+
+@contextlib.contextmanager
+def _captured():
+    capture = _Capture()
+    with _quiet_pynxtools(capture):
+        yield capture.messages
 
 
 def _text(value) -> str:
@@ -110,11 +127,12 @@ def _sorted_findings(messages: list[str]) -> dict:
     }
 
 
-def _unexpected(findings: dict) -> list[str]:
+def _unexpected(findings: dict, definition: str) -> list[str]:
+    gaps = KNOWN_SUBENTRY_GAPS.get(definition, ())
     return [
         message
         for message in (*findings["required_missing"], *findings["other"])
-        if not any(gap.search(message) for gap in KNOWN_SUBENTRY_GAPS)
+        if not any(gap.search(message) for gap in gaps)
     ]
 
 
@@ -155,7 +173,8 @@ class Validator:
 
     def master(self, path: Path) -> dict:
         result = self.structural(path)
-        pynx = self._nds.run_pynxtools_validation(path)  # it captures its own findings
+        with _quiet_pynxtools():  # NDS captures the findings itself
+            pynx = self._nds.run_pynxtools_validation(path)
         result["entries"] = [e.model_dump() for e in pynx.entries]
         result["pynxtools_note"] = pynx.note
         result["findings"] = _sorted_findings(pynx.findings)
@@ -193,7 +212,7 @@ class Validator:
                         messages.append(f"pynxtools raised: {error}")
                         valid = False
                 findings = _sorted_findings(messages)
-                unexpected = _unexpected(findings)
+                unexpected = _unexpected(findings, nxdl)
                 result["subentries"][name] = {
                     "definition": nxdl,
                     "valid": valid,
@@ -339,22 +358,44 @@ def _masters(args) -> list[Path]:
     )
 
 
+def _write_not_run(master: Path, reason: str) -> None:
+    """A report saying the gate did not run, over one that could linger."""
+    _write_json_atomic(
+        master.resolve().parent / REPORT_NAME,
+        {
+            "master": master.name,
+            "ran": False,
+            "reason": reason,
+            "summary": {"passed": None},
+            "validated_at": datetime.now(UTC).isoformat(),
+        },
+    )
+
+
 def _not_run(masters: list[Path], reason: str, *, write: bool) -> int:
     """Say the gate did not run, where a passing report could otherwise linger."""
     print(f"Validation could not run: {reason}", file=sys.stderr)
     for master in masters:
         if write and master.is_file():
-            _write_json_atomic(
-                master.resolve().parent / REPORT_NAME,
-                {
-                    "master": master.name,
-                    "ran": False,
-                    "reason": reason,
-                    "summary": {"passed": None},
-                    "validated_at": datetime.now(UTC).isoformat(),
-                },
-            )
+            _write_not_run(master, reason)
     return CANNOT_RUN
+
+
+def _published(masters: list[Path], *, write: bool) -> tuple[list[Path], list[Path]]:
+    """Split the masters into those published and those that are not there.
+
+    Only a ``--master`` can be missing (``--output-root`` lists published
+    ones). It is not a pass: the gate could not run for it (exit 2, unless
+    another campaign failed), and an older report in its folder must not read
+    as this run's. Checked before NDS loads, so it holds without NDS too.
+    """
+    missing = [master for master in masters if not master.is_file()]
+    for master in missing:
+        reason = f"no published master at {master}"
+        print(f"Validation ({master.name}): could not run; {reason}")
+        if write and master.parent.is_dir():
+            _write_not_run(master, reason)
+    return [master for master in masters if master.is_file()], missing
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -385,6 +426,9 @@ def main(argv: list[str] | None = None) -> int:
         masters = _masters(args)
     except FileNotFoundError as error:
         return _not_run([], str(error), write=False)
+    masters, missing = _published(masters, write=not args.no_write)
+    if missing and not masters:
+        return CANNOT_RUN
     try:
         validator = Validator(args.definitions)
     except (ImportError, AttributeError, FileNotFoundError, RuntimeError) as error:
@@ -397,9 +441,6 @@ def main(argv: list[str] | None = None) -> int:
     failed = False
     reports = []
     for master in masters:
-        if not master.is_file():
-            print(f"Validation ({master.name}): no published master")
-            continue
         try:
             report = validate_campaign(validator, master, strict=args.strict_subentries)
         except Exception as error:
@@ -413,7 +454,9 @@ def main(argv: list[str] | None = None) -> int:
         failed = failed or not report["summary"]["passed"]
     if args.json:
         print(json.dumps(reports, indent=2, sort_keys=True))
-    return 1 if failed else 0
+    if failed:
+        return 1
+    return CANNOT_RUN if missing else 0
 
 
 if __name__ == "__main__":

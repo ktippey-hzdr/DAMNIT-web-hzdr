@@ -9,7 +9,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import sys
+import time
 from pathlib import Path
 
 import pytest
@@ -701,6 +703,34 @@ def test_the_gate_s_counts_reach_the_api_log(tmp_path, caplog):
     with caplog.at_level("INFO"):
         trigger.validation_finished(2)
     assert "could not run" in caplog.text
+
+
+def test_a_report_older_than_the_run_is_not_logged_as_its_result(tmp_path, caplog):
+    """Under OUTPUT_ROOT a campaign the gate skipped keeps an old report."""
+
+    def report(name: str, passed: bool) -> Path:
+        folder = tmp_path / name
+        folder.mkdir()
+        path = folder / ".validation.json"
+        path.write_text(
+            json.dumps({"master": f"{name}.nxs", "summary": {"passed": passed}})
+        )
+        return path
+
+    old = report("old", False)
+    week_ago = time.time() - 7 * 24 * 3600
+    os.utime(old, (week_ago, week_ago))
+    report("new", True)
+    trigger = BuilderTrigger(
+        _settings(
+            tmp_path, output_nexus=None, output_root=tmp_path, validation_python="py"
+        )
+    )
+    trigger._validation_started = time.time() - 1
+    with caplog.at_level("INFO"):
+        trigger.validation_finished(0)
+    assert "new.nxs: passed" in caplog.text
+    assert "old.nxs" not in caplog.text
 
 
 def test_a_busy_worker_is_not_logged_as_an_error(tmp_path, caplog):
