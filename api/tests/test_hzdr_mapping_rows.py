@@ -1,3 +1,6 @@
+# h5py's `Group.__getitem__` is typed as Group | Dataset | Datatype, so every
+# `handle["entry/..."]` in an assertion needs narrowing pyright cannot infer.
+# pyright: reportIndexIssue=false, reportAttributeAccessIssue=false
 """shot-aligner's mapping rows applied in h5py (campaign output phase 4b).
 
 The reference fixture's container holds the real rows end to end
