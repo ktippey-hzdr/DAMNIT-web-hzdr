@@ -136,12 +136,19 @@ def _unexpected(findings: dict, definition: str) -> list[str]:
     ]
 
 
-class Validator:
-    """NDS's checks and pynxtools, set up once for every file of a run.
+def _nds_helper(nds, name: str):
+    """NDS's public helper, or the private one it wraps in older NDS.
 
-    Uses two private NDS helpers (the definitions overlay and the pynxtools
-    import); ``test_hzdr_nexus_validate`` breaks wherever NDS moves them.
+    ``assemble_definitions_tree`` and ``load_pynxtools_validator`` are public
+    since NDS's ``feat/public-validation-helpers``; before that only their
+    ``_``-prefixed forms existed. ``test_hzdr_nexus_validate`` breaks if
+    neither is there.
     """
+    return getattr(nds, name, None) or getattr(nds, f"_{name}")
+
+
+class Validator:
+    """NDS's checks and pynxtools, set up once for every file of a run."""
 
     def __init__(self, definitions: Path | None) -> None:
         from nexus_design_studio.core import validator as nds
@@ -158,10 +165,12 @@ class Validator:
                 msg = "pynxtools imported before its definitions path was set"
                 raise RuntimeError(msg)
             self._tmp = tempfile.TemporaryDirectory(prefix="hzdr-nxdl-")
-            nds._assemble_definitions_tree(definitions, Path(self._tmp.name))
+            _nds_helper(nds, "assemble_definitions_tree")(
+                definitions, Path(self._tmp.name)
+            )
             os.environ["NEXUS_DEF_PATH"] = self._tmp.name
             self.extra = frozenset(n.removesuffix(".nxdl.xml") for n in names)
-        self._against = nds._load_pynxtools_validator()
+        self._against = _nds_helper(nds, "load_pynxtools_validator")()
 
     def structural(self, path: Path) -> dict:
         report = self._nds.validate_nexus_file(path, extra_definitions=self.extra)

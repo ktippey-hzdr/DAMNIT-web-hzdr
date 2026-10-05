@@ -414,5 +414,6 @@ nothing from `damnit_api`, so one process checks a whole campaign: about
   shot-aligner sync checks without their sibling. DAMNIT's GitHub CI has no
   NDS checkout, so there it skips (the exit-2 cases still run); it runs
   wherever the sibling is (the combo, `test-all`, fwkt-webapps). The gate uses
-  two private NDS helpers (the definitions overlay, the pynxtools import);
-  those tests break wherever NDS moves them.
+  NDS's public `assemble_definitions_tree` and `load_pynxtools_validator`
+  (NDS `feat/public-validation-helpers`), falling back to their private
+  `_`-prefixed forms in an older NDS; those tests break if neither is there.

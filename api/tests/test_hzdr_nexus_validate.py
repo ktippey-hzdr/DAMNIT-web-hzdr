@@ -185,6 +185,23 @@ def test_a_known_gap_is_known_only_for_its_definition():
     assert gate._unexpected(findings, "NXxrd_pan") == [finding]
 
 
+def test_the_gate_prefers_nds_public_helpers():
+    gate = _script()
+
+    class OldNds:
+        @staticmethod
+        def _load_pynxtools_validator():
+            return "private"
+
+    class NewNds(OldNds):
+        @staticmethod
+        def load_pynxtools_validator():
+            return "public"
+
+    assert gate._nds_helper(OldNds, "load_pynxtools_validator")() == "private"
+    assert gate._nds_helper(NewNds, "load_pynxtools_validator")() == "public"
+
+
 def test_a_missing_output_root_could_not_run(tmp_path):
     result = _gate("--output-root", str(tmp_path / "nope"), python=sys.executable)
     assert result.returncode == 2
