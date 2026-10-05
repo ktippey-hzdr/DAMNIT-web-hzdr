@@ -1714,3 +1714,20 @@ def test_a_worker_that_converted_nothing_says_so(campaign):
         )
     assert result.returncode == hc.BUSY_EXIT, result.stdout + result.stderr
     assert "another worker is converting" in result.stdout
+
+
+def test_a_shot_without_start_time_says_so_once_not_per_instrument():
+    """A missing fired_at was one "did not write" line per instrument."""
+    absent = "points at '/entry/start_time', which this acquisition did not write"
+    problems = [
+        f"BAM: mapping row 'start_time' {absent}",
+        "BAM: mapping row 'gain' points at 'x', which this acquisition did not write",
+        f"Probe135: mapping row 'start_time' {absent}",
+    ]
+    collapsed = hc._one_line_for_start_time(problems)
+    assert collapsed[0].startswith("BAM: mapping row 'gain'")
+    assert len(collapsed) == 2
+    assert "no fired_at" in collapsed[1]
+    assert "2 instrument(s)" in collapsed[1]
+    assert "(BAM, Probe135)" in collapsed[1]
+    assert hc._one_line_for_start_time(problems[1:2]) == problems[1:2]
