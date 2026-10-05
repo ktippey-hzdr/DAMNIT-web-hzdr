@@ -2,6 +2,7 @@
 # `handle["entry/..."]` in an assertion needs narrowing pyright cannot infer.
 # pyright: reportIndexIssue=false, reportAttributeAccessIssue=false
 # pyright: reportArgumentType=false, reportOperatorIssue=false, reportCallIssue=false
+# pyright: reportGeneralTypeIssues=false
 """The container writer (campaign output plan phase 3).
 
 The design is `hzdr/docs/plans/container-writer.md`. The exit check is the

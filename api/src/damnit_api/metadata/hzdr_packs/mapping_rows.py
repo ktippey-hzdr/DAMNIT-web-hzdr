@@ -1,3 +1,8 @@
+# h5py's `Group.__getitem__` is typed as Group | Dataset | Datatype, and every
+# path here is one this module created as a group or a dataset itself, so
+# the narrowing pyright cannot infer is known by construction.
+# pyright: reportIndexIssue=false, reportAttributeAccessIssue=false
+# pyright: reportOperatorIssue=false, reportArgumentType=false
 """shot-aligner's per-instrument mapping rows, applied to a shot container in h5py.
 
 Campaign output phase 4b. A port of shot-aligner's ``mappings.apply_to`` and
@@ -281,7 +286,7 @@ def _ensure_groups(handle: h5py.File, path: str, leaf_class: str | None) -> None
         else:
             name = _declared_class(walked)
         _group(
-            handle, walked, name if (name or "").startswith("NX") else "NXcollection"
+            handle, walked, name if name and name.startswith("NX") else "NXcollection"
         )
 
 
