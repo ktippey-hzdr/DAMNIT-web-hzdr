@@ -1,5 +1,5 @@
 {
-  "commit": "856d814",
+  "commit": "51c2bc2",
   "files": {
     "camera_metadata.py": {
       "from": "shot_aligner/scripts/shotalign/camera_metadata.py",
@@ -95,7 +95,7 @@
     },
     "mappings/Probe135.json": {
       "from": "shot_aligner/config/mappings/Probe135.json",
-      "sha256": "b36a086fbf18cacfa24fb66b1130d6c3462810016bc2f5db396463cda737fe6b"
+      "sha256": "821fc784ea49a3208d3196c823ba03b340313f08eb381fb9c01757d2757854a2"
     },
     "mappings/ProtProfFoil.json": {
       "from": "shot_aligner/config/mappings/ProtProfFoil.json",
@@ -127,15 +127,15 @@
     },
     "mappings/TPS15_Lanex.json": {
       "from": "shot_aligner/config/mappings/TPS15_Lanex.json",
-      "sha256": "e9b77daeb7d380a8669f72df9df8955f5a437829aa548e31aaae21eef32f7b2e"
+      "sha256": "62d8c71f5e886e378a55a8e779a80305f7a5ac180a71b37e3d0991767f026608"
     },
     "mappings/TPS15_MCP.json": {
       "from": "shot_aligner/config/mappings/TPS15_MCP.json",
-      "sha256": "57ed95ad878d628fa2662d0f534e0f9d33591ec0deb0ffaf1cc470f6adc60d66"
+      "sha256": "5e6f3506a7a26f9b9071499195779b729432037c561a0d3841360f195ca913d4"
     },
     "mappings/TPS45.json": {
       "from": "shot_aligner/config/mappings/TPS45.json",
-      "sha256": "485d1addb8f8891c8d61fb49c8c0a1274f8d022c89844fc4b10223e90affc197"
+      "sha256": "8236abde2e182d460b91d1e46a2415ec3abd19cb17cbab0e57ff0562a93066dd"
     },
     "mappings/TPS_90.json": {
       "from": "shot_aligner/config/mappings/TPS_90.json",
@@ -179,7 +179,7 @@
     },
     "mappings/refl_spectrometer.json": {
       "from": "shot_aligner/config/mappings/refl_spectrometer.json",
-      "sha256": "9a38b98a40761d982c1648fd3cd983aa91d184e94cc279616d156991946db358"
+      "sha256": "29ee4b0372c6b752ce61c7606959f4ebba8ba3e6cbbaa04f329668d2277d5faf"
     },
     "nxwrite.py": {
       "from": "shot_aligner/scripts/shotalign/nxwrite.py",

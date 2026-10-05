@@ -9,8 +9,8 @@
   "status": "reviewed",
   "definition": null,
   "provenance": {
-    "decidedBy": "tippey27",
-    "decidedAt": "2026-09-28T11:43:32+00:00",
+    "decidedBy": "auto, Verifikation pending",
+    "decidedAt": "2026-10-05T09:09:37+00:00",
     "rowCount": 19,
     "basis": {
       "autoAccepted": true,
@@ -24,7 +24,16 @@
         "chip_size_y: low confidence",
         "gamma: low confidence",
         "image_file: low confidence"
-      ]
+      ],
+      "placed": {
+        "by": "auto, Verifikation pending",
+        "on": "2026-10-04",
+        "item": "TPS15_Lanex: rows moved with the container after the rule rename (§4.5)",
+        "proposal": "shot_aligner/notes/plans/mapping-proposals-2026.md",
+        "appliedWith": "shot_aligner/scripts/apply_mapping_proposals.py",
+        "account": "root",
+        "previousDecider": "tippey27"
+      }
     },
     "firstDecidedAt": "2026-09-27T14:13:55+00:00",
     "reconciliations": [
@@ -65,7 +74,7 @@
     },
     {
       "local_name": "sequence_number",
-      "nexus_path": "/entry/TPS15_Lanex/Camera/sequence_number",
+      "nexus_path": "/entry/TPS_15_degree/Thomson_Parabola_Spectrometer_15_deg_Lanex/sequence_number",
       "nexus_class": "NXdetector",
       "nexus_attribute": "",
       "status": "mapped",
@@ -73,8 +82,8 @@
       "note": "The trailing counter in the file name, distinguishing frames captured within one second. NXdetector declares `sequence_number`.",
       "units": "",
       "source": "",
-      "nexus_path_template": "/entry/TPS15_Lanex/{instance}/sequence_number",
-      "group_instance": "Camera"
+      "nexus_path_template": "/entry/TPS_15_degree/{instance}/sequence_number",
+      "group_instance": "Thomson_Parabola_Spectrometer_15_deg_Lanex"
     },
     {
       "local_name": "image_file",
@@ -91,7 +100,7 @@
     },
     {
       "local_name": "detector_image",
-      "nexus_path": "/entry/TPS15_Lanex/Camera/data",
+      "nexus_path": "/entry/TPS_15_degree/Thomson_Parabola_Spectrometer_15_deg_Lanex/data",
       "nexus_class": "NXdetector",
       "nexus_attribute": "",
       "status": "mapped",
@@ -99,8 +108,8 @@
       "note": "The captured frame itself, read from the sibling `<stem>_original.png` at apply time. NXdetector/data is where NXDL puts a detector's array, and the group must stay `detector_<something>` because NXDL declares detector_TYPE with nameType=\"partial\". The applier stamps `interpretation=image` on rank-2 data, so a viewer opening the array knows it is a picture rather than a line.",
       "units": "",
       "source": "raw_data/image",
-      "nexus_path_template": "/entry/TPS15_Lanex/{instance}/data",
-      "group_instance": "Camera"
+      "nexus_path_template": "/entry/TPS_15_degree/{instance}/data",
+      "group_instance": "Thomson_Parabola_Spectrometer_15_deg_Lanex"
     },
     {
       "local_name": "contrast.min_source",
@@ -169,7 +178,7 @@
     },
     {
       "local_name": "image_number",
-      "nexus_path": "/entry/TPS15_Lanex/Camera/frame_start_number",
+      "nexus_path": "/entry/TPS_15_degree/Thomson_Parabola_Spectrometer_15_deg_Lanex/frame_start_number",
       "nexus_class": "NXdetector",
       "nexus_attribute": "",
       "status": "mapped",
@@ -177,12 +186,12 @@
       "note": "FALSE FRIEND CORRECTED. The matcher sends this to /entry/instrument/detector/data because `_head_token` strips `number` as a form-word, leaving `image` as the head noun — so a frame counter lands on the detector's data array. NXdetector declares `frame_start_number` for exactly this.",
       "units": "",
       "source": "raw_data/sequence_number",
-      "nexus_path_template": "/entry/TPS15_Lanex/{instance}/frame_start_number",
-      "group_instance": "Camera"
+      "nexus_path_template": "/entry/TPS_15_degree/{instance}/frame_start_number",
+      "group_instance": "Thomson_Parabola_Spectrometer_15_deg_Lanex"
     },
     {
       "local_name": "camera_model",
-      "nexus_path": "/entry/TPS15_Lanex/Camera/description",
+      "nexus_path": "/entry/TPS_15_degree/Thomson_Parabola_Spectrometer_15_deg_Lanex/description",
       "nexus_class": "NXdetector",
       "nexus_attribute": "",
       "status": "mapped",
@@ -190,12 +199,12 @@
       "note": "The file's `Name` row (e.g. acA2040-35gm). NXfabrication/model is the better NeXus concept for a device model, but NXfabrication has no base_class_paths entry, so the builder cannot place it — see the held_back note in the review artifact. NXdetector/description is declared and placeable, and is where this goes until that is resolved.",
       "units": "",
       "source": "fabrication/model",
-      "nexus_path_template": "/entry/TPS15_Lanex/{instance}/description",
-      "group_instance": "Camera"
+      "nexus_path_template": "/entry/TPS_15_degree/{instance}/description",
+      "group_instance": "Thomson_Parabola_Spectrometer_15_deg_Lanex"
     },
     {
       "local_name": "exposure_time",
-      "nexus_path": "/entry/TPS15_Lanex/Camera/count_time",
+      "nexus_path": "/entry/TPS_15_degree/Thomson_Parabola_Spectrometer_15_deg_Lanex/count_time",
       "nexus_class": "NXdetector",
       "nexus_attribute": "",
       "status": "mapped",
@@ -203,12 +212,12 @@
       "note": "NXDL spells a detector's integration time `count_time`, not `exposure_time` — the same rename the spectrometer profiles make.",
       "units": "",
       "source": "count_time",
-      "nexus_path_template": "/entry/TPS15_Lanex/{instance}/count_time",
-      "group_instance": "Camera"
+      "nexus_path_template": "/entry/TPS_15_degree/{instance}/count_time",
+      "group_instance": "Thomson_Parabola_Spectrometer_15_deg_Lanex"
     },
     {
       "local_name": "gain",
-      "nexus_path": "/entry/TPS15_Lanex/Camera/gain_setting",
+      "nexus_path": "/entry/TPS_15_degree/Thomson_Parabola_Spectrometer_15_deg_Lanex/gain_setting",
       "nexus_class": "NXdetector",
       "nexus_attribute": "",
       "status": "mapped",
@@ -216,8 +225,8 @@
       "note": "Declared by NXdetector. Recorded in dB as the camera reports it.",
       "units": "",
       "source": "gain_setting",
-      "nexus_path_template": "/entry/TPS15_Lanex/{instance}/gain_setting",
-      "group_instance": "Camera"
+      "nexus_path_template": "/entry/TPS_15_degree/{instance}/gain_setting",
+      "group_instance": "Thomson_Parabola_Spectrometer_15_deg_Lanex"
     },
     {
       "local_name": "black_level",

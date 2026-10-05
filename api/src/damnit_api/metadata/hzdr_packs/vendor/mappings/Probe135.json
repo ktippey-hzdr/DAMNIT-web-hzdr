@@ -3,14 +3,14 @@
   "instrument": "Probe135",
   "instrumentId": "probe135",
   "instrumentIdStatus": "catalogue",
-  "$instrumentId": "The DRACO instrument catalogue's id for this instrument (NDS catalogs/instruments/hzdr-draco.yaml, hzdr-draco 0.1.0). 'catalogue': the catalogue has the entry. 'proposed': it does not yet, and the id is the catalogue's slug rule applied to the folder label, for the maintainer to add or correct.",
+  "$instrumentId": "The DRACO instrument catalogue's id for this instrument (NDS catalogs/instruments/hzdr-draco.yaml, hzdr-draco 0.2.0). 'catalogue': the catalogue has the entry. 'proposed': it does not yet, and the id is the catalogue's slug rule applied to the folder label, for the maintainer to add or correct.",
   "ndsProfile": null,
   "$status": "'proposed' means NDS suggested these and nobody has checked them: they are recorded, shown in the app pre-filled, and DELIBERATELY NOT written into any container. 'reviewed' means a person went through them, and only then do they change the data.",
   "status": "reviewed",
   "definition": null,
   "provenance": {
-    "decidedBy": "tippey27",
-    "decidedAt": "2026-09-28T11:43:31+00:00",
+    "decidedBy": "auto, Verifikation pending",
+    "decidedAt": "2026-10-05T09:09:37+00:00",
     "rowCount": 12,
     "basis": {
       "autoAccepted": true,
@@ -28,7 +28,15 @@
         "Picture Size horz./vert.: low confidence",
         "Pixelrate: low confidence",
         "ROI horz./vert.: low confidence"
-      ]
+      ],
+      "accepted": {
+        "by": "auto, Verifikation pending",
+        "on": "2026-10-04",
+        "item": "Probe135 'Camera Type' -> description (§4.5)",
+        "proposal": "shot_aligner/notes/plans/mapping-proposals-2026.md",
+        "appliedWith": "shot_aligner/scripts/apply_mapping_proposals.py",
+        "account": "root"
+      }
     },
     "firstDecidedAt": "2026-09-25T13:40:12+00:00",
     "reconciliations": [
@@ -60,15 +68,15 @@
     },
     {
       "local_name": "Camera Type",
-      "nexus_path": "/entry/Probe_135_deg/pco_Camera/data",
+      "nexus_path": "/entry/Probe_135_deg/pco_Camera/description",
       "nexus_class": "NXdetector",
       "nexus_attribute": "",
       "source": "acquisition_settings/camera_type",
       "status": "mapped",
       "confidence": 0.78,
       "registry_key": "",
-      "note": "proposed by NDS; source matched exact",
-      "nexus_path_template": "/entry/Probe_135_deg/{instance}/data",
+      "note": "proposed by NDS; source matched exact. Retargeted from /entry/Probe_135_deg/pco_Camera/data (the detector's NXdata group, which nothing may link over) to its description, accepted 2026-10-04 (shot_aligner/notes/plans/mapping-proposals-2026.md §4.5).",
+      "nexus_path_template": "/entry/Probe_135_deg/{instance}/description",
       "group_instance": "pco_Camera"
     },
     {
