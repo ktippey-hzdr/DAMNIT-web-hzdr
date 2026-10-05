@@ -98,6 +98,7 @@ AREAS = (
     CoverageArea(
         name="HZDR diagnostic packs and shot containers",
         files=(
+            f"{A}/metadata/hzdr_compare.py",
             f"{A}/metadata/hzdr_containers.py",
             f"{A}/metadata/hzdr_packs/mapping_rows.py",
             f"{A}/metadata/hzdr_packs/__init__.py",
@@ -113,6 +114,7 @@ AREAS = (
             f"{A}/metadata/hzdr_packs/vendor/nxwrite.py",
         ),
         tests=(
+            f"{T}/test_hzdr_compare.py",
             f"{T}/test_hzdr_containers.py",
             f"{T}/test_hzdr_mapping_rows.py",
             f"{T}/test_hzdr_nexus_validate.py",
