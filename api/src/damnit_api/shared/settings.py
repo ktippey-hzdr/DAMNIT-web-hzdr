@@ -113,6 +113,18 @@ class MetadataSettings(BaseModel):
     mongo_shots_source_field: str = "source_key"
     mongo_shots_number_field: str = "shot_number"
     mongo_shots_fired_at_field: str = "fired_at"
+    # "from=to" prefixes, comma separated, translating the paths events record
+    # (/bigdata/..., Z:/bigdata/...) onto this host's mount of the same share.
+    path_map: str = ""
+
+    @field_validator("path_map")
+    @classmethod
+    def _check_path_map(cls, value: str) -> str:
+        # Refuse a bad map when settings load, not on the first request.
+        from .hzdr_paths import parse_path_map
+
+        parse_path_map(value)
+        return value
 
 
 class TerminologySettings(BaseModel):

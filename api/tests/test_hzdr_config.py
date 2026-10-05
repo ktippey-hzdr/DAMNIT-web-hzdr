@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 from damnit_api.auth.ldap import _user_info_from_record
 from damnit_api.main import create_app
 from damnit_api.shared.hzdr_settings import HZDRLaserSettings
-from damnit_api.shared.settings import DamnitSettings, LDAPSettings
+from damnit_api.shared.settings import DamnitSettings, LDAPSettings, Settings
 
 
 def test_damnit_settings_resolves_hzdr_folder_path(tmp_path):
@@ -89,3 +89,16 @@ def test_app_starts_without_mymdc():
 
     assert response.status_code == 200
     assert damnit_api._mymdc.CLIENT is None
+
+
+def test_path_map_env_var_reaches_the_metadata_settings(monkeypatch, tmp_path):
+    """The documented knob is DW_API_METADATA__PATH_MAP and defaults to empty."""
+    spec = "/bigdata=/mnt/bigdata,Z:/bigdata=/mnt/bigdata"
+    # Independent of a deployment's api/.env and the shell environment.
+    monkeypatch.delenv("DW_API_METADATA__PATH_MAP", raising=False)
+    monkeypatch.setenv("DW_API_DAMNIT_PATH", str(tmp_path))  # local mode
+    assert Settings(_env_file=None).metadata.path_map == ""
+
+    monkeypatch.setenv("DW_API_METADATA__PATH_MAP", spec)
+
+    assert Settings(_env_file=None).metadata.path_map == spec

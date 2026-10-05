@@ -13,10 +13,12 @@ repos:
           - id: check-yaml
           - id: end-of-file-fixer
             stages: [pre-commit]
-            exclude: ^frontend/apps/demo/public/
+            # Vendored pack code and reference fixture are pinned by sha256.
+            exclude: ^frontend/apps/demo/public/|^api/src/damnit_api/metadata/hzdr_packs/vendor/|^api/tests/fixtures/hzdr-reference/
           - id: trailing-whitespace
             stages: [pre-commit]
-            exclude: ^frontend/apps/demo/public/
+            # Vendored pack code and reference fixture are pinned by sha256.
+            exclude: ^frontend/apps/demo/public/|^api/src/damnit_api/metadata/hzdr_packs/vendor/|^api/tests/fixtures/hzdr-reference/
           - id: mixed-line-ending
             args: [--fix=lf]
             files: \.(bash|sh)$

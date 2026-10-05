@@ -205,12 +205,50 @@ if ($invalid) {
 # Skip when only specific repos are selected (the check spans all repos).
 if ($Repos.Count -eq 0) {
     Write-Host ""
-    Write-Host "--- Contract sync (hzdr_event.py + fixtures) ---" -ForegroundColor Cyan
+    # The script prints its own header, and signals drift with `exit 1`,
+    # which sets $LASTEXITCODE and never throws: a try/catch alone let drift
+    # through. The catch is kept for an error the script does throw.
     try {
         & "$PSScriptRoot\sync-hzdr-event.ps1"
     } catch {
         Write-Host "  Contract sync failed: $_" -ForegroundColor Red
         Write-Host "  Run: pwsh hzdr/scripts/sync-hzdr-event.ps1 -Apply  to fix." -ForegroundColor Yellow
+        exit 1
+    }
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Contract drift." -ForegroundColor Red
+        Write-Host "  Run: pwsh hzdr/scripts/sync-hzdr-event.ps1 -Apply  to fix." -ForegroundColor Yellow
+        exit 1
+    }
+}
+
+# -- Reference fixture sync check ----------------------------------------------
+# Verifies that api/tests/fixtures/hzdr-reference/ is byte-identical to
+# shot-aligner's shot_aligner/tests/fixtures/reference/ and to the hashes in
+# its SOURCE.json. Same rule as above: only when every repo is selected.
+if ($Repos.Count -eq 0) {
+    Write-Host ""
+    # The helper prints its own header.
+    & "$PSScriptRoot\sync-hzdr-reference.ps1"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Reference fixture drift." -ForegroundColor Red
+        Write-Host "  Run: pwsh hzdr/scripts/sync-hzdr-reference.ps1 -Apply  to fix." -ForegroundColor Yellow
+        exit 1
+    }
+}
+
+# -- Pack code sync check -----------------------------------------------------
+# Verifies that api/src/damnit_api/metadata/hzdr_packs/vendor/ (shot-aligner's
+# readers, pack helpers and pack manifests) is byte-identical to shot-aligner's
+# and to the hashes in its SOURCE.json. Same rule: only when every repo is
+# selected.
+if ($Repos.Count -eq 0) {
+    Write-Host ""
+    # The helper prints its own header.
+    & "$PSScriptRoot\sync-hzdr-packs.ps1"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  Vendored pack code drift." -ForegroundColor Red
+        Write-Host "  Run: pwsh hzdr/scripts/sync-hzdr-packs.ps1 -Apply  to fix." -ForegroundColor Yellow
         exit 1
     }
 }

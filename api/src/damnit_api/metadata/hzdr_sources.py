@@ -7,6 +7,7 @@ from typing import Any
 import orjson
 from pydantic import BaseModel, Field, JsonValue, computed_field
 
+from ..shared.hzdr_paths import map_path, parse_path_map
 from ..shared.settings import MetadataSettings
 from .hzdr_event import HZDRPayloadRef
 
@@ -169,6 +170,9 @@ class HZDRDataProduct(BaseModel):
     dtype: str | None = None
     units: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+    # Set only in a shot detail: whether ``path`` exists on this host after the
+    # path map. None when there is nothing local to check (no path, a URI).
+    reachable: bool | None = None
 
 
 class HZDRShot(BaseModel):
@@ -242,6 +246,10 @@ class HZDRShotDetail(BaseModel):
     hdf5_exists: bool = False
     hdf5_datasets: list[HZDRHDF5Dataset] = Field(default_factory=list)
     hdf5_error: str | None = None
+    # The shot's container as the campaign file links it
+    # (a root entry named `<YYYYMMDD>_<number>`); its datasets are listed in
+    # `hdf5_datasets` under that prefix and preview through the same file.
+    container: str | None = None
 
 
 class HZDRDatasetPreview(BaseModel):
@@ -257,6 +265,18 @@ class HZDRSourceProvider:
 
     def __init__(self, settings: MetadataSettings):
         self.settings = settings
+        self._path_rules = parse_path_map(settings.path_map)
+
+    def local_hdf5_path(self, shot: HZDRShot) -> Path | None:
+        """The shot's HDF5 path as this host can open it (see hzdr_paths)."""
+        return map_path(
+            None if shot.hdf5_path is None else str(shot.hdf5_path),
+            self._path_rules,
+        )
+
+    def with_local_paths(self, shot: HZDRShot) -> HZDRShot:
+        """A copy of ``shot`` whose ``hdf5_path`` is the one this host opens."""
+        return shot.model_copy(update={"hdf5_path": self.local_hdf5_path(shot)})
 
     def list_sources(self) -> list[HZDRSource]:
         """List available HZDR sources from local files or MongoDB."""
@@ -309,17 +329,40 @@ class HZDRSourceProvider:
             return None
         return self._shot_detail(shot)
 
+    def _product_reachable(self, product: HZDRDataProduct) -> bool | None:
+        if not product.path or "://" in product.path:
+            return None
+        local = map_path(product.path, self._path_rules)
+        return None if local is None else local.exists()
+
     def _shot_detail(self, shot: HZDRShot) -> HZDRShotDetail:
+        # A view for this host; the stored shot keeps its recorded paths.
+        shot = shot.model_copy(
+            update={
+                "data_products": [
+                    product.model_copy(
+                        update={"reachable": self._product_reachable(product)}
+                    )
+                    for product in shot.data_products
+                ]
+            }
+        )
         detail = HZDRShotDetail(shot=shot)
-        if shot.hdf5_path is None:
+        local_path = self.local_hdf5_path(shot)
+        if local_path is None:
             return detail
 
-        detail.hdf5_exists = shot.hdf5_path.exists()
+        detail.hdf5_exists = local_path.exists()
         if not detail.hdf5_exists:
             return detail
 
         try:
-            detail.hdf5_datasets = list_hdf5_datasets(shot.hdf5_path)
+            detail.hdf5_datasets = list_hdf5_datasets(local_path)
+            if shot.shot_key:
+                detail.container, datasets = list_container_datasets(
+                    local_path, shot.shot_key
+                )
+                detail.hdf5_datasets.extend(datasets)
         except OSError as exc:
             detail.hdf5_error = str(exc)
         return detail
@@ -329,9 +372,12 @@ class HZDRSourceProvider:
     ) -> HZDRDatasetPreview | None:
         """Return a small JSON-safe preview for one HDF5 dataset."""
         shot = self.get_shot(key, shot_number)
-        if shot is None or shot.hdf5_path is None or not shot.hdf5_path.exists():
+        if shot is None:
             return None
-        return preview_hdf5_dataset(shot.hdf5_path, dataset_name)
+        local_path = self.local_hdf5_path(shot)
+        if local_path is None or not local_path.exists():
+            return None
+        return preview_hdf5_dataset(local_path, dataset_name)
 
 
 def load_sources_file(path: Path | None) -> list[HZDRSource]:
@@ -366,6 +412,90 @@ def list_hdf5_datasets(path: Path) -> list[HZDRHDF5Dataset]:
     return datasets
 
 
+def list_container_datasets(
+    path: Path, shot_key: str
+) -> tuple[str | None, list[HZDRHDF5Dataset]]:
+    """The shot's container link in campaign file ``path``, and its datasets.
+
+    ``visititems`` does not follow external links, so the campaign file's own
+    listing stops at the root links to the containers; this follows the one for
+    this shot. ``(None, [])`` when the file links no container for it, or the
+    link does not resolve (the container is being replaced, or the folder was
+    copied without ``shots/``).
+    """
+    import h5py
+
+    from .hzdr_nexus import SHOTS_DIRNAME, shot_container_name
+
+    try:
+        stem = shot_container_name(shot_key).removesuffix(".nxs")
+    except ValueError:
+        return None, []
+    link = stem
+    datasets: list[HZDRHDF5Dataset] = []
+    with h5py.File(path, "r") as handle:
+        found = handle.get(link, getlink=True)
+        if not isinstance(found, h5py.ExternalLink) or not found.filename.startswith(
+            f"{SHOTS_DIRNAME}/"
+        ):
+            return None, []
+        try:
+            container = handle[link]
+        except (KeyError, OSError):
+            return None, []
+
+        for name, item in _container_datasets(container):  # pyright: ignore[reportArgumentType]
+            datasets.append(
+                HZDRHDF5Dataset(
+                    name=f"{link}/{name}",
+                    shape=[int(value) for value in item.shape],
+                    dtype=str(item.dtype),
+                )
+            )
+    return link, datasets
+
+
+# Groups that hold second names for a detector's data: a mapping's definition
+# subentry and its collection_/process_ groups (phase 4b, hard links).
+def _is_view(group, name: str) -> bool:
+    nx_class = group.attrs.get("NX_class", "")
+    if isinstance(nx_class, bytes):
+        nx_class = nx_class.decode()
+    return nx_class == "NXsubentry" or name.startswith(("collection_", "process_"))
+
+
+def _container_datasets(entry) -> list[tuple[str, Any]]:
+    """Each dataset of a container once, under the detector's own name.
+
+    ``visititems`` reports an object once, under its first name in name order,
+    which for a dataset a mapping row linked can be its subentry name
+    (``Reflected_515_Spectrometer/...`` sorts before
+    ``Reflected_light_spectroscopy/...``). Every name is walked here and the
+    one outside a mapping's view is kept; a derived value, which has no other
+    name, is listed where the mapping wrote it.
+    """
+    import h5py
+
+    best: dict[Any, tuple[bool, str, Any]] = {}
+
+    def walk(group, prefix: str, in_view: bool, ancestors: tuple) -> None:
+        for name in sorted(group):
+            item = group.get(name)
+            if item is None:
+                continue  # a dangling link
+            here = f"{prefix}{name}"
+            if isinstance(item, h5py.Dataset):
+                key = (in_view, here)
+                if item.id not in best or key < best[item.id][:2]:
+                    best[item.id] = (in_view, here, item)
+            elif isinstance(item, h5py.Group) and item.id not in ancestors:
+                view = in_view or _is_view(item, name)
+                walk(item, f"{here}/", view, (*ancestors, item.id))
+
+    walk(entry, "", False, (entry.id,))
+    return sorted((name, item) for _, name, item in best.values())
+
+
 def preview_hdf5_dataset(path: Path, dataset_name: str) -> HZDRDatasetPreview:
     """Read a small preview from a HDF5 dataset for UI display."""
     import h5py
@@ -373,20 +503,24 @@ def preview_hdf5_dataset(path: Path, dataset_name: str) -> HZDRDatasetPreview:
 
     with h5py.File(path, "r") as handle:
         dataset = handle[dataset_name]
-        data = np.asarray(dataset[...])  # pyright: ignore[reportIndexIssue]
-        if data.ndim == 0 or (data.ndim == 1 and data.size == 1):
+        shape = tuple(int(n) for n in dataset.shape)  # pyright: ignore[reportAttributeAccessIssue]
+        # Read only what the preview shows: through a container link a
+        # name can reach a camera stack of gigabytes, so the leading axes are
+        # indexed to their first frame and the frame is read strided.
+        if len(shape) == 0 or (len(shape) == 1 and shape[0] == 1):
+            data = np.asarray(dataset[()])  # pyright: ignore[reportIndexIssue]
             preview = data.reshape(-1)[0].item()
             preview_kind = "scalar"
-        elif data.ndim == 1:
-            preview = data[: min(data.shape[0], 200)].astype(float).tolist()
+        elif len(shape) == 1:
+            data = np.asarray(dataset[: min(shape[0], 200)])  # pyright: ignore[reportIndexIssue]
+            preview = data.astype(float).tolist()
             preview_kind = "line"
         else:
-            image_source = data
-            while image_source.ndim > 2:
-                image_source = image_source[0]
-            y_stride = max(1, image_source.shape[0] // 64)
-            x_stride = max(1, image_source.shape[1] // 64)
-            image = image_source[::y_stride, ::x_stride].astype(float)
+            lead = (0,) * (len(shape) - 2)
+            y_stride = max(1, shape[-2] // 64)
+            x_stride = max(1, shape[-1] // 64)
+            window = (*lead, slice(None, None, y_stride), slice(None, None, x_stride))
+            image = np.asarray(dataset[window]).astype(float)  # pyright: ignore[reportIndexIssue]
             image = image[:64, :64]
             minimum = float(np.nanmin(image))
             maximum = float(np.nanmax(image))

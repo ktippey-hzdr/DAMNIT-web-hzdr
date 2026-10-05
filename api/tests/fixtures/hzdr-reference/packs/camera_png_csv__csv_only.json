@@ -1,0 +1,270 @@
+{
+  "acquisition": {
+    "files": [
+      "set1_2025-12-01_15h-59m-04s_7.csv"
+    ],
+    "instrument": "BAM",
+    "seq": 7
+  },
+  "detector_path": "entry/detector",
+  "fixture": "hzdr reference pack output",
+  "instrument": {
+    "id": null,
+    "label": "BAM"
+  },
+  "nodes": {
+    "/entry": {
+      "NX_class": "NXentry",
+      "type": "group"
+    },
+    "/entry/detector": {
+      "NX_class": "NXdetector",
+      "type": "group"
+    },
+    "/entry/detector/acquisition_settings": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/acquisition_settings/black_level_offset": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Black Level Offset",
+        "source_text": "0.00"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": 0.0
+    },
+    "/entry/detector/acquisition_settings/chip_size_x": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Chip Size X",
+        "source_text": "3.69 mm"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "mm",
+      "value": 3.69
+    },
+    "/entry/detector/acquisition_settings/chip_size_y": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Chip Size Y",
+        "source_text": "2.77 mm"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "mm",
+      "value": 2.77
+    },
+    "/entry/detector/acquisition_settings/exposure": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Exposure",
+        "source_text": "0.035000 s"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "s",
+      "value": 0.035
+    },
+    "/entry/detector/acquisition_settings/gain": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Gain",
+        "source_text": "12.00 dB"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "dB",
+      "value": 12.0
+    },
+    "/entry/detector/acquisition_settings/gamma": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Gamma",
+        "source_text": "1.00"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": 1.0
+    },
+    "/entry/detector/count_time": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Exposure",
+        "source_text": "0.035000 s"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "s",
+      "value": 0.035
+    },
+    "/entry/detector/fabrication": {
+      "NX_class": "NXfabrication",
+      "type": "group"
+    },
+    "/entry/detector/fabrication/model": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "acA640-120gm"
+    },
+    "/entry/detector/gain_setting": {
+      "NX_class": null,
+      "attrs": {
+        "source_key": "Gain"
+      },
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "dB",
+      "value": 12.0
+    },
+    "/entry/detector/metadata": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/metadata/black_level_offset": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "0.00"
+    },
+    "/entry/detector/metadata/chip_size_x": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "3.69 mm"
+    },
+    "/entry/detector/metadata/chip_size_y": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "2.77 mm"
+    },
+    "/entry/detector/metadata/comment": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "synthetic case"
+    },
+    "/entry/detector/metadata/exposure": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "0.035000 s"
+    },
+    "/entry/detector/metadata/gain": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "12.00 dB"
+    },
+    "/entry/detector/metadata/gamma": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "1.00"
+    },
+    "/entry/detector/original_metadata": {
+      "NX_class": "NXnote",
+      "type": "group"
+    },
+    "/entry/detector/original_metadata/data": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "{\"Name\": \"acA640-120gm\", \"Label\": \"beam\", \"Comment\": \"synthetic case\", \"Exposure\": \"0.035000 s\", \"Gain\": \"12.00 dB\", \"Gamma\": \"1.00\", \"Black Level Offset\": \"0.00\", \"Chip Size X\": \"3.69 mm\", \"Chip Size Y\": \"2.77 mm\", \"Image No.\": \"7\"}"
+    },
+    "/entry/detector/original_metadata/date": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
+    "/entry/detector/original_metadata/description": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "original parsed camera CSV metadata; values kept as text"
+    },
+    "/entry/detector/original_metadata/source_file": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "set1_2025-12-01_15h-59m-04s_7.csv"
+    },
+    "/entry/detector/original_metadata/type": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "application/json"
+    },
+    "/entry/detector/raw_data": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/raw_data/name": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "beam"
+    },
+    "/entry/detector/raw_data/sequence_number": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "7"
+    }
+  },
+  "pack": "camera_png_csv",
+  "plottable": null,
+  "problems": [
+    "missing image for CSV-only acquisition"
+  ],
+  "root": "packs/cases/camera_png_csv__csv_only",
+  "small": 64,
+  "volatile": [
+    "/entry/detector/original_metadata/date"
+  ],
+  "writer": "shot-aligner diagnostics.camera_png_csv.write"
+}

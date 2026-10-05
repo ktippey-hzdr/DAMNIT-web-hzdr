@@ -64,6 +64,7 @@ cd api && uv run pytest tests/test_hzdr_spool.py::test_name   # single test
 ```
 python api/scripts/hzdr-hdf5-builder.py --experiment-id <id> --campaign-timezone Europe/Berlin \
     --labfrog-sqlite <c>.sqlite --trigger-jsonl <triggers>.jsonl --output-nexus <c>.nxs
+python api/scripts/hzdr-container-worker.py --master <c>.nxs   # shot containers into <c's folder>/shots/ (or --output-root)
 python api/scripts/hzdr-local-acceptance.py        # emulator events through Confirm Matches, no broker
 python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hzdr-event-v1 schema + sample fixtures
 ```
@@ -96,6 +97,69 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     canonical path inventory (only `/entry/shots/*` is shot-indexed —
     `/entry/source_events` and `/entry/data_products` need a `shot_key` join) are in
     [hzdr/docs/plans/openpmd-projection-plan.md](hzdr/docs/plans/openpmd-projection-plan.md).
+  - `hzdr_packs/` — the diagnostic packs (campaign output plan phase 2b): one
+    acquisition's files into one `NXdetector`, via
+    `write(pack_id, group, acquisition, read_path) -> problems`, for
+    `camera_png_csv`, `spectrometer_irr8` and `sequence_frames`
+    (`metadata.instrument.format`). shot-aligner's readers, helpers and pack
+    manifests are **vendored byte for byte** under `hzdr_packs/vendor/`
+    (pinned in its `SOURCE.json`; ruff/pyright/pre-commit skip it; fix them in
+    shot-aligner, re-vendor with `hzdr/scripts/sync-hzdr-packs.{sh,ps1} --apply`,
+    checked by `test-all.ps1`); the packs themselves are **rewritten to h5py**.
+    Frames are read with Pillow in OpenCV's `IMREAD_UNCHANGED` layout
+    (`_images.py`; a 16-bit colour frame is refused, not truncated) and stream
+    into chunked gzip-4 datasets one frame at a time. Held node for node and
+    value for value to shot-aligner's per-pack references
+    (`api/tests/fixtures/hzdr-reference/packs/`). Called by `hzdr_containers.py`.
+    The vendor folder also pins NDS's instrument catalogue
+    (`hzdr-draco-0.2.0.json`, `vendor.catalogue()`).
+  - `hzdr_containers.py` — the **shot containers** (campaign output phase 3,
+    design in [hzdr/docs/plans/container-writer.md](hzdr/docs/plans/container-writer.md)):
+    reads the published master's `/entry/source_events` + `/entry/shots`
+    (joined by `event_id`; no bridge-profile change), groups each shot's files
+    into acquisitions by shot-aligner's claim key, and writes
+    `<campaign folder>/shots/<YYYYMMDD>_<shot_number:06d>.nxs` (one `NXentry`,
+    `NXinstrument`/`NXdetector` named by the vendored `nxwrite.container_groups`
+    from the catalogue, `shot_key` as an attribute). Run by
+    `api/scripts/hzdr-container-worker.py` (`--master`, or `--output-root`
+    with optional `--campaign`; the `_unassigned` bucket only with
+    `--include-unassigned`) **outside the campaign lock**, under its own
+    `shots/.convert.lock` (a second worker leaves `shots/.convert.pending` for
+    the running one; refreshed per container, another host's reclaimed after
+    30 min). Each container goes to `<name>.nxs.<nonce>.tmp`, is fsynced and
+    renamed into place after a lock check (with
+    the bounded Windows retry), and is rewritten only when its input
+    fingerprint changes (members' `sha256` and presence, catalogue SHA,
+    conversion-code digest, h5py/libhdf5/Pillow versions, path-map digest) —
+    `shots/.build-manifest.json` plus the container's own attribute, so a crash
+    resumes — or a member's size/mtime moved under the same `sha256`. The
+    master is read in slices, keeping only acquisition events. A
+    missing/unreadable file drops that detector and is recorded in
+    `/entry/conversion_problems`; a container that fails is recorded with its
+    error and the pass goes on. Held to the reference fixture's manifest, all 101 contract nodes,
+    including shot-aligner's per-instrument mapping rows (**phase 4b**,
+    `hzdr_packs/mapping_rows.py`, a port of its `mappings.apply_to`: hard links
+    to the agreed paths, derived datasets for transforms, problems noted in
+    `/entry/mapping_problems`; the mapping files vendored into
+    `hzdr_packs/vendor/mappings/` and fingerprinted per instrument). **Phase 4:** the builder
+    links the container of every shot that has an acquisition in this build
+    (`hzdr_nexus.is_acquisition`) and whose file is in place (it names the
+    shot's `shot_key`) from the master's **root**: one relative
+    `ExternalLink("shots/<name>", "/entry")` per container, named by its stem,
+    so the master is a multi-entry NeXus file and `/entry` stays valid against
+    NXhzdr_target; `/entry/shot_containers` (`NXcollection`) indexes them with
+    `shot_key`/`container` datasets to join on; inside the temp file before the atomic rename. When a worker
+    invocation wrote a container the published master does not link, or
+    collected one it still links (`relink_needed`, judged at the end against
+    the master as it is then), it exits `RELINK_EXIT` (3; 4 with a failure) and
+    the trigger answers with one more build, which converges. After each pass
+    the worker moves this campaign's containers (by their own `shot_key`)
+    whose shot has no acquisition in the published master to `shots/.trash`,
+    purged after 7 days; never the lock, guard, pending marker, manifest or
+    temp files, and nothing when the master has no acquisition at all. Shot
+    detail follows the shot's link (`hzdr_sources.list_container_datasets`),
+    listing its datasets as `<stem>/...`; previews read
+    them through the campaign file, one strided frame at a time.
   - `scicat.py` — registers the canonical campaign NeXus file as a citable SciCat
     dataset via the `scicat_plugin` HTTP boundary; runs as a best-effort builder
     post-step (never fails a build) and stamps `scicat_pid`/`version_hash` into the
@@ -173,10 +237,35 @@ events by trigger time) and `DW_API_HZDR_BUILDER__TIME_MATCH_AUTOASSIGN`
 propose review candidates, and an authoritative `shot_number` naming exactly
 one shot attaches on the number alone; `true` restores the earlier ladder,
 which attached a numbered trigger to a neighbouring LabFrog shot by time).
-Consumers spool
+`DW_API_HZDR_BUILDER__VALIDATION_PYTHON` (default empty: off) names a Python
+with nexus-design-studio and pynxtools (NDS's own `.venv`); set, the trigger
+runs `api/scripts/hzdr-nexus-validate.py` (campaign output phase 5) after each
+container worker (not after one that asked for a relink or converted
+nothing, `BUSY_EXIT`), or after the build without containers, one run at a
+time: the master against NXhzdr_target and its container links, the
+containers structurally and their definition subentries (known mapping gaps
+reported, anything new gating), in `<campaign folder>/.validation.json` and
+`.hzdr-validation.log`; exit 1 fails the gate, exit 2 means it could not run.
+`DW_API_HZDR_BUILDER__CONTAINERS_ENABLED` (default `false`) makes the trigger
+start `hzdr-container-worker.py` (for `OUTPUT_NEXUS`, or every campaign under
+`OUTPUT_ROOT`) once before each build and once after a successful one, without
+waiting for it; it logs to `.hzdr-container-worker.log` beside the output
+(`CONTAINER_WORKER_SCRIPT` overrides the script; `CONTAINERS_INCLUDE_UNASSIGNED`
+adds the `_unassigned` bucket in multi-campaign mode). Consumers spool
 `unassigned` events to a shared `<spool>/_unassigned/` file that every
 campaign's build reads. A ruling posted from Review matches asks the running
 auto-trigger for a rebuild (`builder_trigger.request_rebuild`).
+`DW_API_METADATA__PATH_MAP` (`from=to` prefixes, comma separated, absolute
+targets; default empty; a malformed value stops startup) translates recorded
+paths (`/bigdata/...`, `Z:/bigdata/...`) onto this host's mount of the same
+share (`shared/hzdr_paths.py`). It is applied at read time only, in three
+places: a catalog shot's `hdf5_path` when the API lists or previews datasets
+(normally the campaign NeXus file, so it matters when the catalog was built on
+another host or comes from Mongo); the `hdf5_path` handed to Context Builder
+variables; and each data product's `path`, which a shot detail reports as
+`reachable` (true/false; null for URIs and in-file datasets) and the UI badges
+as on disk / missing. The builder does not use it; the container worker reads
+raw files through it (or its `--path-map`). Nothing stored is rewritten.
 Structured JSON logging turns on when `DW_API_DEBUG=false`.
 `hzdr/scripts/damnit-api.service` is the systemd unit for an `/opt` install;
 `hzdr/scripts/damnit-api-checkout.service.example` is the one in use on
@@ -231,11 +320,19 @@ the producer repos that emit the envelope (`shotcounter/`, `planet-watchdog/` un
 conforms, so a contract change fails CI in every producer until the copies re-sync.
 `hzdr/scripts/sync-hzdr-event.ps1` checks (or `-Apply` fixes) the copies; `hzdr/scripts/test-all.ps1`
 runs all sibling suites.
+Two more copies come from shot-aligner and are checked the same way (check by
+default, `--apply`/`-Apply` re-vendors, `SHOT_ALIGNER_ROOT` overrides
+`../shot-aligner`): `hzdr/scripts/sync-hzdr-reference.{sh,ps1}` for the reference
+fixture in `api/tests/fixtures/hzdr-reference/`, and
+`hzdr/scripts/sync-hzdr-packs.{sh,ps1}` for the vendored readers, pack
+manifests, instrument catalogue and per-instrument mapping rows
+(`vendor/mappings/`) in `metadata/hzdr_packs/vendor/`. `test-all.ps1` and `test-all.sh` run all three
+checks and stop on drift.
 
 ## Conventions and boundaries
 - Keep work local-first; prefer the local acceptance script and the harness broker. No real broker/Mongo/ASAPO calls unless the user explicitly changes scope.
 - Do not read or print secrets, credentials, tokens, or auth files. Keep endpoints and tokens in env-specific config, never in API code.
-- Preserve HZDR-specific behavior; the builder is single-writer per campaign (PID lock) and publishes the NeXus file + catalog atomically — keep both invariants.
+- Preserve HZDR-specific behavior; the builder is single-writer per campaign (PID lock) and publishes the NeXus file + catalog atomically — keep both invariants. The lock (`hzdr_nexus.single_writer_lock`) records `host:pid:process-start`, treats a fresh empty lock as held, reclaims a dead or reused PID on this host (on this host the PID decides, never age), and never lets the builder steal another host's lock; the container worker's lock also expires when another host's is not refreshed (`stale_after`), and `WriterLock.refresh()` raises `LockLostError` once a holder's lock was taken over, so it stops before publishing. Every writer must run the same lock code (older code steals the new record format). Every create/reclaim/release of the lock is serialized by a kernel lock on `<lock>.guard` (kept on disk), and a reclaim goes through a checked tombstone; without kernel locks a stale lock is not reclaimed (remove it by hand). Renames over a published file go through `replace_with_retry` (bounded, for Windows readers).
 - Mind private GitLab dependencies and Windows/Linux differences (PowerShell `.ps1` and bash `.sh` launchers are kept in parallel).
 - Root-level `scripts/` (and other upstream-owned paths) are touched only by upstream merges. Everything HZDR at the repo root lives under `hzdr/` (`hzdr/docs/`, `hzdr/scripts/`); inside `api/`/`frontend/`, HZDR code keeps the `hzdr_`/`hzdr/` naming.
 - Add characterization tests before risky refactors. Fix React hook-dependency warnings properly rather than suppressing them.
@@ -253,6 +350,7 @@ runs all sibling suites.
 - `cd api && uv run ruff check .` and `cd api && uv run pytest -k hzdr` for API/integration changes.
 - `pwsh hzdr/scripts/test-all.ps1` before a cross-repo change (it runs the sibling conformance suites).
 - `python api/scripts/hzdr-local-acceptance.py` for an end-to-end check without a broker or sibling repos.
+- NeXus output: `<nds>/.venv/bin/python api/scripts/hzdr-nexus-validate.py --master <c>.nxs` (or `HZDR_NDS_PYTHON=<that python> uv run pytest tests/test_hzdr_nexus_validate.py`); exit 1 on a master or container error.
 - Frontend: `pnpm run dev:app` and verify in the browser; `pnpm run lint`.
 
 ## Agent Pack
@@ -322,11 +420,11 @@ They are named for the geometry and the species because the number means
 nothing without them — a 90° Thomson-parabola reading for protons and for
 Si¹¹⁺ are two measurements, not one key with a label. Sourced from the
 December 2025 ShootSheet columns `TPS 90° - H`, `TPS 90° -Si 11` and `Dosis`
-in `laser_shot_nexus`, and registered **ahead of** any producer, which is the
+in shot-aligner (`tippey27/shot-aligner`), and registered **ahead of** any producer, which is the
 order this registry asks for: that repository is not wired to the Kafka pilot
 and emits no events today. The Thomson parabola was already named in
 [standards-alignment.md §3.5](hzdr/docs/standards-alignment.md) as an important
-DRACO diagnostic with no producer sending it. **Since 2026-09-18** `laser_shot_nexus`
+DRACO diagnostic with no producer sending it. **Since 2026-09-18** shot-aligner
 stamps all three onto its shot containers from the very ShootSheet columns they
 were registered from, where the column names the species and nothing is
 ambiguous — a NeXus field carrying a registry key, not an event producer, so the
@@ -416,7 +514,11 @@ file. They are appended to `/entry/shots`, with empty LabFrog fields and
 arrays still describe that LabFrog prefix. `/entry/instrument/<instrument.id>`
 is an `NXcollection` index of source-event rows for a declared instrument; its
 `event_index` points into `/entry/source_events`. Unregistered files get no
-instrument group. These additive views keep the v4 table columns unchanged.
+instrument group. `/entry/shot_containers` (campaign output phase 4) is an
+`NXcollection` index (`shot_key`/`container` datasets) of the per-shot
+containers in `shots/`, which the file links at its root, one relative
+external link per container named by its stem. These additive views
+keep the v5 table columns unchanged.
 
 ### Shared Pydantic field constraints (`api/src/damnit_api/shared/models.py`)
 

@@ -1,0 +1,157 @@
+{
+  "$comment": "Declarative half of the camera pack. Edited here or in the review app's Formats tab; the behaviour is in camera_png_csv.py beside this file. See README.md in this folder for what each field means.",
+  "id": "camera_png_csv",
+  "title": "Camera frame with CSV sidecar",
+  "order": 20,
+  "kind": "image",
+  "summary": "A PNG frame, optionally with the acquisition software's CSV sidecar, written for one event. Fifteen of this campaign's nineteen diagnostics export this way.",
+  "claims": {
+    "$comment": "A file is offered to each pack in `order`; the first whose suffixes match and whose excludeSuffixes do not, claims it. measurementSuffixes is the half that carries the picture, which is what gets counted, opened and named as the source.",
+    "suffixes": [
+      "_original.png",
+      ".png",
+      ".csv"
+    ],
+    "excludeSuffixes": [
+      ".Irr8.txt"
+    ],
+    "measurementSuffixes": [
+      "_original.png",
+      ".png"
+    ],
+    "sidecarSuffixes": [
+      ".csv"
+    ],
+    "$bmpFrameSuffixes": "Claimed ONLY for an instrument whose campaign entry sets `bmpFrames: true`, and only when the name parses under namePatterns; anywhere else a .bmp goes to the sequence pack as before. Some 2024 cameras saved nothing but an 8-bit BMP named in this pack's timestamped grammar -- 15,424 in Z:/2024/224_08_26/Ar profiler, 2,535 in Z:/2024/2024_03_26/BAM, no .csv and no _original.png beside any of them -- so the file name is the only metadata there is. Listed in order of preference: when two of these share a stem, the first is the frame. A .bmp beside an _original.png of the same stem joins that acquisition and never becomes the frame, because there the BMP is an 8-bit copy of the 16-bit measurement.",
+    "bmpFrameSuffixes": [
+      "_original.bmp",
+      ".bmp",
+      "_snapshot.bmp"
+    ]
+  },
+  "namePatterns": [
+    {
+      "id": "labelled_timestamp",
+      "regex": "^(?P<label>.+?)_(?P<date>\\d{4}-\\d{2}-\\d{2})_(?P<hh>\\d{2})h-(?P<mm>\\d{2})m-(?P<ss>\\d{2})s_(?P<seq>\\d+)$",
+      "example": "set1_2025-12-03_15h-22m-51s_7_original.png",
+      "note": "The richest dialect in the December data: set label, full timestamp, per-set sequence number. The label itself may contain underscores, which is why it is non-greedy."
+    }
+  ],
+  "unlabelledIsShot": false,
+  "$unlabelledIsShot": "False: a camera name always carries a label, so a name that parses to a label which is not set<N> is an alignment or focus series, not a shot.",
+  "reader": {
+    "$comment": "The repository's own format readers stay the authority; the pack imports them rather than reimplementing. img_csv.py sits at the checkout root and is shared with workflows/.",
+    "module": "img_csv",
+    "functions": [
+      "read_image",
+      "read_csv_metadata_file"
+    ]
+  },
+  "nexus": {
+    "$comment": "ndsProfile names the reviewed NeXus Design Studio profile that governs this routing. It is checked by the combo root's `diagnostic-packs` check, which can see NDS; this repository cannot, so nothing here validates it locally.",
+    "ndsProfile": "profiles/beam_profiler.yaml",
+    "ndsProfileVersion": "0.3",
+    "ndsProfileState": "draft, needs facility sign-off; v0.2 routed the Peak Profile tool that v0.1 missed, v0.3 added the Gaussian's amplitude and baseline",
+    "$ndsInput": "Which of this pack's files NDS is given when the review app asks it where a field belongs. 'measurement' or 'sidecar'. The CSV, not the frame. beam_profiler.yaml describes the vendor tool-result sidecar -- handing NDS the 16-bit PNG gets a UnicodeDecodeError, because a PNG is not text. The frame is the measurement; the sidecar is the metadata, and metadata is what a mapping maps.",
+    "ndsInput": "sidecar",
+    "$sourceAliases": "Which dataset this pack writes corresponds to each field NDS names when it reads the file. The advisor offers these as the `source` of a mapping row, so a suggestion becomes actionable instead of being a path with nothing behind it. A name NOT listed here falls through to matching on the name itself; a name mapped to null is declined deliberately and is never guessed. Format-level, so every instrument sharing this pack gets it at once -- which is the point: seventeen cameras had the same three matches and the same ten misses.",
+    "sourceAliases": {
+      "detector_image": "raw_data/image",
+      "image_number": "raw_data/sequence_number",
+      "camera_model": "fabrication/model",
+      "black_level": "acquisition_settings/black_level_offset",
+      "gamma": "acquisition_settings/gamma",
+      "chip_size_x": "acquisition_settings/chip_size_x",
+      "chip_size_y": "acquisition_settings/chip_size_y",
+      "sequence_number": null,
+      "image_file": "file_metadata/file_name",
+      "camera_vendor": null,
+      "start_time": "/entry/start_time",
+      "experiment_type": null,
+      "contrast.min_source": null,
+      "contrast.max_source": null,
+      "contrast.min_destination": null,
+      "contrast.max_destination": null,
+      "contrast.roi": null,
+      "peak_profile.fwhm_horiz": "beam_profile_fit/fwhm_horiz",
+      "peak_profile.fwhm_vert": "beam_profile_fit/fwhm_vert",
+      "peak_profile.one_over_e2_horiz": "beam_profile_fit/width_1e2_horiz",
+      "peak_profile.one_over_e2_vert": "beam_profile_fit/width_1e2_vert",
+      "peak_profile.amplitude_horiz": "beam_profile_fit/amplitude_horiz",
+      "peak_profile.amplitude_vert": "beam_profile_fit/amplitude_vert",
+      "peak_profile.offset_horiz": "beam_profile_fit/offset_horiz",
+      "peak_profile.offset_vert": "beam_profile_fit/offset_vert",
+      "peak_profile.roi": "beam_profile_fit/parameters/roi",
+      "peak_profile.peak_determination_method": "beam_profile_fit/parameters/peak_determination_method",
+      "peak_profile.averaging": "beam_profile_fit/parameters/averaging",
+      "peak_profile.pos_x": null,
+      "peak_profile.pos_y": null,
+      "peak_profile.value": null,
+      "peak_profile.mean_horiz": null,
+      "peak_profile.mean_vert": null,
+      "peak_profile.green_x_horiz": null,
+      "peak_profile.green_y_horiz": null,
+      "peak_profile.red_x_horiz": null,
+      "peak_profile.red_y_horiz": null,
+      "peak_profile.dist_x_horiz": null,
+      "peak_profile.green_x_vert": null,
+      "peak_profile.green_y_vert": null,
+      "peak_profile.red_x_vert": null,
+      "peak_profile.red_y_vert": null,
+      "peak_profile.dist_x_vert": null,
+      "statistics.sum": "roi_statistics/sum",
+      "statistics.max": "roi_statistics/max",
+      "statistics.mean": "roi_statistics/mean",
+      "statistics.std_dev": "roi_statistics/std_dev",
+      "statistics.number_of_pixels": "roi_statistics/pixel_count",
+      "statistics.roi": "roi_statistics/parameters/roi",
+      "profile.fwhm_horiz": null,
+      "profile.fwhm_vert": null,
+      "profile.one_over_e2_horiz": null,
+      "profile.one_over_e2_vert": null,
+      "profile.mean_horiz": null,
+      "profile.mean_vert": null,
+      "peak.pos_x": null,
+      "peak.pos_y": null,
+      "peak.value": null,
+      "centroid.pos_x": null,
+      "centroid.pos_y": null
+    },
+    "$unmappedSubtrees": "Parts of this pack's output no mapping row is expected to claim, and why. Read by `align.py map <date> --verify`, whose `norow` column would otherwise report this pack's fifteen verbatim paths on each of seventeen cameras and bury the finding that matters. Declaring the exemption is the point: 'we do not map this and here is why' is a different statement from 'nobody looked'. Claiming one anyway is allowed -- the list says what is not expected, not what is forbidden. An entry may also be an exact path rather than a prefix, which is how the NXprocess bookkeeping below is excused without excusing the measurements beside it.",
+    "unmappedSubtrees": {
+      "original_metadata": "the sidecar's own keys, kept verbatim as text so nothing is lost by the promotion. Mapping one would link a string where the typed copy beside it holds a number.",
+      "metadata": "the same keys under the vendor's own spelling, also as text. The typed values -- with units, and with source_key/source_text saying which header line they came from -- are in acquisition_settings, and those are what a mapping row should point at.",
+      "data": "the NXdata view of raw_data/image, made so a viewer has something to plot. It is a link, not a second measurement; NDS's detector_image maps to raw_data/image, which is where the frame lives.",
+      "display": "the 8-bit stretched preview, written only with --preview and labelled a display artefact. Deliberately not a measurement.",
+      "beam_profile_fit/program": "NXprocess's own bookkeeping -- which program, when, and where in the sequence. Written by this pack to say what produced the group, not read off the instrument, so no profile field will ever name it.",
+      "beam_profile_fit/date": "NXprocess's own bookkeeping -- which program, when, and where in the sequence. Written by this pack to say what produced the group, not read off the instrument, so no profile field will ever name it.",
+      "beam_profile_fit/sequence_index": "NXprocess's own bookkeeping -- which program, when, and where in the sequence. Written by this pack to say what produced the group, not read off the instrument, so no profile field will ever name it.",
+      "roi_statistics/program": "NXprocess's own bookkeeping -- which program, when, and where in the sequence. Written by this pack to say what produced the group, not read off the instrument, so no profile field will ever name it.",
+      "roi_statistics/date": "NXprocess's own bookkeeping -- which program, when, and where in the sequence. Written by this pack to say what produced the group, not read off the instrument, so no profile field will ever name it.",
+      "roi_statistics/sequence_index": "NXprocess's own bookkeeping -- which program, when, and where in the sequence. Written by this pack to say what produced the group, not read off the instrument, so no profile field will ever name it."
+    },
+    "$declined": "Why each null is a null. `sequence_number` is NDS's name for the counter in the FILE NAME; our raw_data/sequence_number is the camera's own `Image No.`, which NDS calls `image_number` -- matching them on the shared leaf name was a false friend that read as an exact match on all seventeen cameras. `image_file` and `start_time` were nulls until 2026-09-25 only because nexus_build writes them outside anything the pack's own output lists (file_metadata/), so no source could name them; a source may now be anything a built container holds, and both are aliased to the build's datasets. `start_time` is the shot's aligned /entry/start_time, as the maintainer ruled 2026-09-25; the camera's own time from its file name stays in every container as file_metadata/file_creation_date and is selectable too. `camera_vendor` and `experiment_type` are not in the sidecar at all. The five `contrast.*` rows are the display stretch the operator had on screen: governed-keys.md checked and rejected them, because they carry no measurement and the builder writes its own documented stretch to display/preview.",
+    "$declinedPeakProfile": "Why the fifteen peak_profile.* nulls are nulls, kept apart from $declined because they are one tool's block rather than one reason each. The Peak Profile tool exports twenty-six columns; this pack writes eleven of them as datasets and the whole block verbatim as text in original_metadata/analysis, so nothing is lost by declining the rest -- what is declined is a *dataset of its own*, not the value. `mean_horiz`/`mean_vert` are the Gaussian centre mu: mu horiz agrees with `Pos x` in 170 of this campaign's 211 fits, and mu vert is frozen at 1542.938 on every Focus mini 800 frame, so neither is a centre that can be believed (camera_metadata.FIT_FIELDS says the same in code). `pos_x`, `pos_y` and `value` are the tool's own peak readout rather than fit outputs, and the frame `Pos x` is measured in is the unsettled question governed-keys.md records -- writing it as a dataset would give a number a meaning nobody has agreed. The ten green_*/red_*/dist_* columns are the positions of the marker lines on the operator's screen; NDS itself routed them to /entry/collection at confidence 0.35, which is where a field goes when there is nowhere better.",
+    "$peakProfileCoverage": "Measured, not assumed: of the campaign's camera sidecars the Peak Profile tool ran on 361 and the fit produced typed widths on 211. The eleven aliased names above are the ones camera_metadata.FIT_FIELDS and FIT_PARAMETERS actually turn into datasets; `align.py map <date> --verify` holds this table against a real build rather than trusting it.",
+    "$declinedUnusedTools": "Why the profile.*, peak.* and centroid.* nulls are nulls. All three tools exist in the vendor software and beam_profiler.yaml routes them; measured over the campaign's 2468 sidecars, all three produced ZERO populated rows (against Contrast 2420, Peak Profile 361, Statistics 186). The profile keeps them because another camera or another operator workflow may well populate them, and a row naming an absent field costs nothing. Here they must be declined rather than simply left out, because an absent alias falls through to matching on the name and `profile.fwhm_horiz` is a whole-frame fit whose leaf name is the Peak Profile tool's ROI fit -- two different measurements one letter apart. NDS itself refused to let them share a target (`_reject_duplicates`), which is the same judgement.",
+    "$statistics": "The Statistics tool ran on 186 sidecars. Everything it reports could be recomputed from the stored frame except the one thing that cannot: which pixels it is over. The ROI is an operator-drawn polygon and the CSV records only its name ('Image' when it is the whole frame), so the parameter is kept beside the numbers. Dataset names drop the profile's roi_ prefix because the group already says what they are over.",
+    "nxClass": "NXdetector",
+    "writes": [
+      "raw_data/image — the 16-bit frame as stored, units counts",
+      "data — NXdata linking the frame, interpretation image",
+      "display/preview — an 8-bit stretched copy, labelled a display artefact (only with --preview)",
+      "metadata/* and original_metadata — the sidecar's own keys, kept as text",
+      "acquisition_settings/* — the six typed settings, with source_key and source_text",
+      "count_time, gain_setting, x_pixel_size, y_pixel_size — NXdetector base-class fields",
+      "beam_profile_fit — NXprocess, the vendor Peak Profile fit where one was run; its eleven typed fields are the ones sourceAliases connects to NDS's peak_profile.* names",
+      "beam_profile_fit/fit_is_degenerate — whether the vendor's fit is worth believing; it exports a failed fit exactly like a good one, and 34 of this campaign's 211 are degenerate",
+      "roi_statistics — NXprocess, the vendor Statistics tool's five scalars over the operator's ROI, with the ROI name beside them"
+    ]
+  },
+  "registryKeys": [],
+  "$registryKeys": "Governed keys from DAMNIT's METADATA_KEY_REGISTRY that this pack fills. Empty: the camera sidecar's one candidate is laser.beam_waist_x/y, and governed-keys.md records why it is deliberately NOT claimed — the vendor's 1/e^2 column is a full width where the signed key is a radius, and which plane the camera images is an operator ruling.",
+  "notes": [
+    "The alignment-series builder in nexus_build.build_alignment is camera-only and reads through this pack's suffixes, but its stacking logic is not yet a pack hook. A second image-kind pack would need that generalised first.",
+    "Frames are read by cv2 through img_csv.read_image; a colour PNG is converted to grey."
+  ]
+}

@@ -133,10 +133,13 @@ async def get_campaign_context_results(
     """Run this user's active context file against HZDR source shots."""
     context_path = _campaign_context_path(campaign, user, "context.py")
     _ensure_context_file(context_path, campaign, user)
-    source = HZDRSourceProvider(settings.metadata).get_source(campaign)
+    provider = HZDRSourceProvider(settings.metadata)
+    source = provider.get_source(campaign)
     if source is None:
         raise HTTPException(status_code=404, detail="Unknown HZDR source")
-    return _run_hzdr_context_file(context_path, source.shots)
+    # Context code opens hdf5_path itself, so hand it the path this host reads.
+    shots = [provider.with_local_paths(shot) for shot in source.shots]
+    return _run_hzdr_context_file(context_path, shots)
 
 
 async def _write_campaign_context(

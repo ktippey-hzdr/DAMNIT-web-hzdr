@@ -235,11 +235,11 @@ METADATA_KEY_REGISTRY: dict[str, str | None] = {
     # them: a 90-degree TPS reading for protons and for Si-11+ are different
     # measurements, not one key with a label. Sourced from the December 2025
     # ShootSheet columns "TPS 90 - H", "TPS 90 -Si 11" and "Dosis"
-    # (laser_shot_nexus); registered ahead of any producer, which is the order
+    # (shot-aligner); registered ahead of any producer, which is the order
     # this registry asks for. Observed ranges there: Si-11+ 10-58 MeV, dose
     # 0-317 uSv, protons a single 2.5 MeV setting.
     #
-    # Since 2026-09-18 laser_shot_nexus stamps all three onto its shot
+    # Since 2026-09-18 shot-aligner stamps all three onto its shot
     # containers from the ShootSheet columns they were registered from -- the
     # column names the species (`- H`, `-Si 11`), so nothing there is ambiguous,
     # and a cell holding an operator's words rather than a number keeps the key

@@ -1,0 +1,199 @@
+{
+  "commit": "51c2bc2",
+  "files": {
+    "camera_metadata.py": {
+      "from": "shot_aligner/scripts/shotalign/camera_metadata.py",
+      "sha256": "7c28c2fbd0de75560eeba19c2858d1315c5da225b5f0eb5a9288648bcd9802b5"
+    },
+    "camera_png_csv.json": {
+      "from": "shot_aligner/scripts/shotalign/diagnostics/camera_png_csv.json",
+      "sha256": "3235c5f20df0c0a05bfd73bf7ae60d56e277b706d5c200c313db408c574d4951"
+    },
+    "hzdr-draco-0.2.0.json": {
+      "from": "shot_aligner/config/instrument-catalogue/hzdr-draco-0.2.0.json",
+      "sha256": "bad5d3b2d87a70dad08321e92a3ba550cfa29a2ae7478a3176c9a10369d66e8d"
+    },
+    "img_csv.py": {
+      "from": "polina/img_csv.py",
+      "sha256": "efb180cc06637ea288df8274ad065d7e05ff83523a05a6c2aee32648c184b5fe"
+    },
+    "irr8.py": {
+      "from": "polina/irr8.py",
+      "sha256": "122626b1bef31fe315224919e65bc44dc3a5d438f7bf50d920fd429ad889374a"
+    },
+    "mappings/BAM.json": {
+      "from": "shot_aligner/config/mappings/BAM.json",
+      "sha256": "990d2d1d165b19b7647aa4ad71a3a4d127c1377eb37d0c11280f9b9bead289a3"
+    },
+    "mappings/DIF_400.json": {
+      "from": "shot_aligner/config/mappings/DIF_400.json",
+      "sha256": "333c111d628a82f5da4b66b68bec8f5c2e251b1ac06feee22d370ffebac65785"
+    },
+    "mappings/DIF_515.json": {
+      "from": "shot_aligner/config/mappings/DIF_515.json",
+      "sha256": "6693b3e044f2cb57c93c5673bc1f41716fac80c69a1240ebad3450e17c0a735e"
+    },
+    "mappings/DIF_800.json": {
+      "from": "shot_aligner/config/mappings/DIF_800.json",
+      "sha256": "93c6be03c3a7925d14e2be03f4a6527c9f6ffb2805b6ffefc60442a026319b1b"
+    },
+    "mappings/FF_M2_Mini_515.json": {
+      "from": "shot_aligner/config/mappings/FF_M2_Mini_515.json",
+      "sha256": "ffbe66bfc9133775530140c25f196e420ac361f15f4245e694cd6114523ea42b"
+    },
+    "mappings/FF_M2_Mini_800.json": {
+      "from": "shot_aligner/config/mappings/FF_M2_Mini_800.json",
+      "sha256": "bcd33598b709ecffda3051f3cd67aa980857bed073e1489642f4ea48b6d660b7"
+    },
+    "mappings/FF_PM_Bulli.json": {
+      "from": "shot_aligner/config/mappings/FF_PM_Bulli.json",
+      "sha256": "bbf53a6429b23af90da291ad0ab26ae4ee62c0221ca8cddda5c9584ba67d2577"
+    },
+    "mappings/FF_after_DD.json": {
+      "from": "shot_aligner/config/mappings/FF_after_DD.json",
+      "sha256": "9e8a102a16304db4aa98f5ec524223339f6c79ae5e247a1a6fb73a84a7d4b511"
+    },
+    "mappings/Focus_mini_515.json": {
+      "from": "shot_aligner/config/mappings/Focus_mini_515.json",
+      "sha256": "a1bc22d6cbbe49c55b7420e47ecfa6b28409e0a997d2ded02c0dc787601595d9"
+    },
+    "mappings/Focus_mini_800.json": {
+      "from": "shot_aligner/config/mappings/Focus_mini_800.json",
+      "sha256": "7f5c894b0f6bf7c15a9dfd202172cc85064b57c0fc715dd678cae827dcdc8d1b"
+    },
+    "mappings/Lanex_DIF.json": {
+      "from": "shot_aligner/config/mappings/Lanex_DIF.json",
+      "sha256": "f1b8cb78918f2d25ac1c7cfbc9ccc756b948d2a32f492eb3b581f634fdda4559"
+    },
+    "mappings/M1_Spec_Fib_Cer.json": {
+      "from": "shot_aligner/config/mappings/M1_Spec_Fib_Cer.json",
+      "sha256": "0731487400e5c96046f6a91d5a76fc5052e71151abe6ccd429d52506ef21f61a"
+    },
+    "mappings/M1_Trans_800.json": {
+      "from": "shot_aligner/config/mappings/M1_Trans_800.json",
+      "sha256": "321821a92024916adaa480e4de61d822a9ba7ab3ffae8b45728062b204ca86d9"
+    },
+    "mappings/NF_M2_Mini_800.json": {
+      "from": "shot_aligner/config/mappings/NF_M2_Mini_800.json",
+      "sha256": "2895faed79dc1a6799d08cbd01728ca9eb32a364d4c1f6038e381ed2c820b77a"
+    },
+    "mappings/NF_PM_Bulli.json": {
+      "from": "shot_aligner/config/mappings/NF_PM_Bulli.json",
+      "sha256": "06b84bb756ec26cf32e7c4675f5f1ea9c9299ea59edd4cc9d0c954f0c32d1188"
+    },
+    "mappings/OAP_Img_400.json": {
+      "from": "shot_aligner/config/mappings/OAP_Img_400.json",
+      "sha256": "545eb15f62d95fab99cc94af85c4e161bd6a5ec86cf503bb80293b39712fcb1c"
+    },
+    "mappings/OAP_Img_515.json": {
+      "from": "shot_aligner/config/mappings/OAP_Img_515.json",
+      "sha256": "03984ee05a2f5f88d27fd46dfbe572441f1d9271ec13e9242fe02a1e55701c15"
+    },
+    "mappings/PM_Mini_Trans.json": {
+      "from": "shot_aligner/config/mappings/PM_Mini_Trans.json",
+      "sha256": "d175f6be39cf4a9fd0b6aadf7eb678b8af98b24c82b1ddb795a685e3162e1bbc"
+    },
+    "mappings/Probe135.json": {
+      "from": "shot_aligner/config/mappings/Probe135.json",
+      "sha256": "821fc784ea49a3208d3196c823ba03b340313f08eb381fb9c01757d2757854a2"
+    },
+    "mappings/ProtProfFoil.json": {
+      "from": "shot_aligner/config/mappings/ProtProfFoil.json",
+      "sha256": "14c73133c29896beb2dcc07753f2d8087929447632240e2f303b1e4dac8ad91f"
+    },
+    "mappings/ProtProf_LowE.json": {
+      "from": "shot_aligner/config/mappings/ProtProf_LowE.json",
+      "sha256": "a347fc17fed2d7fcbd21a9d9bb26b53e0dfa26e362964f26797101fe082fa32f"
+    },
+    "mappings/Refl1w.json": {
+      "from": "shot_aligner/config/mappings/Refl1w.json",
+      "sha256": "b8c67cb111b56549b160dbc5fb8e577ed2296814c8f71c7129fdf2010ce5b780"
+    },
+    "mappings/Reflected_515_spectrometer.json": {
+      "from": "shot_aligner/config/mappings/Reflected_515_spectrometer.json",
+      "sha256": "b95bb5623ec505378305f15dd3a5c4c396ede656e6c55a33862b7f0583e9693b"
+    },
+    "mappings/Reflected_800_spectrometer.json": {
+      "from": "shot_aligner/config/mappings/Reflected_800_spectrometer.json",
+      "sha256": "e91a1ea1ed71edb6bd14ce6966328b8cd6bbedbe1bc0001ab973e5ff80c9bce2"
+    },
+    "mappings/SPEBS.json": {
+      "from": "shot_aligner/config/mappings/SPEBS.json",
+      "sha256": "f9c356769a6b305ee6eeeb2a27bb9490d99eaa4b742d4aaf519e863fd8b1281d"
+    },
+    "mappings/TP90_proton_prof.json": {
+      "from": "shot_aligner/config/mappings/TP90_proton_prof.json",
+      "sha256": "b6038f2cbf7ae062af0655e2fb76b584ff8c832cabbed4e1c137ae603fdd4f94"
+    },
+    "mappings/TPS15_Lanex.json": {
+      "from": "shot_aligner/config/mappings/TPS15_Lanex.json",
+      "sha256": "62d8c71f5e886e378a55a8e779a80305f7a5ac180a71b37e3d0991767f026608"
+    },
+    "mappings/TPS15_MCP.json": {
+      "from": "shot_aligner/config/mappings/TPS15_MCP.json",
+      "sha256": "5e6f3506a7a26f9b9071499195779b729432037c561a0d3841360f195ca913d4"
+    },
+    "mappings/TPS45.json": {
+      "from": "shot_aligner/config/mappings/TPS45.json",
+      "sha256": "8236abde2e182d460b91d1e46a2415ec3abd19cb17cbab0e57ff0562a93066dd"
+    },
+    "mappings/TPS_90.json": {
+      "from": "shot_aligner/config/mappings/TPS_90.json",
+      "sha256": "9dd41a3247558e3140d64aef955aefa2ffa44ab75220ede484c0cc9584028c8f"
+    },
+    "mappings/TW_FF.json": {
+      "from": "shot_aligner/config/mappings/TW_FF.json",
+      "sha256": "51591c97ec95d969d582be766a5a5e435e872e198d5d32939f40a502396496ec"
+    },
+    "mappings/Trans1w.json": {
+      "from": "shot_aligner/config/mappings/Trans1w.json",
+      "sha256": "7defa68ad366f55c96deb3e8adb71a89b7c933c40b0936f50c80ea56542a7741"
+    },
+    "mappings/Trans2w.json": {
+      "from": "shot_aligner/config/mappings/Trans2w.json",
+      "sha256": "64f37033473363d4f325d8b96f0224eaac2a4b1cc65cecb2d134c8945809ed48"
+    },
+    "mappings/TransLanex.json": {
+      "from": "shot_aligner/config/mappings/TransLanex.json",
+      "sha256": "4bcb744a3ab697f0f8b87da09dacea43efd4acce786e020b0356f05ecf714c9a"
+    },
+    "mappings/back_refl2.json": {
+      "from": "shot_aligner/config/mappings/back_refl2.json",
+      "sha256": "5ec8cb93dcf461c0b99710bcdba9fffa0783dc8a7eb49803247c0e9339d55c8e"
+    },
+    "mappings/cos_corr.json": {
+      "from": "shot_aligner/config/mappings/cos_corr.json",
+      "sha256": "0b76408a7b810751aa834d1fc8f9737703a01883d188431ea4a76110053bef80"
+    },
+    "mappings/elec_refl.json": {
+      "from": "shot_aligner/config/mappings/elec_refl.json",
+      "sha256": "83458e8ba8c433c56a7097155b2cdd773461bdff30e5d0c682c3ab3b59c2d8d4"
+    },
+    "mappings/miniSCIDOM.json": {
+      "from": "shot_aligner/config/mappings/miniSCIDOM.json",
+      "sha256": "9a6e85c66adda5903f049f4f67469ec080bf42eb0b995185746e70519d9f4e13"
+    },
+    "mappings/p_profiler.json": {
+      "from": "shot_aligner/config/mappings/p_profiler.json",
+      "sha256": "a8db835029f7d64b48de243b8e60470a977d5bd1c190d16015ebda85667fd326"
+    },
+    "mappings/refl_spectrometer.json": {
+      "from": "shot_aligner/config/mappings/refl_spectrometer.json",
+      "sha256": "29ee4b0372c6b752ce61c7606959f4ebba8ba3e6cbbaa04f329668d2277d5faf"
+    },
+    "nxwrite.py": {
+      "from": "shot_aligner/scripts/shotalign/nxwrite.py",
+      "sha256": "ac7cc38f0fa53db3e9b4b796f7a3950e65093007c80bfaed5578d00a251f8473"
+    },
+    "sequence_frames.json": {
+      "from": "shot_aligner/scripts/shotalign/diagnostics/sequence_frames.json",
+      "sha256": "c0b1c7318ed844d6976da9fca398a3abecdbcd5b3b3b63451ea8f1ea31c1f6f6"
+    },
+    "spectrometer_irr8.json": {
+      "from": "shot_aligner/scripts/shotalign/diagnostics/spectrometer_irr8.json",
+      "sha256": "6e085917aea72677f021f086a4a3a6458d58add59619c8933c3e91d40f783b70"
+    }
+  },
+  "repository": "https://codebase.helmholtz.cloud/tippey27/shot-aligner",
+  "source": "shot-aligner readers, pack helpers, pack manifests, the instrument catalogue and the per-instrument mapping rows"
+}

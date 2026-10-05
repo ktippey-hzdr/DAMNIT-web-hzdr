@@ -1,0 +1,22 @@
+Tool;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit;Name;Value;Unit
+Profile;Pos x;;;Pos y;;;Averaging;;;Green x horiz;;;Green y horiz;;;Red x horiz;;;Red y horiz;;;Dist x horiz;;;Green x vert;;;Green y vert;;;Red x vert;;;Red y vert;;;Dist x vert;;;FWHM horiz;;;1/e² horiz;;;µ horiz;;;Amplitude horiz;;;Offset horiz;;;FWHM vert;;;1/e² vert;;;µ vert;;;Amplitude vert;;;Offset vert;;;;;;;;;;;
+Position;Pos x;;;Pos y;;;Pos Value;;;Circle Pos x;;;Circle Pos y;;;Radius;;;Rect Pos x;;;Rect Pos y;;;Width;;;Height;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Peak;Pos x;;;Pos y;;;Value;;;ROI;;;Peak Determination Method;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Centroid;Pos x;;;Pos y;;;ROI;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Peak Profile;Pos x;284;Pixel;Pos y;464;Pixel;Value;52160;a.u.;Averaging;1;Pixel;Green x horiz;238;Pixel;Green y horiz;128;a.u.;Red x horiz;0;Pixel;Red y horiz;1840;a.u.;Dist x horiz;238;Pixel;Green x vert;0;Pixel;Green y vert;8992;a.u.;Red x vert;0;Pixel;Red y vert;8992;a.u.;Dist x vert;0;Pixel;ROI;Image;;Peak Determination Method;Calculate Centroid;a.u.;FWHM horiz;;;1/e² horiz;;;µ horiz;;;Amplitude horiz;;;Offset horiz;;;FWHM vert;;;1/e² vert;;;µ vert;;;Amplitude vert;;;Offset vert;;
+Statistics;Sum;;;Max;;;Mean;;;Std Dev;;;ROI;;;Number of Pixels;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Histogram;ROI;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Noise Reduction;Filter;;;Masksize;;;Double SD;;;ROI;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Offset;Offset Type;;;Offset Gray;;;Offset Red;;;Offset Green;;;Offset Blue;;;ROI Input;;;ROI Output;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Contrast;Min Source;0;a.u.;Max Source;790;a.u.;Min Destination;0;a.u.;Max Destination;65535;a.u.;ROI;Image;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Image No.;108544;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Comment;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Name;acA640-120gm;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Label;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Exposure;0.035000 s;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Gain;100.00 dB;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Black Level Offset;0.00;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Gamma;1.00;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+Chip Size X;3.69 mm;Chip Size Y;2.77 mm;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

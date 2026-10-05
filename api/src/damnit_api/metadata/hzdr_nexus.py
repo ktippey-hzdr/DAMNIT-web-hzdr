@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import hashlib
 import json
 import logging
 import os
+import pathlib
 import re
 import shutil
+import socket
 import sqlite3
 import time
 import uuid
@@ -83,52 +86,401 @@ def _pid_is_alive(pid: int) -> bool:
     return True
 
 
+# An empty lock file is one being written (between the O_EXCL create and the
+# record write); only one older than this is a crash's leftover.
+LOCK_EMPTY_GRACE_S = 5.0
+# Bounded retries for a rename refused because the target is open elsewhere
+# (Windows: a reader holding the master or a container).
+REPLACE_ATTEMPTS = 10
+REPLACE_DELAY_S = 0.5
+
+
+def replace_with_retry(
+    source: Path,
+    target: Path,
+    *,
+    attempts: int = REPLACE_ATTEMPTS,
+    delay: float = REPLACE_DELAY_S,
+) -> None:
+    """``source.replace(target)``, retried while the target is held open.
+
+    Atomic on one filesystem on POSIX and Windows; Windows alone refuses it
+    with ``PermissionError`` while another process has the target open (a
+    container worker reading the master, a viewer). Bounded: the last refusal
+    is raised.
+    """
+    for attempt in range(attempts):
+        try:
+            source.replace(target)
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise
+            time.sleep(delay)
+        else:
+            return
+
+
+def _process_start_token(pid: int) -> str:
+    """When ``pid`` started, where the OS says (Linux ``/proc``); else ``""``.
+
+    A PID reused after its holder died, or after a reboot, starts at another
+    time, so this tells a recycled PID from the holder.
+    """
+    try:
+        text = pathlib.Path(f"/proc/{pid}/stat").read_text(encoding="ascii")
+        fields = text.rsplit(")", 1)[1].split()
+    except (OSError, IndexError):
+        return ""
+    return fields[19] if len(fields) > 19 else ""  # starttime, field 22
+
+
+def _lock_record() -> str:
+    """``host:pid:process-start:nonce``; the nonce makes every acquisition unique."""
+    pid = os.getpid()
+    nonce = uuid.uuid4().hex[:12]
+    return f"{socket.gethostname()}:{pid}:{_process_start_token(pid)}:{nonce}"
+
+
+def _parse_lock(text: str) -> tuple[str | None, int, str] | None:
+    """``(host, pid, start)``; ``host`` None for a legacy bare-PID lock."""
+    parts = text.strip().split(":")
+    try:
+        if len(parts) == 1:
+            return None, int(parts[0]), ""
+        if len(parts) >= 3:  # host:pid:start, and :nonce since the reclaim fix
+            return parts[0], int(parts[1]), parts[2]
+    except ValueError:
+        return None
+    return None
+
+
+def _judge_lock(
+    lock_path: Path, stale_after: float | None
+) -> tuple[str | None, str | None]:
+    """``(holder, text)``: who holds the lock (None: stale) and what it said.
+
+    ``text`` None means the lock vanished while being looked at.
+    """
+    try:
+        text = lock_path.read_text(encoding="utf-8")
+        age = time.time() - lock_path.stat().st_mtime
+    except FileNotFoundError:
+        return None, None
+    except OSError:
+        return "a process this host cannot read", ""
+    parsed = _parse_lock(text)
+    if parsed is None:
+        holder = "a process still writing it" if age < LOCK_EMPTY_GRACE_S else None
+        return holder, text
+    host, pid, start = parsed
+    if host is not None and host != socket.gethostname():
+        # Another host's PID cannot be checked from here; only age reclaims it.
+        if stale_after is not None and age > stale_after:
+            return None, text
+        return f"pid {pid} on {host}", text
+    # On this host the PID decides, never age: a live holder that stalled (a
+    # hung read on a mount, one huge container) keeps its lock.
+    if not _pid_is_alive(pid):
+        return None, text
+    if start and _process_start_token(pid) not in {"", start}:
+        return None, text  # the PID was reused
+    return f"pid {pid}", text
+
+
+# How long an acquirer waits for another's create/reclaim/release step, which
+# takes milliseconds; the guard is never held while a lock is held.
+GUARD_TIMEOUT_S = 10.0
+# EBADF: Linux emulates flock on NFS as a byte-range lock, which refuses an
+# exclusive lock on a read-only descriptor (a guard another user created).
+# Treated like no kernel locks: nothing is reclaimed, a free lock is taken.
+_GUARD_UNSUPPORTED = {
+    getattr(errno, name)
+    for name in ("ENOLCK", "EOPNOTSUPP", "ENOTSUP", "ENOSYS", "EINVAL", "EBADF")
+    if hasattr(errno, name)
+}
+
+
+def _lock_fd(fd: int, path: Path, timeout: float = GUARD_TIMEOUT_S) -> bool:
+    """Take an exclusive kernel lock on ``fd``; False where none is available.
+
+    ``flock`` on POSIX (per open file, so threads exclude each other too, and
+    released by the kernel when the holder dies: it never goes stale), one
+    byte through ``msvcrt.locking`` on Windows. Waits up to
+    ``GUARD_TIMEOUT_S`` for another process's step to finish.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                os.lseek(fd, 0, os.SEEK_SET)
+                msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)  # type: ignore[attr-defined]
+            else:
+                import fcntl
+
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            pass  # POSIX: another process is in its step
+        except OSError as error:
+            if error.errno in _GUARD_UNSUPPORTED:
+                return False
+            if os.name != "nt" or error.errno not in {errno.EACCES, errno.EDEADLK}:
+                raise
+        else:
+            return True
+        if time.monotonic() > deadline:
+            message = f"Lock guard {path} stayed busy for {timeout:.1f} s"
+            raise BuilderAlreadyRunningError(message)
+        time.sleep(0.002)
+
+
+def _unlock_fd(fd: int) -> None:
+    if os.name == "nt":
+        import msvcrt
+
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_UNLCK, 1)  # type: ignore[attr-defined]
+    else:
+        import fcntl
+
+        fcntl.flock(fd, fcntl.LOCK_UN)
+
+
+def _open_guard(guard: Path) -> int:
+    """Open (creating) the guard, writable by every user; read-only if need be.
+
+    The service user and an operator running the builder by hand share it, so
+    a new guard is chmodded 0666 (over the umask; errors ignored); one another
+    user created without write access is opened read-only, which ``flock`` and
+    ``msvcrt.locking`` (a read handle suffices for ``LockFile``) both accept.
+    """
+    binary = getattr(os, "O_BINARY", 0)
+    try:
+        fd = os.open(guard, os.O_CREAT | os.O_EXCL | os.O_RDWR | binary, 0o666)
+    except FileExistsError:
+        pass
+    else:
+        with contextlib.suppress(OSError):
+            # Shared on purpose: an empty lock-guard file, holding no data.
+            os.chmod(guard, 0o666)  # noqa: PTH101, S103
+        return fd
+    try:
+        return os.open(guard, os.O_RDWR | binary)
+    except PermissionError:
+        return os.open(guard, os.O_RDONLY | binary)
+
+
 @contextlib.contextmanager
-def single_writer_lock(output_path: Path) -> Iterator[None]:
+def _guard(
+    lock_path: Path, *, timeout: float = GUARD_TIMEOUT_S, warn: bool = True
+) -> Iterator[bool]:
+    """Serialize every create, reclaim and release of ``lock_path``.
+
+    A kernel lock on the sidecar ``<lock>.guard`` (kept, never removed, so
+    its identity never changes), held for the few milliseconds of one step,
+    never while the lock itself is held. Yields whether it is guarded: where
+    the filesystem has no kernel locks (``ENOLCK``: NFS without lockd) it is
+    not, and :func:`_acquire` then reclaims nothing (fails closed), because
+    the tombstone check alone does not exclude two reclaimers.
+
+    The guard is per host on a FUSE mount such as sshfs (the kernel emulates
+    the lock locally): it serializes every process on this host, which is
+    where the worker and the builder run, not processes on two hosts.
+    """
+    guard = lock_path.with_name(f"{lock_path.name}.guard")
+    fd = _open_guard(guard)
+    try:
+        if not _lock_fd(fd, guard, timeout):
+            if warn:
+                logger.warning(
+                    "No kernel lock on %s; stale locks are not reclaimed automatically",
+                    guard,
+                )
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            _unlock_fd(fd)
+    finally:
+        os.close(fd)
+
+
+def _reclaim(lock_path: Path, judged: str) -> None:
+    """Remove the stale lock that said ``judged``, and nothing else.
+
+    Renamed to a unique tombstone first (one atomic step on POSIX and Windows;
+    the tombstone name is new, so ``rename`` never overwrites). Only one
+    reclaimer's rename can move a given lock; the others find nothing
+    (``FileNotFoundError``) and try to create again. If the tombstone does not
+    say what was judged, a live lock was moved after the judgment: it is put
+    back with ``os.link`` (which never overwrites) and the reclaimer gives up.
+    Called only under :func:`_guard`; on its own it narrows the race but does
+    not close it (a third process can create while a moved lock is out).
+    """
+    tombstone = lock_path.with_name(f"{lock_path.name}.{uuid.uuid4().hex}.stale")
+    try:
+        lock_path.rename(tombstone)
+    except FileNotFoundError:
+        return  # another reclaimer moved it first
+    try:
+        moved = tombstone.read_text(encoding="utf-8")
+    except OSError:
+        moved = None
+    if moved == judged:
+        tombstone.unlink(missing_ok=True)
+        return
+    try:
+        os.link(tombstone, lock_path)
+    except FileExistsError:
+        logger.error(
+            "Lock %s was replaced while being reclaimed; the moved lock (%r) "
+            "could not be put back",
+            lock_path,
+            moved,
+        )
+    except OSError:
+        if not lock_path.exists():
+            tombstone.rename(lock_path)
+    tombstone.unlink(missing_ok=True)
+    message = f"Builder output is locked by another process: {lock_path}"
+    raise BuilderAlreadyRunningError(message)
+
+
+def _acquire(
+    lock_path: Path,
+    record: str,
+    stale_after: float | None,
+    *,
+    may_reclaim: bool = True,
+) -> None:
+    for _ in range(3):
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        except FileExistsError:
+            pass
+        else:
+            try:
+                os.write(fd, record.encode("utf-8"))
+            finally:
+                os.close(fd)
+            return
+        holder, text = _judge_lock(lock_path, stale_after)
+        if holder is not None:
+            message = (
+                f"Builder output is locked by {holder}: {lock_path}. "
+                "If that process is no longer running, remove the lock file "
+                "and retry."
+            )
+            raise BuilderAlreadyRunningError(message)
+        if text is not None and not may_reclaim:
+            message = (
+                f"Builder output lock {lock_path} looks stale, but this filesystem "
+                "has no kernel locks to reclaim it safely; remove it by hand if "
+                "its holder is gone."
+            )
+            raise BuilderAlreadyRunningError(message)
+        if text is not None:
+            _reclaim(lock_path, text)  # stale: move it aside, then create again
+    message = f"Builder output is locked by another process: {lock_path}"
+    raise BuilderAlreadyRunningError(message)
+
+
+class LockLostError(RuntimeError):
+    """A held lock no longer holds this holder's record: it was reclaimed."""
+
+
+class WriterLock:
+    """A held ``single_writer_lock``; ``refresh()`` marks it as still in use."""
+
+    def __init__(self, path: Path, record: str = "") -> None:
+        self.path = path
+        self.record = record
+
+    @property
+    def nonce(self) -> str:
+        """This acquisition's unique token (the record's last field)."""
+        return self.record.rsplit(":", 1)[-1]
+
+    def refresh(self) -> None:
+        """Mark the lock as in use; raise :class:`LockLostError` if it is not ours.
+
+        A holder calls this before each unit of work and before publishing, so
+        one whose lock was taken (by age, from another host) stops instead of
+        writing beside the new holder.
+        """
+        try:
+            current = self.path.read_text(encoding="utf-8")
+        except OSError as error:
+            message = f"Lock {self.path} is gone: {error}"
+            raise LockLostError(message) from error
+        if current != self.record:
+            message = f"Lock {self.path} was taken over: it now says {current!r}"
+            raise LockLostError(message)
+        with contextlib.suppress(OSError):
+            os.utime(self.path)
+
+
+def _release(lock_path: Path, record: str) -> None:
+    """Remove the lock if it is still this holder's (an expired one is not)."""
+    try:
+        current = lock_path.read_text(encoding="utf-8")
+    except OSError:
+        return
+    if current != record:
+        logger.warning(
+            "Lock %s was reclaimed from this holder; left to %r", lock_path, current
+        )
+        return
+    with contextlib.suppress(OSError):
+        lock_path.unlink()
+
+
+@contextlib.contextmanager
+def single_writer_lock(
+    output_path: Path,
+    *,
+    stale_after: float | None = None,
+    guard_timeout: float = GUARD_TIMEOUT_S,
+) -> Iterator[WriterLock]:
     """Guard one campaign's builder output against a second concurrent run.
 
     `hzdr-hdf5-builder.py` is invoked manually/by cron with no orchestration
     above it; two invocations for the same --output-nexus would otherwise
-    race on the same NeXus/catalog files. This takes an exclusive,
-    PID-stamped lock file next to `output_path` (atomic create via O_EXCL on
-    both POSIX and Windows) and removes it on exit. A lock file left behind
-    by a crashed/killed process is reclaimed automatically once its PID is no
-    longer alive, so a crash does not require manual cleanup before the next
-    run. This is single-writer locking only - it does not replace
-    write_json_atomic's protection for concurrent *readers*.
+    race on the same NeXus/catalog files. This takes an exclusive lock file
+    next to `output_path` (atomic create via O_EXCL on both POSIX and Windows)
+    holding ``host:pid:process-start:nonce`` and removes it on exit if it is
+    still its own. A lock left behind by a crashed/killed process is reclaimed
+    automatically: an empty one older than ``LOCK_EMPTY_GRACE_S``, one whose
+    PID is dead on this host or was reused (another start time), and, with
+    ``stale_after``, one not refreshed (``WriterLock.refresh``) for that many
+    seconds, but only when it is another host's (on this host the PID
+    decides, so a live holder that stalled keeps it). The builder passes no
+    ``stale_after`` and never steals another host's lock.
+
+    Every create, reclaim and release runs under :func:`_guard` (a kernel
+    lock, so two reclaimers of one stale lock cannot both win), and a reclaim
+    moves the stale file to a tombstone it then checks (:func:`_reclaim`)
+    rather than unlinking whatever is at the path. Without kernel locks a
+    stale lock is not reclaimed at all: two holders are worse than a lock to
+    remove by hand. This is single-writer
+    locking only - it does not replace write_json_atomic's protection for
+    concurrent *readers*.
     """
     lock_path = output_path.with_name(f"{output_path.name}.lock")
     lock_path.parent.mkdir(parents=True, exist_ok=True)
+    record = _lock_record()
+    with _guard(lock_path, timeout=guard_timeout) as guarded:
+        _acquire(lock_path, record, stale_after, may_reclaim=guarded)
     try:
-        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-    except FileExistsError:
-        try:
-            holder_pid = int(lock_path.read_text(encoding="utf-8").strip())
-        except (OSError, ValueError):
-            holder_pid = -1
-        if _pid_is_alive(holder_pid):
-            message = (
-                f"Builder output is locked by pid {holder_pid}: {lock_path}. "
-                "If that process is no longer running, remove the lock file "
-                "and retry."
-            )
-            raise BuilderAlreadyRunningError(message) from None
-        # Stale lock - the holder is gone; reclaim it.
-        with contextlib.suppress(OSError):
-            lock_path.unlink()
-        try:
-            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-        except FileExistsError as exc:
-            # Lost the race to reclaim it - someone else got there first.
-            message = f"Builder output is locked by another process: {lock_path}"
-            raise BuilderAlreadyRunningError(message) from exc
-    try:
-        os.write(fd, str(os.getpid()).encode("ascii"))
-        os.close(fd)
-        yield
+        yield WriterLock(lock_path, record)
     finally:
-        with contextlib.suppress(OSError):
-            lock_path.unlink()
+        try:
+            with _guard(lock_path, warn=False):
+                _release(lock_path, record)
+        except (BuilderAlreadyRunningError, OSError):
+            _release(lock_path, record)
 
 
 MATCH_RANK = {
@@ -165,7 +517,7 @@ def write_json_atomic(path: Path, payload: Any) -> None:
     temp_path = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
     try:
         temp_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-        temp_path.replace(path)
+        replace_with_retry(temp_path, path)
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise
@@ -1820,8 +2172,11 @@ def write_nexus_bridge(
             _write_instrument_event_groups(entry, events)
             _write_data_products(entry, products, output_path=output_path)
             write_nexus_detector_groups(entry, products)
+            # Every link targets a container already renamed into place, and
+            # the master is renamed last: it never names a missing container.
+            _write_shot_container_links(handle, shots, events, output_path=output_path)
 
-        temp_path.replace(output_path)
+        replace_with_retry(temp_path, output_path)
     except BaseException:
         temp_path.unlink(missing_ok=True)
         raise
@@ -2195,6 +2550,143 @@ LABFROG_LOCAL_COUNT_DESCRIPTION = (
 )
 # On /entry/shots when DAMNIT wrote its identity rows itself, not LabFrog.
 SHOT_IDENTITY_ATTR = "damnit_shot_identity"
+
+# Shot containers (campaign output phases 3-4): one file per shot under
+# <campaign folder>/shots/, linked from the master's root (indexed in
+# /entry/shot_containers).
+SHOTS_DIRNAME = "shots"
+SHOT_CONTAINERS_GROUP = "shot_containers"
+_SHOT_KEY_PARTS = re.compile(
+    r"^(?P<campaign>.+):(?P<date>\d{8}|unknown):(?P<number>\d{6,})$"
+)
+
+
+def shot_container_name(shot_key: str) -> str:
+    """``<YYYYMMDD>_<shot_number:06d>.nxs`` from ``campaign:YYYYMMDD:NNNNNN``.
+
+    Not the ``shot_key`` itself: its colons are illegal on Windows and on the
+    ``Z:`` share, and its campaign part changes when a ruling moves the shot.
+    """
+    match = _SHOT_KEY_PARTS.match(shot_key)
+    if match is None:
+        msg = f"not a shot_key (campaign:YYYYMMDD:NNNNNN): {shot_key!r}"
+        raise ValueError(msg)
+    return f"{match['date']}_{int(match['number']):06d}.nxs"
+
+
+def is_acquisition(metadata: Any) -> bool:
+    """Whether an event's metadata names a file to convert (``instrument.format``).
+
+    The one rule for "this shot has a container": the worker plans containers
+    from these events, and the builder links only shots that have one, so a
+    shot whose files a ruling moved elsewhere is not linked to a stale file.
+    """
+    if not isinstance(metadata, dict):
+        return False
+    instrument = metadata.get("instrument")
+    return isinstance(instrument, dict) and bool(instrument.get("format"))
+
+
+def _container_in_place(path: Path, shot_key: str) -> bool:
+    """True when ``path`` is a finished container of exactly this shot.
+
+    The worker renames a container into place only when it is whole, so a
+    file that opens, names this ``shot_key`` and holds ``/entry`` is one the
+    master may link; anything else (a shot that moved here from another
+    campaign under the same date and number, a foreign file) is not linked.
+    """
+    try:
+        if not path.is_file() or not h5py.is_hdf5(path):
+            return False
+        with h5py.File(path, "r") as handle:
+            recorded = handle.attrs.get("shot_key")
+            if isinstance(recorded, bytes):
+                recorded = recorded.decode("utf-8")
+            return recorded == shot_key and "entry" in handle
+    except OSError:
+        return False
+
+
+def shot_container_links(handle: h5py.File) -> dict[str, h5py.ExternalLink]:
+    """The master's links to its containers: root members linking into ``shots/``."""
+    links = {}
+    for name in handle:
+        link = handle.get(name, getlink=True)
+        if isinstance(link, h5py.ExternalLink) and link.filename.startswith(
+            f"{SHOTS_DIRNAME}/"
+        ):
+            links[str(name)] = link
+    return links
+
+
+def _write_shot_container_links(
+    handle: h5py.File,
+    shots: list[dict[str, Any]],
+    events: list[dict[str, Any]],
+    *,
+    output_path: Path,
+) -> int:
+    """Link each shot's container from the master's root; return the count.
+
+    One relative ``ExternalLink("shots/<name>", "/entry")`` per container in
+    place, at the root and named by the container's stem (``20251201_001044``),
+    so the master is a multi-entry NeXus file: ``/entry`` (the campaign,
+    certified against NXhzdr_target) beside one ``NXentry`` per shot, the way
+    shot-aligner's masters are built. Under ``/entry`` a validator would read
+    the containers as part of the campaign entry and refuse them; at the root
+    each is an entry of its own. Relative, so the campaign folder travels as
+    one unit and ``silx``/h5py follow the links. ``/entry/shot_containers``
+    (``NXcollection``) indexes them with ``shot_key``/``container`` datasets,
+    so a reader joins ``/entry/shots`` without parsing names. Both are
+    rewritten whole on every build (a seeded previous master's links are
+    dropped first), so neither names a container the shot table no longer
+    holds. Containers are written by the worker, outside this lock; one not
+    yet in place is linked by the next build (the worker asks for it).
+    """
+    for name in shot_container_links(handle):
+        del handle[name]
+    entry = handle["entry"]
+    group = _replace_group(entry, SHOT_CONTAINERS_GROUP)
+    group.attrs["NX_class"] = "NXcollection"
+    group.attrs["damnit_source"] = "shot_containers"
+    group.attrs["description"] = (
+        "Index of the per-shot NeXus containers in "
+        f"{SHOTS_DIRNAME}/ this file links: each is an external link at the "
+        "file's root named by its container stem, pointing at the container's "
+        "/entry. Join /entry/shots on shot_key here, never by position."
+    )
+    folder = output_path.parent / SHOTS_DIRNAME
+    with_files = {
+        event.get("shot_key")
+        for event in events
+        if event.get("shot_key") and is_acquisition(event.get("metadata"))
+    }
+    linked_keys: list[str] = []
+    linked_names: list[str] = []
+    if folder.is_dir():
+        seen: set[str] = set()
+        for shot in shots:
+            shot_key = shot.get("shot_key")
+            if not isinstance(shot_key, str) or shot_key in seen:
+                continue
+            if shot_key not in with_files:
+                continue  # no file to convert in this build: nothing to link
+            seen.add(shot_key)
+            try:
+                name = shot_container_name(shot_key)
+            except ValueError:
+                continue
+            stem = name.removesuffix(".nxs")
+            if stem in handle or not _container_in_place(folder / name, shot_key):
+                continue
+            handle[stem] = h5py.ExternalLink(f"{SHOTS_DIRNAME}/{name}", "/entry")
+            linked_keys.append(shot_key)
+            linked_names.append(stem)
+    string = h5py.string_dtype(encoding="utf-8")
+    group.create_dataset("shot_key", data=linked_keys, dtype=string)
+    group.create_dataset("container", data=linked_names, dtype=string)
+    return len(linked_names)
+
 
 # All 118 IUPAC element symbols, for the conservative formula check below.
 _ELEMENTS = (
@@ -2761,7 +3253,10 @@ def catalog_write_lock(
     with contextlib.ExitStack() as stack:
         while True:
             try:
-                stack.enter_context(single_writer_lock(sources_file))
+                left = max(0.0, deadline - time.monotonic())
+                stack.enter_context(
+                    single_writer_lock(sources_file, guard_timeout=left)
+                )
                 break
             except BuilderAlreadyRunningError:
                 if time.monotonic() >= deadline:

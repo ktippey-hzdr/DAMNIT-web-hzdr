@@ -285,3 +285,49 @@ async def wait_for_change(
             return True
         await asyncio.sleep(0.1)
     return False
+
+
+def test_context_variables_receive_the_mapped_hdf5_path(tmp_path, monkeypatch):
+    """A recorded /bigdata path reaches context code as this host's mount path."""
+    mount = tmp_path / "mnt" / "bigdata"
+    mount.mkdir(parents=True)
+    (mount / "shot.h5").write_bytes(b"")
+    sources_file = tmp_path / "hzdr_sources.json"
+    sources_file.write_text(
+        """
+{"sources": [{"key": "hzdr-example", "title": "HZDR fixture", "damnit_path": ".",
+  "metadata": {}, "shots": [{"source_key": "hzdr-example", "shot_number": 1001,
+  "fired_at": "2026-05-05T10:00:00Z", "hdf5_path": "/bigdata/shot.h5"}]}]}
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(settings, "auth", AuthSettings(mode="ldap"))
+    monkeypatch.setattr(settings.context_workspace, "root", tmp_path / "contexts")
+    monkeypatch.setattr(settings.context_workspace, "write_enabled", True)
+    monkeypatch.setattr(settings.metadata, "provider", "local")
+    monkeypatch.setattr(settings.metadata, "sources_file", sources_file)
+    monkeypatch.setattr(settings.metadata, "path_map", f"/bigdata={mount}")
+    app = create_app()
+
+    with TestClient(app) as local_client:
+        local_client.get("/oauth/login?redirect_uri=/home", follow_redirects=False)
+        local_client.put(
+            "/contextfile/campaign/hzdr-example/me/files/context.py",
+            json={
+                "fileContent": """
+import os
+
+from damnit_ctx import Variable
+
+
+@Variable(title="File reachable")
+def reachable(run, hdf5_path):
+    return 1.0 if os.path.exists(hdf5_path) else 0.0
+"""
+            },
+        )
+
+        response = local_client.get("/contextfile/campaign/hzdr-example/me/results")
+
+    assert response.status_code == 200
+    assert response.json()["rows"][0]["values"]["reachable"] == pytest.approx(1.0)

@@ -1,0 +1,327 @@
+{
+  "acquisition": {
+    "files": [
+      "20cm_6kv_00001.tif",
+      "20cm_6kv_00002.tif",
+      "20cm_6kv_00001.tif.rec"
+    ],
+    "instrument": "Probe135",
+    "label": "20cm_6kv"
+  },
+  "detector_path": "entry/detector",
+  "fixture": "hzdr reference pack output",
+  "instrument": {
+    "id": null,
+    "label": "Probe135"
+  },
+  "nodes": {
+    "/entry": {
+      "NX_class": "NXentry",
+      "type": "group"
+    },
+    "/entry/detector": {
+      "NX_class": "NXdetector",
+      "default": "data",
+      "type": "group"
+    },
+    "/entry/detector/acquisition_settings": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/acquisition_settings/exposure_delay": {
+      "NX_class": null,
+      "attrs": {
+        "source_text": "Exposure / Delay: 500 µs / 0 ms"
+      },
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "500 µs / 0 ms"
+    },
+    "/entry/detector/acquisition_settings/roi": {
+      "NX_class": null,
+      "attrs": {
+        "source_text": "ROI: 1 1 5 4"
+      },
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "1 1 5 4"
+    },
+    "/entry/detector/acquisition_settings/serial_number": {
+      "NX_class": null,
+      "attrs": {
+        "source_text": "Serial Number: 1234"
+      },
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "1234"
+    },
+    "/entry/detector/count_time": {
+      "NX_class": null,
+      "dtype": "<f8",
+      "shape": [],
+      "type": "dataset",
+      "units": "us",
+      "value": 500.0
+    },
+    "/entry/detector/data": {
+      "NX_class": "NXdata",
+      "signal": "image",
+      "type": "group"
+    },
+    "/entry/detector/data/image": {
+      "NX_class": null,
+      "attrs": {
+        "description": "all 2 frames of one recording of one shot, in frame order; raw_data/frame_number says which file each came from",
+        "interpretation": "image",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "<u2",
+      "shape": [
+        2,
+        4,
+        5
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        [
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        ],
+        [
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ]
+        ]
+      ]
+    },
+    "/entry/detector/original_metadata": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/original_metadata/recorder_comment": {
+      "NX_class": "NXnote",
+      "type": "group"
+    },
+    "/entry/detector/original_metadata/recorder_comment/data": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "pco.camware\n\nRecord Date: 24.02.2025 Time: 15:39:32\n\nCamera Settings\nExposure / Delay: 500 µs / 0 ms\nSerial Number: 1234\nROI: 1 1 5 4\nComment:\n20cm 6kV"
+    },
+    "/entry/detector/original_metadata/recorder_comment/date": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
+    "/entry/detector/original_metadata/recorder_comment/description": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "20cm_6kv_00001.tif.rec exactly as the camera software wrote it; the typed copies are in acquisition_settings"
+    },
+    "/entry/detector/original_metadata/recorder_comment/type": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "text/plain"
+    },
+    "/entry/detector/raw_data": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/raw_data/frame_number": {
+      "NX_class": null,
+      "attrs": {
+        "description": "the frame number in each file name: a position within this recording, not a shot number"
+      },
+      "dtype": "<i4",
+      "shape": [
+        2
+      ],
+      "type": "dataset",
+      "units": null,
+      "value": [
+        1,
+        2
+      ]
+    },
+    "/entry/detector/raw_data/frame_readable": {
+      "NX_class": null,
+      "dtype": "|b1",
+      "shape": [
+        2
+      ],
+      "type": "dataset",
+      "units": null,
+      "value": [
+        true,
+        true
+      ]
+    },
+    "/entry/detector/raw_data/image": {
+      "NX_class": null,
+      "attrs": {
+        "description": "all 2 frames of one recording of one shot, in frame order; raw_data/frame_number says which file each came from",
+        "interpretation": "image",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "<u2",
+      "link": "/entry/detector/data/image",
+      "shape": [
+        2,
+        4,
+        5
+      ],
+      "type": "dataset",
+      "units": "counts",
+      "value": [
+        [
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ],
+          [
+            100,
+            100,
+            100,
+            100,
+            100
+          ]
+        ],
+        [
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ],
+          [
+            200,
+            200,
+            200,
+            200,
+            200
+          ]
+        ]
+      ]
+    },
+    "/entry/detector/recording_started": {
+      "NX_class": null,
+      "attrs": {
+        "description": "when this set's recording began, from the recorder comment file. Not the time of this frame: one comment describes the whole set, and the frames carry no clock of their own"
+      },
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "2025-02-24T15:39:32"
+    }
+  },
+  "pack": "sequence_frames",
+  "plottable": "entry/detector/data",
+  "problems": [],
+  "root": "packs/cases/sequence_frames__recording_with_comment",
+  "small": 64,
+  "volatile": [
+    "/entry/detector/original_metadata/recorder_comment/date"
+  ],
+  "writer": "shot-aligner diagnostics.sequence_frames.write"
+}

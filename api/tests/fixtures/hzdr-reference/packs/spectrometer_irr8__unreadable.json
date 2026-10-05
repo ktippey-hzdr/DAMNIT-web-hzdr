@@ -1,0 +1,33 @@
+{
+  "acquisition": {
+    "files": [
+      "7519372SP_01Dez25_155904_0001.Irr8.txt"
+    ],
+    "instrument": "Reflected 515 spectrometer"
+  },
+  "detector_path": "entry/detector",
+  "fixture": "hzdr reference pack output",
+  "instrument": {
+    "id": null,
+    "label": "Reflected 515 spectrometer"
+  },
+  "nodes": {
+    "/entry": {
+      "NX_class": "NXentry",
+      "type": "group"
+    },
+    "/entry/detector": {
+      "NX_class": "NXdetector",
+      "type": "group"
+    }
+  },
+  "pack": "spectrometer_irr8",
+  "plottable": null,
+  "problems": [
+    "Reflected 515 spectrometer: could not read 7519372SP_01Dez25_155904_0001.Irr8.txt: Incomplete IRR8 header in <root>/7519372SP_01Dez25_155904_0001.Irr8.txt"
+  ],
+  "root": "packs/cases/spectrometer_irr8__unreadable",
+  "small": 64,
+  "volatile": [],
+  "writer": "shot-aligner diagnostics.spectrometer_irr8.write"
+}

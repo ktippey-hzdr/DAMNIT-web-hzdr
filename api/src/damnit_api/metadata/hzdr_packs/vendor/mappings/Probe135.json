@@ -1,0 +1,213 @@
+{
+  "$comment": "Reviewed NeXus mapping for one instrument. Rows are nexus-design-studio FieldMapping rows -- the same shape as its instrument-profile schema -- so they can be handed back to NDS as a profile. 'source' is ours: the path inside this instrument's detector group holding the value, which is what gets linked. A row with no source is a decision with nothing to point at yet. Edited here or in the review app's Formats tab.",
+  "instrument": "Probe135",
+  "instrumentId": "probe135",
+  "instrumentIdStatus": "catalogue",
+  "$instrumentId": "The DRACO instrument catalogue's id for this instrument (NDS catalogs/instruments/hzdr-draco.yaml, hzdr-draco 0.2.0). 'catalogue': the catalogue has the entry. 'proposed': it does not yet, and the id is the catalogue's slug rule applied to the folder label, for the maintainer to add or correct.",
+  "ndsProfile": null,
+  "$status": "'proposed' means NDS suggested these and nobody has checked them: they are recorded, shown in the app pre-filled, and DELIBERATELY NOT written into any container. 'reviewed' means a person went through them, and only then do they change the data.",
+  "status": "reviewed",
+  "definition": null,
+  "provenance": {
+    "decidedBy": "auto, Verifikation pending",
+    "decidedAt": "2026-10-05T09:09:37+00:00",
+    "rowCount": 12,
+    "basis": {
+      "autoAccepted": true,
+      "date": "2026_09_04",
+      "nds": "0.3.0",
+      "lowConfidence": [
+        "ADC-Operation: low confidence",
+        "Binning horz./vert.: low confidence",
+        "Camera serial number: low confidence",
+        "Conversion factor: low confidence",
+        "Exposure / Delay: low confidence",
+        "IR-Sensitivity: low confidence",
+        "NDS confidence is low or advice was unavailable",
+        "Offset Regulation: low confidence",
+        "Picture Size horz./vert.: low confidence",
+        "Pixelrate: low confidence",
+        "ROI horz./vert.: low confidence"
+      ],
+      "accepted": {
+        "by": "auto, Verifikation pending",
+        "on": "2026-10-04",
+        "item": "Probe135 'Camera Type' -> description (§4.5)",
+        "proposal": "shot_aligner/notes/plans/mapping-proposals-2026.md",
+        "appliedWith": "shot_aligner/scripts/apply_mapping_proposals.py",
+        "account": "root"
+      }
+    },
+    "firstDecidedAt": "2026-09-25T13:40:12+00:00",
+    "reconciliations": [
+      {
+        "at": "2026-10-04T10:27:58+00:00",
+        "automated": true,
+        "why": "phase 2a of HZDR_combo planning/NEXUS_OUTPUT_PLAN.md (decision 5): keyed by the catalogue's instrument.id and held to the NDS profile",
+        "instrumentId": "probe135",
+        "instrumentIdStatus": "catalogue",
+        "ndsProfile": null,
+        "pack": "sequence_frames",
+        "definitionDropped": "NXoptical_spectroscopy",
+        "note": "NXoptical_spectroscopy is not named by the profile: no NDS profile governs it. Rows kept, moved out of the NXsubentry the claim made",
+        "rowsPlaced": 12
+      }
+    ]
+  },
+  "mappings": [
+    {
+      "local_name": "Record Date",
+      "nexus_path": "/entry/start_time",
+      "nexus_class": "NXentry",
+      "nexus_attribute": "",
+      "source": "",
+      "status": "mapped",
+      "confidence": 0.78,
+      "registry_key": "",
+      "note": "proposed by NDS; nothing written for it yet"
+    },
+    {
+      "local_name": "Camera Type",
+      "nexus_path": "/entry/Probe_135_deg/pco_Camera/description",
+      "nexus_class": "NXdetector",
+      "nexus_attribute": "",
+      "source": "acquisition_settings/camera_type",
+      "status": "mapped",
+      "confidence": 0.78,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact. Retargeted from /entry/Probe_135_deg/pco_Camera/data (the detector's NXdata group, which nothing may link over) to its description, accepted 2026-10-04 (shot_aligner/notes/plans/mapping-proposals-2026.md §4.5).",
+      "nexus_path_template": "/entry/Probe_135_deg/{instance}/description",
+      "group_instance": "pco_Camera"
+    },
+    {
+      "local_name": "Picture Size horz./vert.",
+      "nexus_path": "/entry/collection_Probe135/picture_size_horz__vert_",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "source": "acquisition_settings/picture_size_horz_vert",
+      "status": "custom",
+      "confidence": 0.35,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact AUTO DEFAULT: LOW CONFIDENCE",
+      "nexus_path_template": "/entry/{instance}/picture_size_horz__vert_",
+      "group_instance": "collection_Probe135"
+    },
+    {
+      "local_name": "ROI horz./vert.",
+      "nexus_path": "/entry/collection_Probe135/roi_horz__vert_",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "source": "acquisition_settings/roi_horz_vert",
+      "status": "custom",
+      "confidence": 0.35,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact AUTO DEFAULT: LOW CONFIDENCE",
+      "nexus_path_template": "/entry/{instance}/roi_horz__vert_",
+      "group_instance": "collection_Probe135"
+    },
+    {
+      "local_name": "Binning horz./vert.",
+      "nexus_path": "/entry/collection_Probe135/binning_horz__vert_",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "source": "acquisition_settings/binning_horz_vert",
+      "status": "custom",
+      "confidence": 0.35,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact AUTO DEFAULT: LOW CONFIDENCE",
+      "nexus_path_template": "/entry/{instance}/binning_horz__vert_",
+      "group_instance": "collection_Probe135"
+    },
+    {
+      "local_name": "Exposure / Delay",
+      "nexus_path": "/entry/collection_Probe135/exposure___delay",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "source": "acquisition_settings/exposure_delay",
+      "status": "custom",
+      "confidence": 0.35,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact AUTO DEFAULT: LOW CONFIDENCE",
+      "nexus_path_template": "/entry/{instance}/exposure___delay",
+      "group_instance": "collection_Probe135"
+    },
+    {
+      "local_name": "ADC-Operation",
+      "nexus_path": "/entry/collection_Probe135/adc_operation",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "source": "acquisition_settings/adc_operation",
+      "status": "custom",
+      "confidence": 0.35,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact AUTO DEFAULT: LOW CONFIDENCE",
+      "nexus_path_template": "/entry/{instance}/adc_operation",
+      "group_instance": "collection_Probe135"
+    },
+    {
+      "local_name": "Offset Regulation",
+      "nexus_path": "/entry/collection_Probe135/offset_regulation",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "source": "acquisition_settings/offset_regulation",
+      "status": "custom",
+      "confidence": 0.35,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact AUTO DEFAULT: LOW CONFIDENCE",
+      "nexus_path_template": "/entry/{instance}/offset_regulation",
+      "group_instance": "collection_Probe135"
+    },
+    {
+      "local_name": "IR-Sensitivity",
+      "nexus_path": "/entry/collection_Probe135/ir_sensitivity",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "source": "acquisition_settings/ir_sensitivity",
+      "status": "custom",
+      "confidence": 0.35,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact AUTO DEFAULT: LOW CONFIDENCE",
+      "nexus_path_template": "/entry/{instance}/ir_sensitivity",
+      "group_instance": "collection_Probe135"
+    },
+    {
+      "local_name": "Pixelrate",
+      "nexus_path": "/entry/collection_Probe135/pixelrate",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "source": "acquisition_settings/pixelrate",
+      "status": "custom",
+      "confidence": 0.35,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact AUTO DEFAULT: LOW CONFIDENCE",
+      "nexus_path_template": "/entry/{instance}/pixelrate",
+      "group_instance": "collection_Probe135"
+    },
+    {
+      "local_name": "Conversion factor",
+      "nexus_path": "/entry/collection_Probe135/conversion_factor",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "source": "acquisition_settings/conversion_factor",
+      "status": "custom",
+      "confidence": 0.35,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact AUTO DEFAULT: LOW CONFIDENCE",
+      "nexus_path_template": "/entry/{instance}/conversion_factor",
+      "group_instance": "collection_Probe135"
+    },
+    {
+      "local_name": "Camera serial number",
+      "nexus_path": "/entry/collection_Probe135/camera_serial_number",
+      "nexus_class": "NXcollection",
+      "nexus_attribute": "",
+      "source": "acquisition_settings/camera_serial_number",
+      "status": "custom",
+      "confidence": 0.35,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact AUTO DEFAULT: LOW CONFIDENCE",
+      "nexus_path_template": "/entry/{instance}/camera_serial_number",
+      "group_instance": "collection_Probe135"
+    }
+  ]
+}

@@ -1,0 +1,209 @@
+{
+  "$comment": "Reviewed NeXus mapping for one instrument. Rows are nexus-design-studio FieldMapping rows -- the same shape as its instrument-profile schema -- so they can be handed back to NDS as a profile. 'source' is ours: the path inside this instrument's detector group holding the value, which is what gets linked. A row with no source is a decision with nothing to point at yet. Edited here or in the review app's Formats tab.",
+  "instrument": "refl_spectrometer",
+  "instrumentId": "refl_spectrometer",
+  "instrumentIdStatus": "catalogue",
+  "$instrumentId": "The DRACO instrument catalogue's id for this instrument (NDS catalogs/instruments/hzdr-draco.yaml, hzdr-draco 0.2.0). 'catalogue': the catalogue has the entry. 'proposed': it does not yet, and the id is the catalogue's slug rule applied to the folder label, for the maintainer to add or correct.",
+  "ndsProfile": "profiles/irr8_spectrometer.yaml",
+  "$status": "'proposed' means NDS suggested these and nobody has checked them: they are recorded, shown in the app pre-filled, and DELIBERATELY NOT written into any container. 'reviewed' means a person went through them, and only then do they change the data.",
+  "status": "reviewed",
+  "definition": "NXoptical_spectroscopy",
+  "provenance": {
+    "decidedBy": "auto, Verifikation pending",
+    "decidedAt": "2026-10-05T09:09:37+00:00",
+    "rowCount": 11,
+    "basis": {
+      "accepted": {
+        "by": "auto, Verifikation pending",
+        "on": "2026-10-04",
+        "item": "refl_spectrometer: kind, names and 11 rows (§3.2, §4.5)",
+        "proposal": "shot_aligner/notes/plans/mapping-proposals-2026.md",
+        "appliedWith": "shot_aligner/scripts/apply_mapping_proposals.py",
+        "account": "root",
+        "ruling": "It can be set to whatever it fits best in nexus terms as long as it correctly represents the instrument. I wouldn't change its file read name but it can be mapped.",
+        "template": "Reflected_515_spectrometer.json"
+      },
+      "previousBasis": {
+        "autoAccepted": true,
+        "date": "2026_06_18",
+        "nds": "0.3.0",
+        "lowConfidence": [
+          "NDS confidence is low or advice was unavailable",
+          "absolute_irradiance: low confidence",
+          "averaging: low confidence",
+          "dark: low confidence",
+          "photon_counts: low confidence",
+          "reference: low confidence",
+          "smoothing: low confidence",
+          "spectrometer_name: low confidence"
+        ]
+      }
+    },
+    "firstDecidedAt": "2026-09-28T07:19:40+00:00",
+    "reconciliations": [
+      {
+        "at": "2026-10-04T10:27:58+00:00",
+        "automated": true,
+        "why": "phase 2a of HZDR_combo planning/NEXUS_OUTPUT_PLAN.md (decision 5): keyed by the catalogue's instrument.id and held to the NDS profile",
+        "instrumentId": "refl_spectrometer",
+        "instrumentIdStatus": "proposed",
+        "ndsProfile": "profiles/irr8_spectrometer.yaml",
+        "pack": "spectrometer_irr8"
+      },
+      {
+        "at": "2026-10-04T11:44:34+00:00",
+        "automated": true,
+        "why": "hzdr-draco 0.2.0 lists this id; the status follows the vendored catalogue",
+        "instrumentId": "refl_spectrometer",
+        "instrumentIdStatus": "catalogue",
+        "ndsProfile": "profiles/irr8_spectrometer.yaml",
+        "pack": "spectrometer_irr8"
+      }
+    ]
+  },
+  "mappings": [
+    {
+      "local_name": "integration_time",
+      "nexus_path": "/entry/Reflected_Light_Spectrometer/instrument/Reflected_Light_Spectrometer/count_time",
+      "nexus_class": "NXdetector",
+      "nexus_attribute": "",
+      "source": "count_time",
+      "status": "mapped",
+      "confidence": 0.9,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched alias",
+      "nexus_path_template": "/entry/{instance}/instrument/Reflected_Light_Spectrometer/count_time",
+      "group_instance": "Reflected_Light_Spectrometer"
+    },
+    {
+      "local_name": "averaging",
+      "nexus_path": "/entry/Reflected_Light_Spectrometer/instrument/Reflected_Light_Spectrometer/number_of_cycles",
+      "nexus_class": "NXdetector",
+      "nexus_attribute": "",
+      "source": "metadata/Averaging_Nr",
+      "status": "mapped",
+      "confidence": 0.7,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched alias",
+      "nexus_path_template": "/entry/{instance}/instrument/Reflected_Light_Spectrometer/number_of_cycles",
+      "group_instance": "Reflected_Light_Spectrometer"
+    },
+    {
+      "local_name": "smoothing",
+      "nexus_path": "/entry/Reflected_Light_Spectrometer/process/smoothing_width",
+      "nexus_class": "NXprocess",
+      "nexus_attribute": "",
+      "source": "metadata/Smoothing_Nr",
+      "status": "mapped",
+      "confidence": 0.65,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched alias AUTO DEFAULT: LOW CONFIDENCE",
+      "nexus_path_template": "/entry/{instance}/process/smoothing_width",
+      "group_instance": "Reflected_Light_Spectrometer"
+    },
+    {
+      "local_name": "spectrometer_name",
+      "nexus_path": "/entry/Reflected_Light_Spectrometer/instrument/name",
+      "nexus_class": "NXinstrument",
+      "nexus_attribute": "",
+      "source": "metadata/Data_measured_with_spectrometer",
+      "status": "mapped",
+      "confidence": 0.95,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched alias",
+      "nexus_path_template": "/entry/{instance}/instrument/name",
+      "group_instance": "Reflected_Light_Spectrometer"
+    },
+    {
+      "local_name": "detector_channel_type",
+      "nexus_path": "/entry/Reflected_Light_Spectrometer/instrument/Reflected_Light_Spectrometer/detector_channel_type",
+      "nexus_class": "NXdetector",
+      "nexus_attribute": "",
+      "source": "",
+      "status": "mapped",
+      "confidence": 0.9,
+      "registry_key": "",
+      "note": "proposed by NDS; nothing written for it yet",
+      "nexus_path_template": "/entry/{instance}/instrument/Reflected_Light_Spectrometer/detector_channel_type",
+      "group_instance": "Reflected_Light_Spectrometer"
+    },
+    {
+      "local_name": "wavelength",
+      "nexus_path": "/entry/Reflected_Light_Spectrometer/data/wavelength",
+      "nexus_class": "NXdata",
+      "nexus_attribute": "",
+      "source": "raw_data/wave",
+      "status": "mapped",
+      "confidence": 0.9,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched alias",
+      "nexus_path_template": "/entry/{instance}/data/wavelength",
+      "group_instance": "Reflected_Light_Spectrometer"
+    },
+    {
+      "local_name": "sample",
+      "nexus_path": "/entry/Reflected_Light_Spectrometer/instrument/Reflected_Light_Spectrometer/raw_data/raw",
+      "nexus_class": "NXdata",
+      "nexus_attribute": "",
+      "source": "raw_data/sample",
+      "status": "mapped",
+      "confidence": 0.85,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact",
+      "nexus_path_template": "/entry/{instance}/instrument/Reflected_Light_Spectrometer/raw_data/raw",
+      "group_instance": "Reflected_Light_Spectrometer"
+    },
+    {
+      "local_name": "dark",
+      "nexus_path": "/entry/Reflected_Light_Spectrometer/instrument/Reflected_Light_Spectrometer/raw_data/dark",
+      "nexus_class": "NXdata",
+      "nexus_attribute": "",
+      "source": "raw_data/dark",
+      "status": "mapped",
+      "confidence": 0.8,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact",
+      "nexus_path_template": "/entry/{instance}/instrument/Reflected_Light_Spectrometer/raw_data/dark",
+      "group_instance": "Reflected_Light_Spectrometer"
+    },
+    {
+      "local_name": "reference",
+      "nexus_path": "/entry/Reflected_Light_Spectrometer/instrument/Reflected_Light_Spectrometer/raw_data/reference",
+      "nexus_class": "NXdata",
+      "nexus_attribute": "",
+      "source": "raw_data/reference",
+      "status": "mapped",
+      "confidence": 0.8,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact",
+      "nexus_path_template": "/entry/{instance}/instrument/Reflected_Light_Spectrometer/raw_data/reference",
+      "group_instance": "Reflected_Light_Spectrometer"
+    },
+    {
+      "local_name": "absolute_irradiance",
+      "nexus_path": "/entry/Reflected_Light_Spectrometer/data/absolute_irradiance",
+      "nexus_class": "NXdata",
+      "nexus_attribute": "",
+      "source": "raw_data/absolute_irradiance",
+      "status": "mapped",
+      "confidence": 0.9,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched alias",
+      "nexus_path_template": "/entry/{instance}/data/absolute_irradiance",
+      "group_instance": "Reflected_Light_Spectrometer"
+    },
+    {
+      "local_name": "photon_counts",
+      "nexus_path": "/entry/Reflected_Light_Spectrometer/data/photon_flux_density",
+      "nexus_class": "NXdata",
+      "nexus_attribute": "",
+      "source": "raw_data/photon_counts",
+      "status": "mapped",
+      "confidence": 0.75,
+      "registry_key": "",
+      "note": "proposed by NDS; source matched exact",
+      "nexus_path_template": "/entry/{instance}/data/photon_flux_density",
+      "group_instance": "Reflected_Light_Spectrometer"
+    }
+  ]
+}

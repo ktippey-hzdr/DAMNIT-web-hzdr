@@ -8,8 +8,9 @@ the debounce loop with a short window for speed.
 from __future__ import annotations
 
 import asyncio
+import json
 import sys
-from pathlib import Path  # noqa: TC003
+from pathlib import Path
 
 import pytest
 
@@ -368,3 +369,343 @@ async def test_run_builder_once_logs_nonzero_exit(tmp_path, caplog):
         "builder exited 7" in record.message and "explosion" in record.message
         for record in caplog.records
     )
+
+
+# ---------------------------------------------------------------------------
+# Shot containers (campaign output phase 3): the worker, started around a build
+# ---------------------------------------------------------------------------
+
+
+class _RecordingLauncher:
+    """Fake container-worker launcher: records each start, in build order."""
+
+    def __init__(self, log: list[str]) -> None:
+        self.calls: list[list[str]] = []
+        self._log = log
+
+    async def __call__(self, cmd):
+        self.calls.append(list(cmd))
+        self._log.append("worker")
+
+
+def _ordered_runner(log: list[str], returncode: int = 0):
+    async def runner(cmd):  # noqa: RUF029 - coroutine runner contract
+        log.append("build")
+        return returncode, ""
+
+    return runner
+
+
+def test_containers_are_off_by_default(tmp_path):
+    assert HZDRBuilderSettings().containers_enabled is False
+    assert _settings(tmp_path).containers_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_no_worker_is_started_unless_containers_are_enabled(tmp_path):
+    log: list[str] = []
+    launcher = _RecordingLauncher(log)
+    trigger = BuilderTrigger(
+        _settings(tmp_path), runner=_ordered_runner(log), worker_launcher=launcher
+    )
+    await trigger._run_builder_once()
+    assert log == ["build"]
+
+
+@pytest.mark.asyncio
+async def test_the_worker_starts_before_and_after_a_build(tmp_path):
+    log: list[str] = []
+    launcher = _RecordingLauncher(log)
+    trigger = BuilderTrigger(
+        _settings(tmp_path, containers_enabled=True),
+        runner=_ordered_runner(log),
+        worker_launcher=launcher,
+    )
+    await trigger._run_builder_once()
+    # Before: what is already published converts while the build runs.
+    # After: the shots this build published, without waiting for an event.
+    assert log == ["worker", "build", "worker"]
+    assert launcher.calls[0] == launcher.calls[1] == trigger.worker_command()
+
+
+@pytest.mark.asyncio
+async def test_a_failed_build_starts_no_second_worker(tmp_path):
+    log: list[str] = []
+    trigger = BuilderTrigger(
+        _settings(tmp_path, containers_enabled=True),
+        runner=_ordered_runner(log, returncode=1),
+        worker_launcher=_RecordingLauncher(log),
+    )
+    await trigger._run_builder_once()
+    assert log == ["worker", "build"]
+
+
+def test_worker_command_names_the_campaign_master(tmp_path):
+    trigger = BuilderTrigger(_settings(tmp_path, containers_enabled=True))
+    cmd = trigger.worker_command()
+    assert cmd[0] == sys.executable
+    assert cmd[1].endswith("hzdr-container-worker.py")
+    assert Path(cmd[1]).is_file()
+    assert cmd[2:] == ["--master", str(tmp_path / "campaign.nxs")]
+
+
+def test_worker_command_covers_every_campaign_in_multi_campaign_mode(tmp_path):
+    settings = HZDRBuilderSettings(
+        enabled=True, output_root=tmp_path / "out", containers_enabled=True
+    )
+    cmd = BuilderTrigger(settings).worker_command()
+    assert cmd[2:] == ["--output-root", str(tmp_path / "out")]
+
+
+@pytest.mark.asyncio
+async def test_the_default_launcher_does_not_wait_for_the_worker(tmp_path):
+    trigger = BuilderTrigger(_settings(tmp_path, containers_enabled=True))
+    marker = tmp_path / "done"
+    await asyncio.wait_for(
+        trigger._spawn_worker([
+            sys.executable,
+            "-c",
+            (
+                "import time, pathlib, sys; time.sleep(0.3); "
+                f"pathlib.Path({str(marker)!r}).touch(); print('converted')"
+            ),
+        ]),
+        timeout=0.2,
+    )
+    assert not marker.exists()  # still running: the build is not held up
+    await trigger.wait_for_workers()
+    assert marker.exists()
+    log = tmp_path / ".hzdr-container-worker.log"
+    assert "converted" in log.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_a_worker_that_cannot_start_does_not_stop_the_build(tmp_path, caplog):
+    log: list[str] = []
+
+    async def broken(cmd):  # noqa: RUF029 - launcher contract
+        message = "no python"
+        raise OSError(message)
+
+    trigger = BuilderTrigger(
+        _settings(tmp_path, containers_enabled=True),
+        runner=_ordered_runner(log),
+        worker_launcher=broken,
+    )
+    with caplog.at_level("ERROR"):
+        await trigger._run_builder_once()
+    assert log == ["build"]
+    assert any("container worker" in r.message for r in caplog.records)
+
+
+def test_worker_command_includes_the_bucket_only_when_configured(tmp_path):
+    base = {
+        "enabled": True,
+        "output_root": tmp_path / "out",
+        "containers_enabled": True,
+    }
+    assert (
+        "--include-unassigned"
+        not in BuilderTrigger(HZDRBuilderSettings(**base)).worker_command()
+    )
+    cmd = BuilderTrigger(
+        HZDRBuilderSettings(**base, containers_include_unassigned=True)
+    ).worker_command()
+    assert cmd[-1] == "--include-unassigned"
+
+
+@pytest.mark.asyncio
+async def test_the_worker_log_is_rotated_when_it_grows(tmp_path, monkeypatch):
+    from damnit_api.consumer import builder_trigger
+
+    monkeypatch.setattr(builder_trigger, "WORKER_LOG_MAX_BYTES", 100)
+    trigger = BuilderTrigger(_settings(tmp_path, containers_enabled=True))
+    log = tmp_path / builder_trigger.WORKER_LOG_NAME
+    log.write_text("x" * 200, encoding="utf-8")
+    await trigger._spawn_worker([sys.executable, "-c", "print('fresh')"])
+    await trigger.wait_for_workers()
+    assert (tmp_path / (builder_trigger.WORKER_LOG_NAME + ".1")).read_text(
+        encoding="utf-8"
+    ) == "x" * 200
+    assert log.read_text(encoding="utf-8").strip() == "fresh"
+
+
+# --- Phase 4: a worker that left unlinked containers asks for one more build --
+
+
+def test_the_relink_exit_matches_the_workers():
+    from damnit_api.consumer import builder_trigger
+    from damnit_api.metadata import hzdr_containers
+
+    assert builder_trigger.RELINK_EXIT == hzdr_containers.RELINK_EXIT
+
+
+@pytest.mark.parametrize(
+    ("returncode", "rebuilds"), [(0, False), (1, False), (3, True), (4, True)]
+)
+def test_a_worker_that_left_containers_to_link_asks_for_a_build(
+    tmp_path, returncode, rebuilds
+):
+    trigger = BuilderTrigger(_settings(tmp_path))
+    trigger.worker_finished(returncode)
+    assert trigger._wake.is_set() is rebuilds
+
+
+# --- Phase 5: the NeXus validation gate after each build's worker -------------
+
+
+class _Proc:
+    def __init__(self, returncode: int) -> None:
+        self.returncode = returncode
+
+    async def wait(self) -> int:
+        return self.returncode
+
+
+def test_validation_is_off_by_default(tmp_path):
+    assert HZDRBuilderSettings().validation_python == ""
+
+
+@pytest.mark.asyncio
+async def test_without_containers_validation_follows_the_build(tmp_path):
+    log: list[str] = []
+    validations = _RecordingLauncher(log)
+    trigger = BuilderTrigger(
+        _settings(tmp_path, validation_python="/nds/.venv/bin/python"),
+        runner=_ordered_runner(log),
+        validation_launcher=validations,
+    )
+    await trigger._run_builder_once()
+    assert len(validations.calls) == 1
+    cmd = validations.calls[0]
+    assert cmd[0] == "/nds/.venv/bin/python"
+    assert cmd[1].endswith("hzdr-nexus-validate.py")
+    assert cmd[2:] == ["--master", str(tmp_path / "campaign.nxs")]
+
+
+@pytest.mark.asyncio
+async def test_with_containers_validation_follows_the_worker(tmp_path):
+    log: list[str] = []
+    validations = _RecordingLauncher([])
+    trigger = BuilderTrigger(
+        _settings(tmp_path, containers_enabled=True, validation_python="/nds/python"),
+        runner=_ordered_runner(log),
+        worker_launcher=_RecordingLauncher(log),
+        validation_launcher=validations,
+    )
+    await trigger._run_builder_once()
+    assert validations.calls == []  # not before the containers are done
+    await trigger._reap_worker(_Proc(0))
+    assert validations.calls == [trigger.validation_command()]
+
+
+@pytest.mark.asyncio
+async def test_no_validation_unless_configured(tmp_path):
+    validations = _RecordingLauncher([])
+    trigger = BuilderTrigger(
+        _settings(tmp_path), runner=_ordered_runner([]), validation_launcher=validations
+    )
+    await trigger._run_builder_once()
+    await trigger._reap_worker(_Proc(0))
+    assert validations.calls == []
+
+
+def test_multi_campaign_validation_covers_the_root(tmp_path):
+    trigger = BuilderTrigger(
+        _settings(
+            tmp_path,
+            output_nexus=None,
+            output_root=tmp_path / "out",
+            validation_python="py",
+        )
+    )
+    assert trigger.validation_command()[2:] == ["--output-root", str(tmp_path / "out")]
+
+
+def test_the_busy_exit_matches_the_workers():
+    from damnit_api.consumer import builder_trigger
+    from damnit_api.metadata import hzdr_containers
+
+    assert builder_trigger.BUSY_EXIT == hzdr_containers.BUSY_EXIT
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("returncode", [3, 4, 5])
+async def test_no_validation_after_a_relink_or_busy_worker(tmp_path, returncode):
+    validations = _RecordingLauncher([])
+    trigger = BuilderTrigger(
+        _settings(tmp_path, validation_python="py"),
+        validation_launcher=validations,
+    )
+    await trigger._reap_worker(_Proc(returncode))
+    assert validations.calls == []
+
+
+class _HeldProc:
+    """A validation that runs until released."""
+
+    def __init__(self) -> None:
+        self.done = asyncio.Event()
+
+    async def wait(self) -> int:
+        await self.done.wait()
+        return 0
+
+
+@pytest.mark.asyncio
+async def test_validations_never_overlap_and_coalesce_to_one_followup(
+    tmp_path, monkeypatch
+):
+    trigger = BuilderTrigger(_settings(tmp_path, validation_python="py"))
+    started: list[_HeldProc] = []
+
+    async def spawn(cmd, log_path):
+        await asyncio.sleep(0)
+        proc = _HeldProc()
+        started.append(proc)
+        return proc
+
+    monkeypatch.setattr(trigger, "_spawn", spawn)
+    for _ in range(4):  # a burst: the first runs, the rest coalesce
+        await trigger._start_validation("test")
+    assert len(started) == 1
+    started[0].done.set()
+    await asyncio.sleep(0)
+    for _ in range(5):
+        await asyncio.sleep(0)
+    assert len(started) == 2  # exactly one follow-up
+    started[1].done.set()
+    await trigger.wait_for_workers()
+    assert len(started) == 2
+    assert trigger._validating is False
+
+
+def test_the_gate_s_counts_reach_the_api_log(tmp_path, caplog):
+    (tmp_path / ".validation.json").write_text(
+        json.dumps({
+            "master": "campaign.nxs",
+            "summary": {
+                "passed": True,
+                "master_errors": 0,
+                "containers": 7,
+                "container_errors": 0,
+                "subentries": 2,
+                "subentries_certified": 0,
+            },
+        })
+    )
+    trigger = BuilderTrigger(_settings(tmp_path, validation_python="py"))
+    with caplog.at_level("INFO"):
+        trigger.validation_finished(0)
+    assert "campaign.nxs: passed; master 0 error(s); 7 container(s)" in caplog.text
+    with caplog.at_level("INFO"):
+        trigger.validation_finished(2)
+    assert "could not run" in caplog.text
+
+
+def test_a_busy_worker_is_not_logged_as_an_error(tmp_path, caplog):
+    trigger = BuilderTrigger(_settings(tmp_path))
+    with caplog.at_level("INFO"):
+        trigger.worker_finished(5)
+    assert "found the campaign busy" in caplog.text
+    assert not [r for r in caplog.records if r.levelname == "ERROR"]

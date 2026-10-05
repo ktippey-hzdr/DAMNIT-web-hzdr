@@ -1,0 +1,177 @@
+{
+  "acquisition": {
+    "files": [
+      "set1_2025-12-01_15h-59m-04s_7_original.png",
+      "set1_2025-12-01_15h-59m-04s_7.csv"
+    ],
+    "instrument": "BAM",
+    "seq": 7
+  },
+  "detector_path": "entry/detector",
+  "fixture": "hzdr reference pack output",
+  "instrument": {
+    "id": null,
+    "label": "BAM"
+  },
+  "nodes": {
+    "/entry": {
+      "NX_class": "NXentry",
+      "type": "group"
+    },
+    "/entry/detector": {
+      "NX_class": "NXdetector",
+      "type": "group"
+    },
+    "/entry/detector/acquisition_settings": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/fabrication": {
+      "NX_class": "NXfabrication",
+      "type": "group"
+    },
+    "/entry/detector/fabrication/model": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    },
+    "/entry/detector/metadata": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/metadata/black_level_offset": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    },
+    "/entry/detector/metadata/chip_size_x": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    },
+    "/entry/detector/metadata/chip_size_y": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    },
+    "/entry/detector/metadata/comment": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    },
+    "/entry/detector/metadata/exposure": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    },
+    "/entry/detector/metadata/gain": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    },
+    "/entry/detector/metadata/gamma": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    },
+    "/entry/detector/original_metadata": {
+      "NX_class": "NXnote",
+      "type": "group"
+    },
+    "/entry/detector/original_metadata/data": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "{}"
+    },
+    "/entry/detector/original_metadata/date": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null
+    },
+    "/entry/detector/original_metadata/description": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "original parsed camera CSV metadata; values kept as text"
+    },
+    "/entry/detector/original_metadata/source_file": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "set1_2025-12-01_15h-59m-04s_7.csv"
+    },
+    "/entry/detector/original_metadata/type": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": "application/json"
+    },
+    "/entry/detector/raw_data": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/raw_data/name": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    },
+    "/entry/detector/raw_data/sequence_number": {
+      "NX_class": null,
+      "dtype": "string",
+      "shape": [],
+      "type": "dataset",
+      "units": null,
+      "value": ""
+    }
+  },
+  "pack": "camera_png_csv",
+  "plottable": null,
+  "problems": [
+    "unreadable CSV set1_2025-12-01_15h-59m-04s_7.csv: Conflicting camera metadata 'Name' in <root>/set1_2025-12-01_15h-59m-04s_7.csv",
+    "unreadable image set1_2025-12-01_15h-59m-04s_7_original.png"
+  ],
+  "root": "packs/cases/camera_png_csv__unreadable",
+  "small": 64,
+  "volatile": [
+    "/entry/detector/original_metadata/date"
+  ],
+  "writer": "shot-aligner diagnostics.camera_png_csv.write"
+}

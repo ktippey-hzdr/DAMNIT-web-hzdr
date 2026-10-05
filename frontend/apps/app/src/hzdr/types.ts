@@ -66,6 +66,9 @@ export type HZDRDataProduct = {
   dtype?: string
   units?: string
   metadata: Record<string, unknown>
+  // Only in a shot detail: does the file exist on the API host (after the
+  // path map)? null/absent when there is nothing local to check.
+  reachable?: boolean | null
 }
 
 export type HZDRShotDetail = {
@@ -73,6 +76,9 @@ export type HZDRShotDetail = {
   hdf5_exists: boolean
   hdf5_datasets: HZDRHDF5Dataset[]
   hdf5_error?: string
+  // The shot's container as the campaign file links it; its datasets are
+  // listed in hdf5_datasets under this prefix.
+  container?: string | null
 }
 
 export type HZDRHDF5Dataset = {

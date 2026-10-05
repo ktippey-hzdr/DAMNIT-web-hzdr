@@ -1,0 +1,118 @@
+{
+  "acquisition": {
+    "files": [
+      "20cm_6kv_1.tif",
+      "20cm_6kv_2.tif",
+      "20cm_6kv_3.tif",
+      "20cm_6kv_10.tif"
+    ],
+    "instrument": "Probe135",
+    "label": "20cm_6kv"
+  },
+  "detector_path": "entry/detector",
+  "fixture": "hzdr reference pack output",
+  "instrument": {
+    "id": null,
+    "label": "Probe135"
+  },
+  "nodes": {
+    "/entry": {
+      "NX_class": "NXentry",
+      "type": "group"
+    },
+    "/entry/detector": {
+      "NX_class": "NXdetector",
+      "default": "data",
+      "type": "group"
+    },
+    "/entry/detector/data": {
+      "NX_class": "NXdata",
+      "signal": "image",
+      "type": "group"
+    },
+    "/entry/detector/data/image": {
+      "NX_class": null,
+      "attrs": {
+        "description": "all 4 frames of one recording of one shot, in frame order; raw_data/frame_number says which file each came from",
+        "interpretation": "image",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "<u2",
+      "sha256": "76eabb9fc1354742ae342e823ff1eca2fc566e0a6d74893038dbb091f5df541c",
+      "shape": [
+        4,
+        4,
+        5
+      ],
+      "type": "dataset",
+      "units": "counts"
+    },
+    "/entry/detector/raw_data": {
+      "NX_class": "NXcollection",
+      "type": "group"
+    },
+    "/entry/detector/raw_data/frame_number": {
+      "NX_class": null,
+      "attrs": {
+        "description": "the frame number in each file name: a position within this recording, not a shot number"
+      },
+      "dtype": "<i4",
+      "shape": [
+        4
+      ],
+      "type": "dataset",
+      "units": null,
+      "value": [
+        1,
+        2,
+        3,
+        10
+      ]
+    },
+    "/entry/detector/raw_data/frame_readable": {
+      "NX_class": null,
+      "attrs": {
+        "description": "false where the frame could not be read or was not the first frame's size; those positions hold zeros, not a measurement"
+      },
+      "dtype": "|b1",
+      "shape": [
+        4
+      ],
+      "type": "dataset",
+      "units": null,
+      "value": [
+        true,
+        false,
+        true,
+        false
+      ]
+    },
+    "/entry/detector/raw_data/image": {
+      "NX_class": null,
+      "attrs": {
+        "description": "all 4 frames of one recording of one shot, in frame order; raw_data/frame_number says which file each came from",
+        "interpretation": "image",
+        "target": "/entry/detector/raw_data/image"
+      },
+      "dtype": "<u2",
+      "link": "/entry/detector/data/image",
+      "sha256": "76eabb9fc1354742ae342e823ff1eca2fc566e0a6d74893038dbb091f5df541c",
+      "shape": [
+        4,
+        4,
+        5
+      ],
+      "type": "dataset",
+      "units": "counts"
+    }
+  },
+  "pack": "sequence_frames",
+  "plottable": "entry/detector/data",
+  "problems": [
+    "2 of 4 frames could not be written: 20cm_6kv_2.tif, 20cm_6kv_10.tif"
+  ],
+  "root": "packs/cases/sequence_frames__unreadable_frames",
+  "small": 64,
+  "volatile": [],
+  "writer": "shot-aligner diagnostics.sequence_frames.write"
+}
