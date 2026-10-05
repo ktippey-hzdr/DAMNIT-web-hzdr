@@ -69,3 +69,38 @@ separate worker writes the containers under its own lock.
 - `feat/hzdr-external-links`: **held, not for merging as is.** It links
   producer-written HDF5 files. Its target checks and its write-before-publish
   ordering are reused in the master-and-links phase.
+
+## Phase 6: comparing with shot-aligner's build
+
+`api/scripts/hzdr-compare-containers.py` (`damnit_api.metadata.hzdr_compare`)
+is the comparison phase 6 asks for. On fwkt-webapps, after DAMNIT and
+shot-aligner have both built the same campaign:
+
+```sh
+cd ~/DAMNIT-web-hzdr
+uv run python api/scripts/hzdr-compare-containers.py \
+    --damnit <OUTPUT_ROOT>/<campaign> \
+    --aligner <shot-aligner output>/<project> \
+    --json /tmp/<campaign>-compare.json
+```
+
+- **Pairing.** Each DAMNIT container in `shots/` is paired with the
+  shot-aligner container whose `/entry/start_time` is nearest, within
+  `--tolerance` seconds (default 2: DAMNIT writes the trigger's `fired_at`,
+  shot-aligner its anchor diagnostic's clock after the offset fit). Where the
+  clocks disagree by more, give `--pairs` a CSV of `damnit,aligner` paths. An
+  unpaired container fails the run unless `--allow-unpaired`.
+- **What may differ.** Every rule in `hzdr_compare.IGNORED` names its reason:
+  shot-aligner's alignment evidence, build provenance and workbook row;
+  DAMNIT's campaign id, problem notes and LabFrog record; each builder's
+  naming of the shot; the entry-level plot (decision 6); and the documented
+  `file_creation_date`/`time_source`. `file_path` is compared by file name,
+  `start_time` as one instant. Everything else, every value included, must
+  agree.
+- **Exit codes.** 0: every pair equal. 1: a difference or an unpaired
+  container. 2: an input is missing or no container was found.
+- **Rehearsed on the reference shot.** `api/tests/test_hzdr_compare.py`
+  builds the fixture with shot-aligner's production `build_shot` and DAMNIT's
+  worker and requires them equal (112 nodes the same, 61 ignored, 0
+  different on 2026-10-05). It skips without a shot-aligner checkout.
+
