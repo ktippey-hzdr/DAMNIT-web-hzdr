@@ -1,3 +1,6 @@
+# h5py's `Group.__getitem__` is typed as Group | Dataset | Datatype, so every
+# `handle["entry/..."]` edited in a test needs narrowing pyright cannot infer.
+# pyright: reportIndexIssue=false
 """The NeXus validation gate (campaign output phase 5) on the reference output.
 
 The gate runs in nexus-design-studio's environment, which has pynxtools; this
@@ -56,6 +59,8 @@ needs_nds = pytest.mark.skipif(
 def _script():
     """The gate as a module, for what needs neither NDS nor pynxtools."""
     spec = importlib.util.spec_from_file_location("hzdr_nexus_validate", SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

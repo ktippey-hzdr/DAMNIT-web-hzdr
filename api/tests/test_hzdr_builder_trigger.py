@@ -1,3 +1,6 @@
+# The fake processes stand in for asyncio.subprocess.Process, which only
+# their wait() and returncode are asked for.
+# pyright: reportArgumentType=false
 """Tests for the debounced builder auto-trigger (consumer/builder_trigger.py).
 
 The trigger coalesces spool events into subprocess reruns of the builder.  These

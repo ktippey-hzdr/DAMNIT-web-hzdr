@@ -1,3 +1,6 @@
+# h5py is optional here (a Python without it exits 2 before any of it is
+# used), so pyright reads every h5py attribute as possibly None.
+# pyright: reportOptionalMemberAccess=false
 """NeXus validation gate for a campaign's output (campaign output phase 5).
 
     <nds>/.venv/bin/python api/scripts/hzdr-nexus-validate.py \\
@@ -36,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import contextlib
+import importlib
 import json
 import logging
 import os
@@ -151,7 +155,9 @@ class Validator:
     """NDS's checks and pynxtools, set up once for every file of a run."""
 
     def __init__(self, definitions: Path | None) -> None:
-        from nexus_design_studio.core import validator as nds
+        # NDS's environment, not DAMNIT's: this script runs in NDS's Python, so
+        # the import is by name (DAMNIT's type check cannot resolve it).
+        nds = importlib.import_module("nexus_design_studio.core.validator")
 
         self._nds = nds
         self._tmp = None
@@ -408,7 +414,7 @@ def _published(masters: list[Path], *, write: bool) -> tuple[list[Path], list[Pa
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser = argparse.ArgumentParser(description=(__doc__ or "").splitlines()[0])
     where = parser.add_mutually_exclusive_group(required=True)
     where.add_argument("--master", action="append", type=Path)
     where.add_argument("--output-root", type=Path)
