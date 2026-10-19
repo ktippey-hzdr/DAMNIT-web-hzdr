@@ -20,7 +20,6 @@ behavioural tests below; the reader tests are in `test_hzdr_pack_readers.py`.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import weakref
 from pathlib import Path
@@ -31,6 +30,8 @@ import pytest
 from PIL import Image
 
 from damnit_api.metadata import hzdr_packs
+from damnit_api.metadata.hzdr_compare import text as _text
+from damnit_api.metadata.hzdr_compare import walk
 from damnit_api.metadata.hzdr_packs import sequence_frames
 from damnit_api.shared.hzdr_paths import map_path, parse_path_map
 
@@ -39,133 +40,9 @@ RAW = FIXTURE / "raw"
 RECORDED_ROOT = "/bigdata/HPLexp/reference-fixture"
 PACK_IDS = ("camera_png_csv", "spectrometer_irr8", "sequence_frames")
 
-# Recorded by the manifest walk itself; everything else is under `attrs`.
-WALKED = ("NX_class", "units", "signal", "axes", "default", "nds_definition")
-
 
 def _reference(pack: str) -> dict:
     return json.loads((FIXTURE / "packs" / f"{pack}.json").read_text(encoding="utf-8"))
-
-
-def _text(value):
-    if value is None:
-        return None
-    if isinstance(value, bytes):
-        return value.decode()
-    if hasattr(value, "tolist"):
-        value = value.tolist()
-    if isinstance(value, (list, tuple)):
-        return [_text(v) for v in value]
-    return str(value)
-
-
-def _attribute(value):
-    if isinstance(value, bytes):
-        return value.decode()
-    if hasattr(value, "tolist"):
-        value = value.tolist()
-    if isinstance(value, (list, tuple)):
-        return [_attribute(v) for v in value]
-    return value
-
-
-def _value(dataset, small: int):
-    if dataset.size > small:
-        return None
-    if dataset.dtype.kind in "SOU":
-        data = dataset.asstr()[()]
-        return data.tolist() if hasattr(data, "tolist") else data
-    data = dataset[()]
-    if isinstance(data, np.ndarray):
-        return data.tolist()
-    return data.item() if hasattr(data, "item") else data
-
-
-def _digest(dataset, small: int):
-    if dataset.size <= small or dataset.dtype.kind in "SOU":
-        return None
-    data = np.ascontiguousarray(dataset[()])
-    little = data.astype(data.dtype.newbyteorder("<"))
-    return hashlib.sha256(little.tobytes()).hexdigest()
-
-
-def _link_node(link) -> dict | None:
-    """A soft or external link, recorded by its target and not followed."""
-    if isinstance(link, h5py.SoftLink):
-        return {"type": "softlink", "link": link.path}
-    if isinstance(link, h5py.ExternalLink):
-        return {"type": "externallink", "link": f"{link.filename}:{link.path}"}
-    return None
-
-
-def _node(obj, parent, name: str, small: int) -> tuple[dict, bool]:
-    """One object's entry, and whether its value is volatile."""
-    is_group = isinstance(obj, h5py.Group)
-    entry = {
-        "type": "group" if is_group else "dataset",
-        "NX_class": _text(obj.attrs.get("NX_class")),
-    }
-    if not is_group:
-        entry["shape"] = list(obj.shape)
-        entry["dtype"] = "string" if obj.dtype.kind in "SOU" else obj.dtype.str
-        entry["units"] = _text(obj.attrs.get("units"))
-    entry |= {
-        attr: _text(obj.attrs[attr])
-        for attr in ("signal", "axes", "default", "nds_definition")
-        if attr in obj.attrs
-    }
-    extra = {
-        key: _attribute(obj.attrs[key])
-        for key in sorted(obj.attrs)
-        if key not in WALKED
-    }
-    if extra:
-        entry["attrs"] = extra
-    if is_group:
-        return entry, False
-    if name == "date" and _text(parent.attrs.get("NX_class")) == "NXnote":
-        return entry, True
-    measured = {"value": _value(obj, small), "sha256": _digest(obj, small)}
-    entry |= {key: value for key, value in measured.items() if value is not None}
-    return entry, False
-
-
-def walk(path: Path, small: int = 64) -> tuple[dict, list[str]]:
-    """shot-aligner's manifest walk plus values, over a DAMNIT-written file.
-
-    The same rules as `make_reference_fixture.manifest` and
-    `make_pack_references`: every link name, aliases grouped with the
-    lexicographically first as canonical, `attrs` for the rest, `value` for
-    datasets of at most `small` elements, `sha256` above that, and an NXnote's
-    `date` listed as volatile.
-    """
-    nodes: dict[str, dict] = {}
-    objects: dict = {}
-    volatile: list[str] = []
-
-    def visit(group, prefix: str, ancestors: tuple) -> None:
-        for name in sorted(group):
-            here = f"{prefix}/{name}"
-            linked = _link_node(group.get(name, getlink=True))
-            if linked is not None:
-                nodes[here] = linked
-                continue
-            obj = group[name]
-            nodes[here], is_volatile = _node(obj, group, name, small)
-            if is_volatile:
-                volatile.append(here)
-            objects.setdefault(obj.id, []).append(here)
-            if isinstance(obj, h5py.Group) and obj.id not in ancestors:
-                visit(obj, here, (*ancestors, obj.id))
-
-    with h5py.File(path, "r") as handle:
-        visit(handle, "", (handle.id,))
-    for paths in objects.values():
-        canonical = min(paths)
-        for name in paths:
-            if name != canonical:
-                nodes[name]["link"] = canonical
-    return dict(sorted(nodes.items())), volatile
 
 
 def _write(tmp_path: Path, pack: str, acquisition: dict, read_path) -> tuple:
