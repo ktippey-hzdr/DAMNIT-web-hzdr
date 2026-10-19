@@ -370,13 +370,16 @@ nothing from `damnit_api`, so one process checks a whole campaign: about
   not the end of the run.
 - **Exit 1, the gate**: a structural error in the master or a container, the
   master's entry not valid against its definition, a dangling container
-  link, or a subentry finding outside `KNOWN_SUBENTRY_GAPS`. Warnings are
+  link, or a subentry finding outside the gaps `KNOWN_SUBENTRY_GAPS` lists
+  for the definition that subentry declares. Warnings are
   counted, never gating. A subentry whose only findings are the known gaps is
   *not certified* and gates only with `--strict-subentries`.
 - **Exit 2, could not run**: no nexus-design-studio or pynxtools in that
-  Python, a missing `--output-root`, or no NXDL in `--definitions`. It writes
-  a report with `"ran": false`, so an older passing one is not read as
-  current.
+  Python, a missing `--output-root`, no NXDL in `--definitions`, or a
+  `--master` that is not there (checked before NDS loads; a campaign that
+  fails still makes the run exit 1). It writes a report with `"ran": false`
+  wherever the campaign folder exists, so an older passing one is not read
+  as current.
 - **Known gaps (today)**: every Irr8 subentry lacks `experiment_type`, the
   `beam_TYPE` and `detector_TYPE` groups and `definition/@URL`/`@version`,
   and its `number_of_cycles` is not NX_INT. shot-aligner's own build of the
@@ -384,10 +387,13 @@ nothing from `damnit_api`, so one process checks a whole campaign: about
   them is a mapping decision (the rows in shot-aligner's `config/mappings`,
   reviewed by a person), not a converter's to invent; once they are filled,
   drop them from `KNOWN_SUBENTRY_GAPS` and run with `--strict-subentries`.
+  The gaps are keyed by definition (`NXoptical_spectroscopy` only), so the
+  same finding under another definition is new.
   Any *other* subentry finding is new and fails the gate, so a regression is
   not hidden behind the known ones.
 - **Report**: `<campaign folder>/.validation.json` (written atomically,
-  fsynced) and one line per campaign, e.g. `Validation (c.nxs): passed;
+  fsynced) and one line per campaign, each finding once (pynxtools' own
+  stderr echo is silenced while the gate runs it), e.g. `Validation (c.nxs): passed;
   master 0 error(s), 1 warning(s); 150 container(s), 0 error(s), 150
   warning(s); subentries 0/40 certified`.
 - **After each build**: with `DW_API_HZDR_BUILDER__VALIDATION_PYTHON` set to
@@ -398,13 +404,16 @@ nothing from `damnit_api`, so one process checks a whole campaign: about
   follows, and that build's worker validates) or one that converted nothing
   (`BUSY_EXIT`, 5: another worker had every campaign). **One run at a time**:
   a request while one runs is remembered once and starts when it ends. When
-  it ends, the API log gets each campaign's counts from its report, and
-  "could not run" for exit 2. Empty (the default): off.
+  it ends, the API log gets each campaign's counts from the reports that run
+  wrote (one older than its start, e.g. a campaign without a published
+  master under `OUTPUT_ROOT`, is skipped), and "could not run" for exit 2.
+  Empty (the default): off.
 - **In CI**: `api/tests/test_hzdr_nexus_validate.py` runs the gate on the
   reference output with that Python (`HZDR_NDS_PYTHON`, or the sibling
   `../nexus-design-studio/.venv`) and skips where there is none, like the
   shot-aligner sync checks without their sibling. DAMNIT's GitHub CI has no
   NDS checkout, so there it skips (the exit-2 cases still run); it runs
   wherever the sibling is (the combo, `test-all`, fwkt-webapps). The gate uses
-  two private NDS helpers (the definitions overlay, the pynxtools import);
-  those tests break wherever NDS moves them.
+  NDS's public `assemble_definitions_tree` and `load_pynxtools_validator`
+  (NDS `feat/public-validation-helpers`), falling back to their private
+  `_`-prefixed forms in an older NDS; those tests break if neither is there.

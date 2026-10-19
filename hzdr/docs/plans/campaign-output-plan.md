@@ -22,6 +22,27 @@ answer and the reference the builder is tested against.
 Containers are not named by `shot_key`. It contains colons, which Windows and
 the `Z:` share refuse, and its campaign part changes when a shot is moved.
 
+## Where it stands (2026-10-05)
+
+Merged into `main` on 2026-10-05 (12837e0, from `feat/hzdr-nexus-output`),
+re-vendored against shot-aligner's `main` (509b761). **Not deployed**; the
+containers (`DW_API_HZDR_BUILDER__CONTAINERS_ENABLED`) and the validation gate
+(`DW_API_HZDR_BUILDER__VALIDATION_PYTHON`) are off until configured.
+
+| Item below | State |
+| --- | --- |
+| Conversion code in `metadata/` (readers, packs, mapping rows) | on `main`: `hzdr_packs/`, vendored and sync-checked |
+| What a pack needs from `data_products` | on `main`: the converter joins `source_events` by `event_id` |
+| Conversion outside the campaign lock | on `main`: `hzdr-container-worker.py`, own lock |
+| The API follows links | on `main` |
+| The canonical file becomes the master | on `main`: root links, `/entry/shot_containers` |
+| Garbage collection after publish | on `main`: to `shots/.trash`, purged after 7 days |
+| Incremental builds | on `main`: input fingerprints, `shots/.build-manifest.json` |
+| Validation after each build | on `main` (phase 5); review follow-ups on `fix/hzdr-validation-followups`, not merged yet |
+| SciCat registers the folder | **open**: registers the master only; folder registration belongs to phase 6 |
+| `<campaign>_backgrounds.nxs` | **open**: not built; no phase covered it yet |
+| Side by side with shot-aligner on one real campaign (phase 6) | **open**: needs fwkt-webapps and real data |
+
 ## What changes here
 
 Phase 3, the container writer, is designed in

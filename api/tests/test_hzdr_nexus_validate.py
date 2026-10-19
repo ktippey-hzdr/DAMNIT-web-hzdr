@@ -1,3 +1,6 @@
+# h5py's `Group.__getitem__` is typed as Group | Dataset | Datatype, so every
+# `handle["entry/..."]` edited in a test needs narrowing pyright cannot infer.
+# pyright: reportIndexIssue=false
 """The NeXus validation gate (campaign output phase 5) on the reference output.
 
 The gate runs in nexus-design-studio's environment, which has pynxtools; this
@@ -8,6 +11,7 @@ skips otherwise, like the shot-aligner sync checks without their sibling.
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import subprocess  # noqa: S404 -- a fixed interpreter and script
@@ -50,6 +54,16 @@ needs_nds = pytest.mark.skipif(
     NDS_PYTHON is None,
     reason="no nexus-design-studio Python with pynxtools (set HZDR_NDS_PYTHON)",
 )
+
+
+def _script():
+    """The gate as a module, for what needs neither NDS nor pynxtools."""
+    spec = importlib.util.spec_from_file_location("hzdr_nexus_validate", SCRIPT)
+    assert spec is not None
+    assert spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def _gate(*args: str, python: str | None = None) -> subprocess.CompletedProcess:
@@ -118,6 +132,10 @@ def test_a_master_invalid_against_its_definition_fails_the_gate(
     result = _gate("--master", str(bad), "--no-write")
     assert result.returncode == 1
     assert "/entry is not valid against NXhzdr_target" in result.stdout
+    # The findings are in the report, once: not echoed by pynxtools on stderr
+    # as well, which the trigger's log also takes.
+    assert "start_time" in result.stdout
+    assert "start_time" not in result.stderr, result.stderr
 
 
 @needs_nds
@@ -146,6 +164,47 @@ def test_without_nds_the_gate_says_it_could_not_run(reference_output, tmp_path):
     report = json.loads((folder / ".validation.json").read_text(encoding="utf-8"))
     assert report["ran"] is False
     assert report["summary"]["passed"] is None
+
+
+def test_a_missing_master_could_not_run(tmp_path):
+    """Not a pass: exit 2, and an older passing report there is replaced."""
+    folder = tmp_path / "c"
+    folder.mkdir()
+    (folder / ".validation.json").write_text('{"summary": {"passed": true}}')
+    result = _gate("--master", str(folder / "c.nxs"), python=sys.executable)
+    assert result.returncode == 2, result.stdout + result.stderr
+    assert "no published master" in result.stdout
+    report = json.loads((folder / ".validation.json").read_text(encoding="utf-8"))
+    assert report["ran"] is False
+    assert report["summary"]["passed"] is None
+    nowhere = _gate("--master", str(tmp_path / "gone" / "x.nxs"), python=sys.executable)
+    assert nowhere.returncode == 2
+    assert not (tmp_path / "gone").exists()
+
+
+def test_a_known_gap_is_known_only_for_its_definition():
+    gate = _script()
+    finding = "The required field /entry/Irr8/experiment_type hasn't been supplied."
+    findings = {"required_missing": [finding], "other": []}
+    assert gate._unexpected(findings, "NXoptical_spectroscopy") == []
+    assert gate._unexpected(findings, "NXxrd_pan") == [finding]
+
+
+def test_the_gate_prefers_nds_public_helpers():
+    gate = _script()
+
+    class OldNds:
+        @staticmethod
+        def _load_pynxtools_validator():
+            return "private"
+
+    class NewNds(OldNds):
+        @staticmethod
+        def load_pynxtools_validator():
+            return "public"
+
+    assert gate._nds_helper(OldNds, "load_pynxtools_validator")() == "private"
+    assert gate._nds_helper(NewNds, "load_pynxtools_validator")() == "public"
 
 
 def test_a_missing_output_root_could_not_run(tmp_path):
