@@ -883,6 +883,33 @@ def _apply_mapping_rows(handle: h5py.File, plan: ShotPlan, result: ShotResult) -
                 f"{mapping.instrument}: mapping rows failed: "
                 f"{type(error).__name__}: {error}"
             )
+    if not plan.fired_at:
+        result.mapping_problems = _one_line_for_start_time(result.mapping_problems)
+
+
+# What `mapping_rows` says for a row whose source is the shot's start_time
+# when the container has none (`_write_shot` writes it only from fired_at).
+_NO_START_TIME = "points at '/entry/start_time', which this acquisition did not write"
+
+
+def _one_line_for_start_time(problems: list[str]) -> list[str]:
+    """One line, not one per instrument, for a shot with no start_time.
+
+    Most mappings carry a ``start_time`` row, so a shot without a ``fired_at``
+    used to list the same absence once per instrument and bury anything else
+    in ``/entry/mapping_problems``. The instruments are named in the one line.
+    """
+    missing = [line for line in problems if _NO_START_TIME in line]
+    if not missing:
+        return problems
+    instruments = sorted({line.split(":", 1)[0] for line in missing})
+    kept = [line for line in problems if _NO_START_TIME not in line]
+    summary = (
+        "start_time: this shot has no fired_at, so /entry/start_time was not "
+        f"written and the start_time row of {len(instruments)} instrument(s) "
+        f"links nothing ({', '.join(instruments)})"
+    )
+    return [*kept, summary]
 
 
 def _write_shot(
