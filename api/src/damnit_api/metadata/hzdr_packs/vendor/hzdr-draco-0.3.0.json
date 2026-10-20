@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "facility": "HZDR DRACO",
   "description": "Instruments of the HZDR DRACO laser experiments whose files can be attributed to a shot.",
   "provenance": {
@@ -8,7 +8,7 @@
     "source_ref": "9915ee9c502690be83c2dca454a5ed7fc0eac391",
     "created_by": "nds seed (no reviewer)",
     "created_at": "2026-09-29",
-    "note": "Seeded, unreviewed: every entry is proposed. 0.2.0 adds 20 entries whose ids the maintainer accepted on 2026-10-04 (shot-aligner e68d56adf1aa0a84aecf36669095e179260ec55a); see the header."
+    "note": "Seeded, unreviewed: every entry is proposed. 0.2.0 adds 20 entries whose ids the maintainer accepted on 2026-10-04 (shot-aligner e68d56adf1aa0a84aecf36669095e179260ec55a); 0.3.0 adds 6 more requested on 2026-10-20 (shot-aligner b7879b927b3cf012947eda10eec56643aecb33fa); see the header."
   },
   "entries": [
     {
@@ -39,6 +39,33 @@
       "note": "2024 gas target, BMP-only frames. on_shot is the aligner's default, not a measurement."
     },
     {
+      "id": "back_refl",
+      "display_name": "back-refl",
+      "family": null,
+      "instrument_name": "back-refl",
+      "detector_name": "Camera",
+      "group": "ions",
+      "format": "camera_png_csv",
+      "clock": "filename",
+      "timing_role": "on_shot",
+      "attribution": "trigger_window",
+      "latency_max_s": null,
+      "frames_per_shot": null,
+      "frames_per_shot_by_date": {},
+      "options": {
+        "bmp_frames": false
+      },
+      "folder_aliases": [
+        "back-refl"
+      ],
+      "nds_profile": "profiles/beam_profiler.yaml",
+      "nds_profile_version": "0.3",
+      "producer": "planet-watchdog",
+      "status": "proposed",
+      "decided_by": null,
+      "note": "Added in 0.3.0 at the maintainer's request (2026-10-20); the entry is not reviewed. A camera with 734 acquisitions in the aligner's draft of 2026_09_04; no mapping yet. instrument_name and detector_name are the aligner's draft placeholders (folder name, generic detector), not decided names; no family is decided. on_shot is assumed (the aligner's 2026-09-27 ruling for unlisted instruments), not measured."
+    },
+    {
       "id": "back_refl2",
       "display_name": "back_refl2",
       "family": null,
@@ -64,6 +91,33 @@
       "status": "proposed",
       "decided_by": null,
       "note": "Id accepted by the maintainer 2026-10-04 (shot-aligner mapping-proposals-2026.md §0); the entry is not reviewed. instrument_name and detector_name are the aligner's draft placeholders (folder name, generic detector), not decided names; no family is decided. on_shot is assumed (the aligner's 2026-09-27 ruling for unlisted instruments), not measured."
+    },
+    {
+      "id": "back_refl3",
+      "display_name": "back-refl3",
+      "family": null,
+      "instrument_name": "back-refl3",
+      "detector_name": "Camera",
+      "group": "ions",
+      "format": "camera_png_csv",
+      "clock": "filename",
+      "timing_role": "on_shot",
+      "attribution": "trigger_window",
+      "latency_max_s": null,
+      "frames_per_shot": null,
+      "frames_per_shot_by_date": {},
+      "options": {
+        "bmp_frames": false
+      },
+      "folder_aliases": [
+        "back-refl3"
+      ],
+      "nds_profile": "profiles/beam_profiler.yaml",
+      "nds_profile_version": "0.3",
+      "producer": "planet-watchdog",
+      "status": "proposed",
+      "decided_by": null,
+      "note": "Added in 0.3.0 at the maintainer's request (2026-10-20); the entry is not reviewed. A camera with 734 acquisitions in the aligner's draft of 2026_09_04; no mapping yet. instrument_name and detector_name are the aligner's draft placeholders (folder name, generic detector), not decided names; no family is decided. on_shot is assumed (the aligner's 2026-09-27 ruling for unlisted instruments), not measured."
     },
     {
       "id": "bam",
@@ -336,6 +390,33 @@
       "note": "Id accepted by the maintainer 2026-10-04 (shot-aligner mapping-proposals-2026.md §0); the entry is not reviewed. instrument_name and detector_name are the aligner's draft placeholders (folder name, generic detector), not decided names; no family is decided. on_shot is assumed (the aligner's 2026-09-27 ruling for unlisted instruments), not measured."
     },
     {
+      "id": "ff_spider_diag",
+      "display_name": "FF_Spider_Diag",
+      "family": null,
+      "instrument_name": "FF_Spider_Diag",
+      "detector_name": "Camera",
+      "group": "ions",
+      "format": "camera_png_csv",
+      "clock": "filename",
+      "timing_role": "on_shot",
+      "attribution": "trigger_window",
+      "latency_max_s": null,
+      "frames_per_shot": null,
+      "frames_per_shot_by_date": {},
+      "options": {
+        "bmp_frames": false
+      },
+      "folder_aliases": [
+        "FF_Spider_Diag"
+      ],
+      "nds_profile": "profiles/beam_profiler.yaml",
+      "nds_profile_version": "0.3",
+      "producer": "planet-watchdog",
+      "status": "proposed",
+      "decided_by": null,
+      "note": "Added in 0.3.0 at the maintainer's request (2026-10-20); the entry is not reviewed. The aligner read 26 camera acquisitions here in its draft of 2026_06_18; no mapping yet. Despite the name it is catalogued as a far-field camera, not the SPIDER pulse-measurement format NDS reads separately (core/spider_input.py): check that when reviewing. instrument_name and detector_name are draft placeholders; on_shot is assumed, not measured."
+    },
+    {
       "id": "focus_mini_515",
       "display_name": "Focus mini 515",
       "family": "Focus diagnostics",
@@ -388,6 +469,33 @@
       "status": "proposed",
       "decided_by": null,
       "note": "Appears only in focus/alignment series, never in a shot event; needs an auxiliary flag before it can be attributed."
+    },
+    {
+      "id": "fokus_bulli",
+      "display_name": "Fokus Bulli",
+      "family": null,
+      "instrument_name": "Fokus Bulli",
+      "detector_name": "Detector",
+      "group": "ions",
+      "format": "unrecognised",
+      "clock": "none",
+      "timing_role": "on_shot",
+      "attribution": "trigger_window",
+      "latency_max_s": null,
+      "frames_per_shot": null,
+      "frames_per_shot_by_date": {},
+      "options": {
+        "bmp_frames": false
+      },
+      "folder_aliases": [
+        "Fokus Bulli"
+      ],
+      "nds_profile": null,
+      "nds_profile_version": null,
+      "producer": "unassigned",
+      "status": "proposed",
+      "decided_by": null,
+      "note": "Added in 0.3.0 at the maintainer's request (2026-10-20); the entry is not reviewed. The aligner recognised no file in this folder (0 acquisitions in its draft of 2026_09_04) and recorded no kind, so format, clock, attribution and producer are placeholders until someone has looked at the files. on_shot is assumed, not measured."
     },
     {
       "id": "lanex_dif",
@@ -905,6 +1013,33 @@
       "note": "Id accepted by the maintainer 2026-10-04 (shot-aligner mapping-proposals-2026.md §0); the entry is not reviewed. instrument_name and detector_name are the aligner's draft placeholders (folder name, generic detector), not decided names; no family is decided. on_shot is assumed (the aligner's 2026-09-27 ruling for unlisted instruments), not measured."
     },
     {
+      "id": "tof",
+      "display_name": "TOF",
+      "family": null,
+      "instrument_name": "TOF",
+      "detector_name": "Detector",
+      "group": "ions",
+      "format": "unrecognised",
+      "clock": "none",
+      "timing_role": "on_shot",
+      "attribution": "trigger_window",
+      "latency_max_s": null,
+      "frames_per_shot": null,
+      "frames_per_shot_by_date": {},
+      "options": {
+        "bmp_frames": false
+      },
+      "folder_aliases": [
+        "TOF"
+      ],
+      "nds_profile": null,
+      "nds_profile_version": null,
+      "producer": "unassigned",
+      "status": "proposed",
+      "decided_by": null,
+      "note": "Added in 0.3.0 at the maintainer's request (2026-10-20); the entry is not reviewed. The aligner recognised no file in this folder (0 acquisitions in its draft of 2026_06_18) and recorded no kind, so format, clock, attribution and producer are placeholders until someone has looked at the files. on_shot is assumed, not measured."
+    },
+    {
       "id": "tp90_proton_prof",
       "display_name": "TP90 proton prof",
       "family": "TPS 90 degree",
@@ -1146,6 +1281,33 @@
       "status": "proposed",
       "decided_by": null,
       "note": "Id accepted by the maintainer 2026-10-04 (shot-aligner mapping-proposals-2026.md §0); the entry is not reviewed. instrument_name and detector_name are the aligner's draft placeholders (folder name, generic detector), not decided names; no family is decided. on_shot is assumed (the aligner's 2026-09-27 ruling for unlisted instruments), not measured."
+    },
+    {
+      "id": "tw_focus",
+      "display_name": "TW Focus",
+      "family": null,
+      "instrument_name": "TW Focus",
+      "detector_name": "Detector",
+      "group": "ions",
+      "format": "unrecognised",
+      "clock": "none",
+      "timing_role": "on_shot",
+      "attribution": "trigger_window",
+      "latency_max_s": null,
+      "frames_per_shot": null,
+      "frames_per_shot_by_date": {},
+      "options": {
+        "bmp_frames": false
+      },
+      "folder_aliases": [
+        "TW Focus"
+      ],
+      "nds_profile": null,
+      "nds_profile_version": null,
+      "producer": "unassigned",
+      "status": "proposed",
+      "decided_by": null,
+      "note": "Added in 0.3.0 at the maintainer's request (2026-10-20); the entry is not reviewed. The aligner recognised no file in this folder (0 acquisitions in its draft of 2026_09_04) and recorded no kind, so format, clock, attribution and producer are placeholders until someone has looked at the files. on_shot is assumed, not measured."
     }
   ]
 }
