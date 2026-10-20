@@ -86,7 +86,7 @@ and it does not change when a ruling moves the shot to another campaign. The
 
 One `NXentry`. Group names come from the vendored, unchanged
 `nxwrite.container_groups`, fed from the vendored NDS catalogue
-(`hzdr_packs/vendor/hzdr-draco-0.1.0.json`, pinned by the packs sync):
+(`hzdr_packs/vendor/hzdr-draco-<version>.json`, the version the packs sync pins):
 `family` is shot-aligner's `group`, `instrument_name` its `instrumentName`,
 `detector_name` its `detectorName`. So M1_Spec_Fib_Cer lands at
 `/entry/Reflected_light_spectroscopy/_515_Reflected_Light_Spectrometer`,
