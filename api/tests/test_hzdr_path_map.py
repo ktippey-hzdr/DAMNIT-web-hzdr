@@ -75,8 +75,12 @@ def test_longest_prefix_is_judged_after_normalizing():
 
 
 def test_unmatched_path_keeps_its_backslashes():
+    # Returned as given, not in the slash form used for matching: on POSIX the
+    # backslash stays part of the name. Path(raw), not the string, because on
+    # Windows str() of any path prints backslashes.
     rules = parse_path_map(f"/bigdata={MOUNT}")
-    assert str(map_path("/data/odd\\name.h5", rules)) == "/data/odd\\name.h5"
+    raw = "/data/odd\\name.h5"
+    assert map_path(raw, rules) == Path(raw)
 
 
 def test_malformed_map_stops_settings_loading():

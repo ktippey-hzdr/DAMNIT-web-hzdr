@@ -444,14 +444,20 @@ def list_container_datasets(
         except (KeyError, OSError):
             return None, []
 
-        for name, item in _container_datasets(container):  # pyright: ignore[reportArgumentType]
-            datasets.append(
-                HZDRHDF5Dataset(
-                    name=f"{link}/{name}",
-                    shape=[int(value) for value in item.shape],
-                    dtype=str(item.dtype),
+        # The container is its own file, opened through the link: closing the
+        # campaign file leaves it open until the garbage collector runs, and an
+        # open file on Windows cannot be replaced, trashed or deleted.
+        try:
+            for name, item in _container_datasets(container):  # pyright: ignore[reportArgumentType]
+                datasets.append(
+                    HZDRHDF5Dataset(
+                        name=f"{link}/{name}",
+                        shape=[int(value) for value in item.shape],
+                        dtype=str(item.dtype),
+                    )
                 )
-            )
+        finally:
+            container.file.close()
     return link, datasets
 
 

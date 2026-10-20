@@ -1533,6 +1533,39 @@ def test_the_shot_detail_lists_its_container_through_the_master(campaign):
     assert list_container_datasets(campaign["master"], shot_key) == (None, [])
 
 
+def test_listing_a_container_leaves_nothing_open(campaign):
+    """The container behind the link is closed, not left to the collector.
+
+    On Windows an open container cannot be replaced or trashed; on POSIX the
+    leak is invisible, so this counts HDF5's open objects instead. A group or
+    dataset keeps its file open after every file handle is closed, so objects
+    of every type are counted, with the collector paused so it cannot tidy up
+    a leak before the count.
+    """
+    import gc
+
+    from damnit_api.metadata.hzdr_sources import list_container_datasets
+
+    hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    _republish(campaign)
+    with h5py.File(campaign["master"], "r") as master:
+        shot_key = master["20251201_001042"].attrs["shot_key"]
+
+    def open_objects() -> int:
+        return h5py.h5f.get_obj_count(h5py.h5f.OBJ_ALL, h5py.h5f.OBJ_ALL)
+
+    gc.disable()
+    try:
+        before = open_objects()
+        link, datasets = list_container_datasets(campaign["master"], shot_key)
+        after = open_objects()
+    finally:
+        gc.enable()
+    assert link == "20251201_001042"
+    assert datasets
+    assert after == before
+
+
 def test_a_frame_previews_through_the_master(campaign):
     from damnit_api.metadata.hzdr_sources import preview_hdf5_dataset
 

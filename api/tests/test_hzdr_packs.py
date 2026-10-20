@@ -21,6 +21,7 @@ behavioural tests below; the reader tests are in `test_hzdr_pack_readers.py`.
 from __future__ import annotations
 
 import json
+import os
 import weakref
 from pathlib import Path
 
@@ -88,8 +89,14 @@ def test_the_pack_writes_what_shot_aligners_pack_writes(tmp_path, name):
     )
     nodes, volatile = walk(path, reference["small"])
 
+    # The references were written on POSIX; on Windows `root / f` puts a
+    # backslash after the root, so only that separator is folded.
     root_text = str(root)
-    assert [p.replace(root_text, "<root>") for p in problems] == reference["problems"]
+    shown = [
+        p.replace(root_text + os.sep, "<root>/").replace(root_text, "<root>")
+        for p in problems
+    ]
+    assert shown == reference["problems"]
     assert plottable == reference["plottable"]
     assert volatile == reference["volatile"]
     assert sorted(nodes) == sorted(reference["nodes"])
