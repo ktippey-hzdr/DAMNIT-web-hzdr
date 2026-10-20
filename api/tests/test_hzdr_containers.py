@@ -1458,6 +1458,84 @@ def test_a_file_of_another_shot_under_the_name_is_not_linked(campaign):
     assert stems == ["20251201_001044", "20251201_001045"]
 
 
+def _count_opens(monkeypatch) -> list[str]:
+    """The containers a build opens to check they are in place."""
+    from damnit_api.metadata import hzdr_nexus
+
+    opened: list[str] = []
+    check = hzdr_nexus._container_in_place
+
+    def counting(path, shot_key):
+        opened.append(path.name)
+        return check(path, shot_key)
+
+    monkeypatch.setattr(hzdr_nexus, "_container_in_place", counting)
+    return opened
+
+
+def _linked(campaign) -> list[str]:
+    with h5py.File(campaign["master"], "r") as master:
+        return [c.decode() for c in master["entry/shot_containers/container"][...]]
+
+
+def _cached(campaign) -> list[str]:
+    from damnit_api.metadata.hzdr_nexus import CONTAINER_CHECK_NAME
+
+    path = campaign["master"].parent / CONTAINER_CHECK_NAME
+    return sorted(json.loads(path.read_text(encoding="utf-8"))["containers"])
+
+
+def test_a_build_does_not_reopen_the_containers_it_found(campaign, monkeypatch):
+    hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    stems = [f"20251201_{n:06d}" for n in range(1042, 1046)]
+    opened = _count_opens(monkeypatch)
+    _republish(campaign)
+    assert _linked(campaign) == stems
+    assert len(opened) == 4
+    assert _cached(campaign) == [f"{s}.nxs" for s in stems]
+
+    opened.clear()
+    _republish(campaign)
+    assert _linked(campaign) == stems
+    assert opened == []  # all four from the cache
+
+    # A container gone is not linked and leaves the cache.
+    (hc.shots_dir(campaign["master"]) / "20251201_001045.nxs").unlink()
+    _republish(campaign)
+    assert _linked(campaign) == stems[:3]
+    assert _cached(campaign) == [f"{s}.nxs" for s in stems[:3]]
+
+
+def test_a_container_changed_since_is_checked_again(campaign, monkeypatch):
+    hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    _republish(campaign)
+    path = hc.shots_dir(campaign["master"]) / CONTAINER
+    with h5py.File(path, "r+") as handle:
+        handle.attrs["shot_key"] = "another-campaign:20251201:001042"
+    # The edit changes the mtime; bumped as well, so a coarse clock cannot
+    # leave it where it was.
+    stat = path.stat()
+    os.utime(path, ns=(stat.st_atime_ns, stat.st_mtime_ns + 2_000_000_000))
+
+    opened = _count_opens(monkeypatch)
+    _republish(campaign)
+    assert opened == [CONTAINER]
+    assert "20251201_001042" not in _linked(campaign)
+    assert CONTAINER not in _cached(campaign)
+
+
+def test_an_unreadable_check_cache_costs_only_a_full_check(campaign, monkeypatch):
+    from damnit_api.metadata.hzdr_nexus import CONTAINER_CHECK_NAME
+
+    hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    (campaign["master"].parent / CONTAINER_CHECK_NAME).write_text("{not json")
+    opened = _count_opens(monkeypatch)
+    _republish(campaign)
+    assert len(opened) == 4
+    assert len(_linked(campaign)) == 4
+    assert len(_cached(campaign)) == 4  # rewritten whole
+
+
 def test_a_shot_that_left_the_master_loses_its_container(campaign):
     read_path = _read_path(campaign["raw"])
     hc.convert_campaign(campaign["master"], read_path=read_path)

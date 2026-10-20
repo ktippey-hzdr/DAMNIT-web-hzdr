@@ -2556,6 +2556,9 @@ SHOT_IDENTITY_ATTR = "damnit_shot_identity"
 # /entry/shot_containers).
 SHOTS_DIRNAME = "shots"
 SHOT_CONTAINERS_GROUP = "shot_containers"
+# Beside the master: which containers the last build found in place, so the
+# next one need not open each of them again (see _InPlaceCache).
+CONTAINER_CHECK_NAME = ".hzdr-container-check.json"
 _SHOT_KEY_PARTS = re.compile(
     r"^(?P<campaign>.+):(?P<date>\d{8}|unknown):(?P<number>\d{6,})$"
 )
@@ -2605,6 +2608,67 @@ def _container_in_place(path: Path, shot_key: str) -> bool:
             return recorded == shot_key and "entry" in handle
     except OSError:
         return False
+
+
+class _InPlaceCache:
+    """``_container_in_place`` across builds, keyed by each file's stat.
+
+    Each build runs as its own process and would otherwise open every
+    container of the campaign to check it, which on the SMB share costs one
+    open per shot per build. A container whose size, mtime and inode are
+    those it had when a build last found it in place for the same shot_key is
+    not opened again: the worker only ever renames a whole new file into
+    place, which changes them. Only finds are kept, and each build keeps only
+    its own, so a container gone or no longer linked drops out. An unreadable
+    or foreign cache file is ignored, and one that cannot be written costs the
+    next build the full check, never this build.
+    """
+
+    VERSION = 1
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        self.opened = 0
+        self._found: dict[str, dict[str, Any]] = {}
+        self._known: dict[str, dict[str, Any]] = {}
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return
+        if isinstance(payload, dict) and payload.get("version") == self.VERSION:
+            containers = payload.get("containers")
+            if isinstance(containers, dict):
+                self._known = containers
+
+    @staticmethod
+    def _stat(path: Path) -> list[int] | None:
+        try:
+            stat = path.stat()
+        except OSError:
+            return None
+        return [stat.st_size, stat.st_mtime_ns, stat.st_ino]
+
+    def in_place(self, path: Path, shot_key: str) -> bool:
+        stat = self._stat(path)
+        if stat is None:
+            return False
+        entry = {"shot_key": shot_key, "stat": stat}
+        if self._known.get(path.name) != entry:
+            self.opened += 1
+            if not _container_in_place(path, shot_key):
+                return False
+        self._found[path.name] = entry
+        return True
+
+    def save(self) -> None:
+        if self._found == self._known:
+            return
+        try:
+            write_json_atomic(
+                self.path, {"version": self.VERSION, "containers": self._found}
+            )
+        except OSError as error:
+            logger.warning("Could not write %s: %s", self.path, error)
 
 
 def shot_container_links(handle: h5py.File) -> dict[str, h5py.ExternalLink]:
@@ -2664,6 +2728,7 @@ def _write_shot_container_links(
     linked_keys: list[str] = []
     linked_names: list[str] = []
     if folder.is_dir():
+        checked = _InPlaceCache(output_path.parent / CONTAINER_CHECK_NAME)
         seen: set[str] = set()
         for shot in shots:
             shot_key = shot.get("shot_key")
@@ -2677,11 +2742,12 @@ def _write_shot_container_links(
             except ValueError:
                 continue
             stem = name.removesuffix(".nxs")
-            if stem in handle or not _container_in_place(folder / name, shot_key):
+            if stem in handle or not checked.in_place(folder / name, shot_key):
                 continue
             handle[stem] = h5py.ExternalLink(f"{SHOTS_DIRNAME}/{name}", "/entry")
             linked_keys.append(shot_key)
             linked_names.append(stem)
+        checked.save()
     string = h5py.string_dtype(encoding="utf-8")
     group.create_dataset("shot_key", data=linked_keys, dtype=string)
     group.create_dataset("container", data=linked_names, dtype=string)

@@ -339,14 +339,21 @@ master), backgrounds (`<campaign>_backgrounds.nxs`), and an entry-level plot
   collects nothing. A file held open on Windows is retried on a later pass.
   Only campaigns the worker converts are collected, so the `_unassigned`
   bucket keeps its containers unless it is converted (`--include-unassigned`).
+  That is intended (maintainer, 2026-10-20).
 - **API.** `hzdr_sources.list_container_datasets(campaign file, shot_key)`
   follows that shot's link (`visititems` does not), and shot detail lists
   the container's datasets as `<stem>/...` with the link in `container`; previews read them through the same campaign file.
   A preview reads only what it shows (the first frame of a stack, strided; the
   first 200 values of a line), since a name can now reach a camera stack.
-- **Cost.** Each build opens the container of every shot with an acquisition
-  to check it is in place: O(shots) opens per build, worth caching by
-  (size, mtime) if it shows on the SMB share at campaign scale.
+- **Cost.** Each build checks the container of every shot with an acquisition
+  is in place. It opens only the ones it has not seen: a container the last
+  build found in place for the same `shot_key`, with the same size, mtime and
+  inode, is taken as still in place (`_InPlaceCache`,
+  `.hzdr-container-check.json` beside the master, added 2026-10-20). The
+  worker only renames whole new files into place, which changes all three.
+  Each build keeps only its own finds, so a container that is gone drops
+  out. A cache that is missing, unreadable or cannot be written costs one
+  full check, never a build.
 - **SciCat** still registers the campaign file; registering the folder
   (master + `shots/`) belongs with the side-by-side run (phase 6).
 
