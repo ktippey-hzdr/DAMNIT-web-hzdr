@@ -145,7 +145,10 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     `hzdr_packs/vendor/mappings/` and fingerprinted per instrument). **Phase 4:** the builder
     links the container of every shot that has an acquisition in this build
     (`hzdr_nexus.is_acquisition`) and whose file is in place (it names the
-    shot's `shot_key`) from the master's **root**: one relative
+    shot's `shot_key`; a file a build found in place is not reopened while its
+    size, mtime and inode stay the same, recorded in
+    `.hzdr-container-check.json` beside the master) from the master's
+    **root**: one relative
     `ExternalLink("shots/<name>", "/entry")` per container, named by its stem,
     so the master is a multi-entry NeXus file and `/entry` stays valid against
     NXhzdr_target; `/entry/shot_containers` (`NXcollection`) indexes them with
