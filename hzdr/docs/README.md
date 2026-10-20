@@ -8,20 +8,21 @@ live status and process docs, and **guides/** the how-to material.
 ## Current status
 
 Data model, offline integration path, local acceptance test, operator review UI,
-and the read-only operational views are implemented and committed. Historical
-deployment evidence records
-[https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/),
-but the endpoint was not re-probed during the 2026-07-23 local review. Builder
-auto-trigger and SciCat registration are implemented; deployed replay/PID proof,
-real-broker ingestion, the pilot replay, and the shotcounter branch merge remain.
-See the [roadmap](status/integration-roadmap.md) and short
-[handoff](status/handoff.md).
+and the read-only operational views are implemented and committed. Deployment
+state is not kept here: the HZDR combo repository's `integration-status.json` is
+the single record. As of 2026-10-03 it lists the API and frontend running at
+[https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/)
+with the Kafka spool consumer and builder auto-trigger enabled (I2), and SciCat
+registration running (I12). Still open there: the deployment-broker
+restart/replay pass (I5), SciCat replay suppression (I7), and the shotcounter
+branch merge (I3). See the [roadmap](status/integration-roadmap.md) and short
+[handoff](status/handoff.md) for the work behind them.
 
 ## Start here
 
 | Document | Purpose |
 | --- | --- |
-| [System overview](system-overview.md) | All seven repositories, the end-to-end data flow, shared contracts, and the end products |
+| [System overview](system-overview.md) | The seven pilot-runtime repositories, the end-to-end data flow, shared contracts, and the end products |
 | [Architecture](architecture.md) | Canonical identity, event model, NeXus layout, and system boundaries |
 | [Screenshots](screenshots.md) | Current UI: home, shot table, context builder, review matches (stale capture), in-app docs, flow monitor |
 | [User guide](guides/user-guide.md) | Find a campaign, inspect shots, and resolve review cases |
