@@ -1,6 +1,6 @@
 # openPMD projection plan (DAMNIT side)
 
-**Status:** see `HZDR_combo/planning/OPENPMD_MULTI_SOURCE_IMPLEMENTATION_PLAN.md`, which owns
+**Status:** see `HZDR_combo/combo/planning/OPENPMD_MULTI_SOURCE_IMPLEMENTATION_PLAN.md`, which owns
 the phase state for this workstream across all the repositories it touches.
 This plan deliberately keeps no second copy: it said "Phase 2 done, Phases 3-5
 open" for weeks after the constellation plan had recorded Phases 1-4 as
@@ -9,7 +9,7 @@ canonical fixture, the projection preflight and the reviewed payload policy --
 is implemented and green; `check_alignment.py run --groups nexus` is the gate.
 
 This is DAMNIT's repo-local slice of the constellation plan
-`HZDR_combo/planning/OPENPMD_MULTI_SOURCE_IMPLEMENTATION_PLAN.md`. The reviewed
+`HZDR_combo/combo/planning/OPENPMD_MULTI_SOURCE_IMPLEMENTATION_PLAN.md`. The reviewed
 projection contract itself lives in nexus-design-studio
 (`docs/openpmd-evolution.md`, `OpenPMDProjectionPlan` + its JSON Schema).
 

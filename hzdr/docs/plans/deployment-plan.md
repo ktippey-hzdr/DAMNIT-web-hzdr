@@ -14,7 +14,7 @@ open, so this plan is not ready for `plans/done/`.
 ## Status snapshot (2026-07-03)
 
 - **Deployed:** see the `DAMNIT-web API+UI` row in [`fwkt-webapps/docs/operations/deployment-plan.md`](https://codebase.helmholtz.cloud/fwk/fwkt/fwkt-data-management/infrastructure/fwkt-webapps/-/blob/main/docs/operations/deployment-plan.md), which is the operator-facing record of what is actually running. This plan deliberately does not keep its own copy: the two disagreed for weeks, one saying the API was deployed and the other that the host had no unit at all. The offline pilot package gate passed on 2026-07-03 across DAMNIT, LabFrog, LabFrog SQLite tools, DAQ File Watchdog and shotcounter; live broker `-DockerTests` remains the deployment gate.
-- **Gate status:** `HZDR_combo/integration-status.json` is the authoritative
+- **Gate status:** `HZDR_combo/combo/integration-status.json` is the authoritative
   record of which integration gates have passed (broker smoke test,
   restart/replay, ops config, SciCat PID). Entries there are re-proved or
   carry a dated attestation; this plan does not keep a second copy.

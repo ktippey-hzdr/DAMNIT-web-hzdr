@@ -26,7 +26,7 @@ production-service, and real ASAPO gates were not rerun on 2026-07-23.
 
 Cross-repository deployment and integration state -- what is deployed, which
 gates have passed -- is **not** recorded here. It lives in
-`HZDR_combo/integration-status.json`, which is the single authoritative record
+`HZDR_combo/combo/integration-status.json`, which is the single authoritative record
 and is re-proved by `check_alignment.py run --groups repos`. This file keeps the
 per-repo implementation detail; where the two would overlap, the ledger wins.
 
@@ -158,4 +158,4 @@ broker, then merge the shotcounter branch.
 | Versioned JSON Schema publication (public URL for `hzdr-event-vN.schema.json`) | ⬜ deferred until a second schema version is needed |
 | `shot_key` in table row-selection and review actions (UI refactor) | ⬜ post-pilot; tracked separately |
 | SciCat registration from builder post-step + `payload_ref.scicat_pid` | 🟡 DAMNIT builder wiring is implemented and locally tested; deployed PID back-population and replay suppression remain unverified |
-| openPMD projection of canonical NeXus (`metadata/hzdr_openpmd.py`, `hzdr-openpmd-fixture.py`, `hzdr-openpmd-preflight.py`) | ✅ DAMNIT's slice committed. Phase state for the whole workstream is owned by `HZDR_combo/planning/OPENPMD_MULTI_SOURCE_IMPLEMENTATION_PLAN.md`, not tracked here; the constellation check `check_alignment.py run --groups nexus` is the gate |
+| openPMD projection of canonical NeXus (`metadata/hzdr_openpmd.py`, `hzdr-openpmd-fixture.py`, `hzdr-openpmd-preflight.py`) | ✅ DAMNIT's slice committed. Phase state for the whole workstream is owned by `HZDR_combo/combo/planning/OPENPMD_MULTI_SOURCE_IMPLEMENTATION_PLAN.md`, not tracked here; the constellation check `check_alignment.py run --groups nexus` is the gate |
