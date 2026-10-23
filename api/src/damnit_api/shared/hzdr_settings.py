@@ -238,6 +238,11 @@ class HZDRBuilderSettings(BaseModel):
 
     enabled: bool = False
     debounce_seconds: float = 10.0
+    # A LabFrog export refreshed outside the spool (a scheduled export) changes
+    # the build's input without any event. Every this many seconds the trigger
+    # checks the exports the builds read (``labfrog_sqlite``/``labfrog_nexus``,
+    # or ``<curated_root>/*/*.sqlite``) and rebuilds when one changed. 0: off.
+    labfrog_poll_seconds: float = Field(default=60.0, ge=0)
     output_nexus: Path | None = None
     # Multi-campaign mode; all three default off (single-campaign mode).
     output_root: Path | None = None

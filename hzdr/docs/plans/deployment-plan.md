@@ -257,6 +257,8 @@ DW_API_HZDR_BUILDER__LABFROG_SQLITE=/data/damnit/hzdr/<campaign>/<campaign>.sqli
 DW_API_HZDR_BUILDER__CAMPAIGN_TIMEZONE=Europe/Berlin
 DW_API_HZDR_BUILDER__DEBOUNCE_SECONDS=10.0
 DW_API_HZDR_BUILDER__MATCH_TOLERANCE_S=120.0
+# default 60: rebuild when the LabFrog export changes (a scheduled refresh); 0 = off
+DW_API_HZDR_BUILDER__LABFROG_POLL_SECONDS=60
 ```
 
 The trigger derives its `--events-jsonl` / `--trigger-jsonl` inputs from the spool
