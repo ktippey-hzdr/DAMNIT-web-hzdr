@@ -139,6 +139,53 @@ class BuilderTrigger:
         """Signal that new events landed.  Safe to call from the consumer loop."""
         self._wake.set()
 
+    def _labfrog_exports(self) -> list[Path]:
+        """The LabFrog exports the builds read, as far as they exist."""
+        s = self._settings
+        if s.multi_campaign:
+            if s.curated_root is None or not s.curated_root.is_dir():
+                return []
+            return sorted(s.curated_root.glob("*/*.sqlite"))
+        return [p for p in (s.labfrog_sqlite, s.labfrog_nexus) if p is not None]
+
+    def _export_signature(self) -> dict[Path, tuple[int, int]]:
+        signature: dict[Path, tuple[int, int]] = {}
+        for path in self._labfrog_exports():
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            signature[path] = (stat.st_mtime_ns, stat.st_size)
+        return signature
+
+    async def _watch_labfrog_exports(self, stop: asyncio.Event) -> None:
+        """Rebuild when a LabFrog export changes; its refresh lands outside the spool.
+
+        The exporter replaces each file atomically, so a changed signature is a
+        finished export. The first look only records the state: starting up is
+        not a change.
+        """
+        interval = self._settings.labfrog_poll_seconds
+        last = await asyncio.to_thread(self._export_signature)
+        while not stop.is_set():
+            try:
+                await asyncio.wait_for(stop.wait(), timeout=interval)
+                return
+            except TimeoutError:
+                pass
+            current = await asyncio.to_thread(self._export_signature)
+            changed = sorted(
+                str(path)
+                for path in current.keys() | last.keys()
+                if current.get(path) != last.get(path)
+            )
+            last = current
+            if changed:
+                logger.info(
+                    "LabFrog export changed, rebuilding: %s", ", ".join(changed)
+                )
+                self.notify()
+
     def build_command(self) -> list[str]:
         """Assemble the ``hzdr-hdf5-builder.py`` command line from settings."""
         s = self._settings
@@ -483,6 +530,11 @@ class BuilderTrigger:
             self._settings.debounce_seconds,
         )
         _RUNNING["trigger"] = self
+        watcher = (
+            asyncio.create_task(self._watch_labfrog_exports(stop))
+            if self._settings.labfrog_poll_seconds > 0
+            else None
+        )
         try:
             while not stop.is_set():
                 if not await self._wait_for_wake(stop):
@@ -495,6 +547,8 @@ class BuilderTrigger:
                 self._wake.clear()
                 await self._run_builder_once()
         finally:
+            if watcher is not None:
+                watcher.cancel()
             if _RUNNING.get("trigger") is self:
                 del _RUNNING["trigger"]
             # Stop watching the workers, not the workers: each runs in its own

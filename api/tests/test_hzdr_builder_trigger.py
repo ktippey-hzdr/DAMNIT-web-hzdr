@@ -752,3 +752,86 @@ def test_a_busy_worker_is_not_logged_as_an_error(tmp_path, caplog):
         trigger.worker_finished(5)
     assert "found the campaign busy" in caplog.text
     assert not [r for r in caplog.records if r.levelname == "ERROR"]
+
+
+# ---------------------------------------------------------------------------
+# Rebuild when a LabFrog export changes outside the spool
+# ---------------------------------------------------------------------------
+
+POLL = 0.05
+
+
+def _touch_export(path: Path, content: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    # Some filesystems keep a coarse mtime; the size change alone must count.
+    stamp = time.time() + 5
+    os.utime(path, (stamp, stamp))
+
+
+@pytest.mark.asyncio
+async def test_a_changed_labfrog_export_triggers_one_rebuild(tmp_path):
+    export = tmp_path / "c.sqlite"
+    _touch_export(export, b"v1")
+    runner = _RecordingRunner()
+    trigger = BuilderTrigger(
+        _settings(tmp_path, labfrog_sqlite=export, labfrog_poll_seconds=POLL),
+        runner=runner,
+    )
+    stop = asyncio.Event()
+    task = await _drive(trigger, stop)
+
+    await asyncio.sleep(POLL * 3)
+    assert runner.calls == []  # starting up is not a change
+
+    _touch_export(export, b"v2, refreshed")
+    await asyncio.sleep(POLL * 3 + DEBOUNCE * 2)
+    await _shutdown(task, stop, trigger)
+
+    assert len(runner.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_multi_campaign_watches_every_curated_export(tmp_path):
+    curated = tmp_path / "curated"
+    _touch_export(curated / "radbio" / "radbio.sqlite", b"v1")
+    runner = _RecordingRunner()
+    trigger = BuilderTrigger(
+        HZDRBuilderSettings(
+            enabled=True,
+            debounce_seconds=DEBOUNCE,
+            output_root=tmp_path / "out",
+            curated_root=curated,
+            labfrog_poll_seconds=POLL,
+        ),
+        runner=runner,
+    )
+    stop = asyncio.Event()
+    task = await _drive(trigger, stop)
+    await asyncio.sleep(POLL * 2)
+
+    # A campaign's first export appearing is a change too.
+    _touch_export(curated / "solenoid" / "solenoid.sqlite", b"new")
+    await asyncio.sleep(POLL * 3 + DEBOUNCE * 2)
+    await _shutdown(task, stop, trigger)
+
+    assert len(runner.calls) == 1
+
+
+@pytest.mark.asyncio
+async def test_export_polling_can_be_turned_off(tmp_path):
+    export = tmp_path / "c.sqlite"
+    _touch_export(export, b"v1")
+    runner = _RecordingRunner()
+    trigger = BuilderTrigger(
+        _settings(tmp_path, labfrog_sqlite=export, labfrog_poll_seconds=0),
+        runner=runner,
+    )
+    stop = asyncio.Event()
+    task = await _drive(trigger, stop)
+
+    _touch_export(export, b"v2, refreshed")
+    await asyncio.sleep(POLL * 3 + DEBOUNCE * 2)
+    await _shutdown(task, stop, trigger)
+
+    assert runner.calls == []
