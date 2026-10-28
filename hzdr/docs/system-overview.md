@@ -22,8 +22,8 @@ web UI reads.
 | --- | --- | --- | --- |
 | **labfrog** | Operator captures structured shot/campaign metadata ("the shotsheet") | Flask + MongoDB | Source of truth for campaign + shot context |
 | **labfrog-sqlite-tools-repo** | Exports LabFrog Mongo records to curated SQLite / NeXus / openPMD | Python CLI (`labfrog-sqlite`) | Turns LabFrog records into a portable, immutable export |
-| **shotcounter** | TANGO device server; counts laser shots, emits canonical trigger events whose `shot_id`/trigger context the other producers key off | PyTango + ZMQ + Kafka | Producer (`source = DRACO-Trigger`) |
-| **planet-watchdog** | Watches instrument folders, parses files, publishes Watchdog source events over Kafka | Python GUI + `watchdog` | Producer (`source = DAQ-File-Watchdog`) |
+| **shotcounter** | TANGO device server at DRACO; counts laser triggers and announces each one over ZMQ. Its counters reset when it restarts, so its numbers are not the shot identity | PyTango + ZMQ | Trigger source for the shot authority |
+| **planet-watchdog** | Two jobs. The **shot authority** (one ZMQ listener on fwkt-webapps) numbers every shotcounter trigger, republishes it on ZMQ and writes it to Kafka `draco.trigger`. The **DAQ File Watchdog** on the instrument PCs watches folders, parses files and publishes Watchdog source events over Kafka | Python + `watchdog` + ZMQ | Producer (`source = DRACO-Trigger` for numbered triggers, `DAQ-File-Watchdog` for files) |
 | **kafka-broker-docker** | Single-node Kafka broker + helper scripts and examples | Docker Compose (KRaft) | Transport (local/dev message bus) |
 | **asapo-for-hzdr-damnit** | Local harness proving the event contract + ASAPO/Kafka staging semantics | Node + Python | Transport test rig + contract reference |
 | **DAMNIT-web-hzdr** | Reconciler/builder + FastAPI API + React frontend | Python + TS | Consumer; builds and serves the canonical outputs |
@@ -31,10 +31,10 @@ web UI reads.
 | **scicat_plugin** | Registers file/path references + metadata in SciCat (reuses `scicat-ingestor` worker codepaths; no binary upload) | Flask + `scicat-ingestor` | Sink; SciCat catalog registration (producer-side per file, or DAMNIT-side per campaign NeXus file) — see [integration-roadmap.md §SciCat Registration](status/integration-roadmap.md#scicat-registration) |
 
 A third producer, **LaserData** (`source = LaserData`, transported over ASAPO),
-exists in the wider HZDR setup but is not one of these repositories. It is a
-future Deployed Semantic Baseline boundary, not a Kafka-pilot or Semantic Test
-Baseline blocker. When activated, it will produce events of the same shape
-described below.
+exists in the wider HZDR setup but is not one of these repositories. It is
+optional (2026-10-02): the deployment is complete with Kafka alone, and it is
+not a Kafka-pilot or Semantic Test Baseline blocker. When activated, it will
+produce events of the same shape described below.
 
 ## End-to-End Data Flow
 
@@ -51,9 +51,11 @@ flowchart TD
 
     subgraph Producers [Event producers]
         direction TB
-        SC[shotcounter<br/>source = DRACO-Trigger] -->|Kafka draco.trigger| KB[(kafka-broker-docker)]
-        KB -->|Kafka<br/>shot_id| PW[planet-watchdog<br/>source = DAQ-File-Watchdog] --> MDB2[(MongoDB<br/>watchdog)]
-        KB -->|Kafka<br/>shot_id| LD[LaserData<br/>external]
+        SC[shotcounter<br/>TANGO device] -->|ZMQ :2950| AU[shot authority<br/>planet-watchdog on fwkt-webapps<br/>issues shot_number]
+        AU -->|ZMQ :2951<br/>shot_number| PW[DAQ File Watchdog<br/>source = DAQ-File-Watchdog] --> MDB2[(MongoDB<br/>watchdog)]
+        AU -->|Kafka draco.trigger<br/>source = DRACO-Trigger| KB[(kafka-broker-docker)]
+        PW -->|Kafka planet.watchdog.events| KB
+        LD[LaserData<br/>external, optional]
     end
 
     style Producers fill:#CAFFBF,stroke:#333,stroke-width:2px
@@ -87,10 +89,10 @@ flowchart TD
     class Outputs customTitle;
     class DW customTitle;
 
-    KB -->|Kafka<br/>shot_id| LF
-    OP -.->|campaign selection + trigger-shot setup| SC
-    PW -->|Kafka| SPOOL
-    LD -->|ASAPO| SPOOL
+    AU -->|ZMQ :2951<br/>shot details| LF
+    OP -.->|trigger-channel setup| SC
+    KB -->|Kafka| SPOOL
+    LD -.->|ASAPO| SPOOL
     LST --> REC
 
     BLD --> NX
@@ -104,25 +106,35 @@ flowchart TD
 
 **The flow in words:**
 
-1. **Operators** enter campaign and shot metadata in **LabFrog**, and select the
-   active campaign plus trigger-shot setup in **shotcounter**. LabFrog stores the
-   campaign/shot context in MongoDB.
+1. **Operators** enter campaign and shot metadata in **LabFrog**, which stores
+   it in MongoDB. Selecting a shot in LabFrog claims the shot authority's number
+   for that record.
 2. **labfrog-sqlite-tools** exports those Mongo records into an immutable curated
-   SQLite + NeXus bundle, stamping the canonical `experiment_id` and preserving
-   linking columns (`kafka_event_id`, transport offsets, `damnit_*` hints).
-3. **shotcounter** emits a `draco.trigger` Kafka event per laser trigger. In local
-   and staged setups, **kafka-broker-docker** carries that trigger context,
-   including `shot_id`, to LabFrog, **planet-watchdog**, and **LaserData**.
+   SQLite + NeXus bundle (every 15 minutes on fwkt-webapps), stamping the
+   canonical `experiment_id`, the claimed `authority_shot_number` (schema 13)
+   and linking columns (`kafka_event_id`, transport offsets, `damnit_*` hints).
+3. **shotcounter** sends a ZMQ message per laser trigger to the **shot
+   authority** (planet-watchdog on fwkt-webapps, since 2026-10-02). The
+   authority gives the trigger the next `shot_number`/`shot_id` (never
+   decreasing, kept across restarts), republishes it on ZMQ `:2951` for
+   LabFrog and the DAQ File Watchdogs, and writes it to Kafka `draco.trigger`
+   with `experiment_id: "unassigned"`: it does not know campaigns.
 4. **Instrument producers** publish immutable *source events* keyed by that shot
-   context:
-   - **planet-watchdog** parses new instrument files and publishes Watchdog events
-     to DAMNIT over Kafka.
-   - **LaserData** (external) publishes LaserData events to DAMNIT over ASAPO.
+   number:
+   - **planet-watchdog** (DAQ File Watchdog) parses new instrument files and
+     publishes Watchdog events to DAMNIT over Kafka `planet.watchdog.events`.
+     No instrument PC runs one yet.
+   - **LaserData** (external, optional) would publish LaserData events to DAMNIT
+     over ASAPO.
    - **asapo-for-hzdr-damnit** is the local rig that proves this contract and the
-     staging semantics before a real broker is wired in.
+     staging semantics without a real broker.
 5. **DAMNIT-web-hzdr** consumes events through durable spool consumers
-   (claim → write+fsync → ack → dedup), matches each event to the right LabFrog
-   shot row, and runs a single-writer builder that produces the canonical outputs.
+   (claim → write+fsync → ack → dedup); unassigned triggers land in
+   `_unassigned/`. The builder assigns each one to a campaign (the LabFrog
+   record that claimed its shot number, then the campaign schedule, then a
+   reviewer's ruling in Review matches; otherwise it stays in the
+   `_unassigned` bucket), matches each event to the right LabFrog shot row, and
+   writes the canonical outputs as a single writer.
 6. The **API and frontend** read those outputs. DAMNIT never asks producers to
    edit the canonical file or make their own matching decisions.
 
@@ -137,7 +149,7 @@ events with the workbook's rows, and having a person review every link before
 it writes one NeXus container per shot.
 
 What it has to infer is what this chain records at the source: the `shot_id`
-that shotcounter mints, and the `experiment_id + shot_id` join below. Its
+that the shot authority issues, and the `experiment_id + shot_id` join below. Its
 `governed-keys.md` records, for every key in `METADATA_KEY_REGISTRY`, whether
 the aligner adopts or refuses it; its containers are not built or registered
 through DAMNIT. See the hub's
@@ -173,12 +185,13 @@ shot key is:
 <experiment_id>:<local YYYYMMDD>:<shot_number padded to 6>
 ```
 
-The date component matters because shot numbers may restart each day.
-`shot_number` is authoritative only from TANGO/shotcounter; it is nullable
-(`int | None`) by design while no end-to-end authoritative source is wired up.
-DAMNIT's matcher resolves identity-first (exact Kafka event id → transport
-position → same-day TANGO shot number → timestamp disambiguation → fallbacks); the
-full ordering is in [architecture.md](architecture.md#matching).
+The date component keeps keys apart for older data whose shot numbers
+restarted. Since 2026-10-02 the governed `shot_number` comes only from the shot
+authority (planet-watchdog), which never reuses a number. It stays nullable
+(`int | None`): a producer without an authoritative number sends `null`, never
+a local count. DAMNIT's matcher resolves identity-first (exact Kafka event id →
+transport position → authoritative shot number → timestamp disambiguation →
+fallbacks); the full ordering is in [architecture.md](architecture.md#matching).
 
 ### 3. The transports and their staging rule
 
@@ -197,8 +210,8 @@ This is what `asapo-for-hzdr-damnit` exists to prove locally, and what
 The pipeline's output — the thing you are "sending here" — is a single canonical
 view per campaign, built by DAMNIT and read by its API/frontend:
 
-- **Combined experiment NeXus file** — preserves the LabFrog NeXus structure and
-  adds DAMNIT's reconciliation result:
+- **Combined experiment NeXus file**, one per campaign — preserves the LabFrog
+  NeXus structure and adds DAMNIT's reconciliation result:
 
   ```text
   /entry/shots          canonical shot rows and match provenance
@@ -208,6 +221,10 @@ view per campaign, built by DAMNIT and read by its API/frontend:
   /entry/watchdog       Watchdog-derived values when present
   ```
 
+- **Per-shot containers** (merged, not yet switched on in production): with
+  `DW_API_HZDR_BUILDER__CONTAINERS_ENABLED=true` the builder converts each
+  shot's bulk files into `shots/<YYYYMMDD>_<shot>.nxs` beside the campaign file,
+  which then links them as a master.
 - **`hzdr_sources.json`** — the source catalog that exposes the file through the
   HZDR API, written atomically (temp file + rename) on every build, with operator
   confirm/dismiss decisions persisted in a `hzdr_sources.review.jsonl` sidecar.
@@ -220,13 +237,18 @@ not a source of truth.
 
 ### Where the end products physically land
 
-Everything is rooted at the DAMNIT data directory, `DW_API_DAMNIT_PATH` (the
-production template uses `/data/damnit/hzdr`). The pieces arrive and are consumed
-like this:
+The spool is rooted at the DAMNIT data directory, `DW_API_DAMNIT_PATH` (the
+production template uses `/data/damnit/hzdr`). In production the builder runs
+inside the API in multi-campaign mode and writes under
+`DW_API_HZDR_BUILDER__OUTPUT_ROOT` (on fwkt-webapps the bigdata share,
+`/bigdata/HPLexp/nexus`): `<root>/<campaign>/<campaign>.nxs`,
+`<root>/_unassigned/unassigned.nxs` and one shared `hzdr_sources.json`
+([deployment-plan.md](plans/deployment-plan.md) Step 2b). The pieces arrive
+and are consumed like this:
 
 | Artifact | Produced by | Path / naming | Consumed by |
 | --- | --- | --- | --- |
-| Staged events | spool consumers in this API | `<DAMNIT_PATH>/spool/asapo/<campaign>/events.jsonl` and `<DAMNIT_PATH>/spool/kafka/<campaign>/<topic>.jsonl` | the builder (`--events-jsonl`, `--trigger-jsonl`, `--watchdog-jsonl`) |
+| Staged events | spool consumers in this API | `<DAMNIT_PATH>/spool/kafka/<campaign or _unassigned>/trigger.jsonl` and `<DAMNIT_PATH>/spool/asapo/<campaign>/events.jsonl` | the builder (`--events-jsonl`, `--trigger-jsonl`, `--watchdog-jsonl`) |
 | Immutable LabFrog export | labfrog-sqlite-tools | curated `*.sqlite` + `*.nxs` per campaign (kept separate from DAMNIT output) | the builder (`--labfrog-sqlite`, `--labfrog-nexus`) |
 | Combined NeXus file | `hzdr-hdf5-builder.py` (`--output-nexus`/`--output-hdf5`, required) | a campaign `.nxs`/`.h5`; each catalog source records its `hdf5_path` | API shot detail / dataset preview |
 | Source catalog | same builder (`write_sources_catalog`) | `hzdr_sources.json`, default written **next to the NeXus file** unless `--sources-file` overrides | API (`DW_API_METADATA__SOURCES_FILE`) |
@@ -240,14 +262,15 @@ so it can safely run on a schedule while the API reads. Build it, then publish t
 catalog atomically (temp file + rename) — the API and frontend pick up the new
 end products on their next read with no restart.
 
-A typical build invocation that ties the inputs to the outputs:
+A single-campaign build by hand, which ties the inputs to the outputs
+(the example slug is illustrative):
 
 ```bash
 python api/scripts/hzdr-hdf5-builder.py \
   --experiment-id Solenoid_Beamline_Tests_01.2025 \
   --campaign-timezone Europe/Berlin \
   --labfrog-sqlite  <campaign>.sqlite \
-  --trigger-jsonl   spool/kafka/<campaign>/hzdr.solenoid.triggers.jsonl \
+  --trigger-jsonl   spool/kafka/<campaign>/trigger.jsonl \
   --events-jsonl    spool/asapo/<campaign>/events.jsonl \
   --output-nexus    <campaign>.nxs
 # -> writes <campaign>.nxs and (next to it) hzdr_sources.json
@@ -282,8 +305,8 @@ ways in:
   `launch-testing-suite.cmd` (local broker + GUI at `http://127.0.0.1:8765/`).
 - **A real local Kafka broker:** `kafka-broker-docker` → `./deploy.sh`.
 - **The shotsheet app:** `labfrog` → `uv run poe debug-with-dockerdb`.
-- **A trigger producer:** `shotcounter` →
-  `./scripts/start_local.sh --with-kafka --broker redpanda --test-mode`.
+- **A trigger producer:** `planet-watchdog` → `testing/tools/fake_zmq_publisher.py`
+  feeding a local shot authority (`docs/LOCAL_TESTING.md`, `docs/SHOT_AUTHORITY.md`).
 - **The file watcher (safe demo):** `planet-watchdog` → `uv run watchdog_test.py`.
 - **This app (consumer + UI):** see [local-development.md](guides/local-development.md).
 
@@ -294,13 +317,13 @@ The API + frontend are live at
 run by systemd from the git checkout `~/DAMNIT-web-hzdr` on fwkt-webapps
 (`hzdr/scripts/damnit-api-checkout.service.example`; there is no `/opt` tree)
 with an `.env.production.example`-derived `api/.env`, served behind the `frontend/nginx`
-proxy templates, with LDAP auth against `ldap.fz-rossendorf.de`. It receives
-no events yet: the Kafka and ASAPO spool consumers are not enabled there
-(confirmed 2026-09-30). The real ASAPO SDK client
-(`RealAsapoSpoolConsumer`, `DW_API_HZDR_SPOOL__BROKER_KIND=asapo`) is
-implemented, and pointing the deployment at real broker credentials is the
-next step (see [remaining-work-plan.md](plans/remaining-work-plan.md) and
-[handoff.md](status/handoff.md)).
+proxy templates, with LDAP auth against `ldap.fz-rossendorf.de`. Since
+2026-10-03 the Kafka spool consumer and the multi-campaign builder are on
+(first campaign `Beamline_radbio_2026`), and builds register in the internal
+SciCat (`vlsscicat.fz-rossendorf.de`). No message has reached `draco.trigger`
+yet, so intake from a real shot is unproven. The ASAPO spool consumer stays
+off (optional). What runs is recorded in the HZDR_combo integration ledger
+(`combo/integration-status.json`), not here.
 
 ## Where to Go Deeper
 

@@ -207,7 +207,7 @@ Branch: `feature/open-sqlite-explorer` — merged to `develop` (default branch)
 | Map MediaWiki campaign choice to canonical `experiment_id` alongside `Campaign` | ✅ merged to `develop` |
 | Store/preserve timezone fields (`date_time_utc`, `date_time_timezone`) | ✅ merged to `develop` |
 | Mongo `_id`/`_id_OLD`/`version`/`status` implement stable identity and history | ✅ pre-existing, documented |
-| Store/import authoritative TANGO shot number | 🔴 blocked-on: `shotcounter` merge + cross-system shot-number authority decision (see `shotcounter` section and §Shot Number Authority) |
+| Store/import the authoritative shot number | ✅ the shot authority's ZMQ shot details reach LabFrog (2026-10-02); a record claims the number and the export carries it as `authority_shot_number` (schema 13). The first live claim waits for a DRACO shot |
 
 ### `GitLab/labfrog-sqlite-tools-repo`
 
