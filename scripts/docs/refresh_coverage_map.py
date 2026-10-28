@@ -232,6 +232,7 @@ AREAS = (
             f"{T}/test_hzdr_config.py",
             f"{T}/test_runtime_config.py",
             f"{T}/test_hzdr_flow_activity.py",
+            f"{T}/test_logging_masks.py",
         ),
         watch_next="Application startup against a real database, and the ASGI entry point",
     ),

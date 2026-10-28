@@ -1,5 +1,6 @@
 import inspect
 import logging
+import re
 import sys
 from typing import TYPE_CHECKING
 
@@ -54,6 +55,29 @@ def pretty_format_name_callsite(logger, method_name, event_dict):
     event_dict["logger_name"] = logger_name.strip(".")
 
     return event_dict
+
+
+# The password in "scheme://user:password@host". Connection strings such as
+# DW_API_HZDR_HEALTH__MONGO_URI are plain str settings, so without this the
+# startup settings dump printed them, password included, to the journal.
+_URL_PASSWORD = re.compile(r"(?P<head>[A-Za-z][A-Za-z0-9+.-]*://[^/:@\s]+:)[^@\s/]+@")
+
+
+def _mask(value):
+    if isinstance(value, str):
+        return _URL_PASSWORD.sub(r"\g<head>***@", value)
+    if isinstance(value, dict):
+        return {key: _mask(item) for key, item in value.items()}
+    # Plain lists and tuples only: rebuilding a subclass such as starlette's
+    # Address namedtuple from a generator fails, and it carries no URL anyway.
+    if type(value) in (list, tuple):
+        return type(value)(_mask(item) for item in value)
+    return value
+
+
+def mask_url_credentials(logger, method_name, event_dict):
+    """Replace the password in any URL anywhere in the event with ``***``."""
+    return {key: _mask(value) for key, value in event_dict.items()}
 
 
 def request_id_at_front(logger, method_name, event_dict):
@@ -112,6 +136,7 @@ def configure(
         structlog.dev.set_exc_info,
         structlog.processors.TimeStamper(fmt="%Y-%m-%dT%H:%M:%SZ", utc=True),
         request_id_at_front,
+        mask_url_credentials,
     ]
 
     if add_call_site_parameters:
