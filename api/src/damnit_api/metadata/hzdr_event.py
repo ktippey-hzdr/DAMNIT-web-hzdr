@@ -9,9 +9,10 @@ byte-identically into:
     planet-watchdog/watchdog_core/hzdr_event.py
 
 by ``DAMNIT-web-hzdr/hzdr/scripts/sync-hzdr-event.ps1`` — edit only the
-DAMNIT copy, then re-run the sync with ``-Apply``. The shotcounter producer
-(``hzdrTangoDSShotcounter``) builds a plain-dict event of the same shape and
-vendors only the JSON fixtures.
+DAMNIT copy, then re-run the sync with ``-Apply``. planet-watchdog's shot
+authority builds the ``draco.trigger`` events with this model. shotcounter's
+parked Kafka publisher (``hzdrTangoDSShotcounter``, not deployed) builds a
+plain-dict event of the same shape and vendors only the JSON fixtures.
 
 Every transport event (LaserData/ASAPO, DAQ File Watchdog/Kafka,
 DRACO-Trigger/Kafka, ...) must validate against ``HZDREventV1``. In DAMNIT,
@@ -141,12 +142,12 @@ class HZDREventV1(BaseModel):
     shot_number: Annotated[int, Field(strict=True, ge=0)] | None = Field(
         default=None,
         description=(
-            "TANGO's shot counter is the authority. A whole number: a JSON "
-            "integer >= 0, never a boolean, float or string. Null means no "
-            "authoritative shot number is available yet for this event - this is "
-            "expected, not an error, while labfrog/DRACO do not yet propagate "
-            "one. Producers may still carry a non-authoritative nested/local "
-            "counter, but only as provenance in metadata, never as this field."
+            "Issued only by the shot authority (planet-watchdog), which stamps "
+            "every DRACO trigger. A whole number: a JSON integer >= 0, never a "
+            "boolean, float or string. Null is valid and means this event "
+            "carries no shot number, as for a file event not attributed to a "
+            "shot. A producer's own counter belongs in metadata as "
+            "provenance, never in this field."
         ),
     )
     source: str

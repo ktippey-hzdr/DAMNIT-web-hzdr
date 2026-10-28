@@ -11,17 +11,19 @@ state.
 shot authority in `planet-watchdog`, fed by shotcounter's current ZMQ stream.
 Its server unit is deployed, while the code update, restart check and consumer
 connections remain on the combo root's `planning/CHECK_FWKT.md`. Older "blocked on
-shotcounter merge" rows below are historical; the branch merge and live broker
-smoke test remain their own open gates.
+shotcounter merge" rows below are historical. Since 2026-10-02 the shotcounter
+Kafka branch is parked, not a gate (see the 2026-10-02 update).
 
-**2026-10-02 update:** the shot authority (`planet-watchdog-shot-authority`) has been running since 2026-10-02 and publishes `draco.trigger`; governed `shot_number` comes only from it, not from shotcounter directly or TANGO. DAMNIT's Kafka spool is still not switched on.
+**2026-10-02 update:** the shot authority (`planet-watchdog-shot-authority`) has been running since 2026-10-02 and publishes stamped triggers to `draco.trigger` (none yet: no DRACO trigger has arrived, re-checked 2026-10-28); `shot_number` and `shot_id` come only from it, not from shotcounter or TANGO. shotcounter keeps sending ZMQ triggers without a number; its own Kafka publisher (`feature/hzdr-canonical-trigger-event`) is parked: not merged, not deployed, and not needed. Full story: `planet-watchdog/docs/SHOT_AUTHORITY.md` and the hub page [Shot numbers](https://fwkt-data-management-hub.readthedocs.io/en/latest/architecture/shot-numbers/). DAMNIT's Kafka spool consumer has run since 2026-10-03 (combo `integration-status.json` I2).
 
 **2026-07-23 review:** local code and documentation were reconciled without
 restructuring this historical roadmap. The DAMNIT API suite passed with
 `346 passed, 5 skipped`; the HZDR-focused subset passed with
 `245 passed, 4 skipped, 102 deselected`. The documented production endpoint was
 not probed. The shotcounter merge, deployment Kafka restart/replay, real pilot
-capture, and deployed builder/SciCat replay evidence remain open.
+capture, and deployed builder/SciCat replay evidence remain open. *(Since
+2026-10-02 the shotcounter merge is no longer needed: the branch is parked and
+the shot authority writes `draco.trigger`.)*
 
 **2026-07-01:** production deployment is live at
 [https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/);
@@ -91,7 +93,8 @@ implemented and committed. Every repo's integration branch has been tested.
 The documented production deployment is
 [https://fwkt-damnit.fz-rossendorf.de/](https://fwkt-damnit.fz-rossendorf.de/);
 its availability was not re-probed on 2026-07-23.
-The remaining work is (a) merging the shotcounter branch, (b) pointing the
+The remaining work is (a) merging the shotcounter branch (superseded
+2026-10-02: parked, the shot authority publishes `draco.trigger`), (b) pointing the
 deployment's real ASAPO/Kafka spool consumers at live broker credentials and
 running restart/replay roundtrips, and (c) running the pilot capture.
 
@@ -102,8 +105,9 @@ Committed and tested:
 - Adapters for normalized ASAPO events, raw Watchdog documents, and legacy
   DRACO `processed_message` payloads.
 - Date-scoped identity and centralized reconciliation: exact Kafka identity,
-  TANGO/shotcounter same-day matching, timestamp disambiguation, and
-  timestamp-only fallback.
+  same-day `shot_number` matching, timestamp disambiguation, and
+  timestamp-only fallback. *(Changed since: see the note under the
+  identity-first matcher below.)*
 - LabFrog Mongo, curated SQLite, and rich NeXus readers; curated SQLite linking
   columns (`kafka_event_id`, transport offsets, `damnit_*`) are preserved.
 - Canonical NeXus bridge, source catalog, API models, and frontend views.
@@ -147,8 +151,9 @@ Committed and tested:
 
 The sequence below is ordered by dependency, not effort.
 
-1. **Merge the `shotcounter` branch** — verified passing (24/24 tests), not
-   yet on main. Gate: one manual Kafka smoke test with `KafkaEnabled=1`
+1. **Merge the `shotcounter` branch** — ⏸ parked since 2026-10-02: the shot
+   authority publishes `draco.trigger`, so the branch is not needed. Earlier
+   state: verified passing (24/24 tests), not yet on main. Gate: one manual Kafka smoke test with `KafkaEnabled=1`
    against a local broker, plus a decision on `IsShotCounterXX` defaults for
    real deployments (currently all `False` — operators must opt each channel
    in explicitly).
@@ -230,7 +235,7 @@ Branch: `master` (changes committed)
 | --- | --- |
 | Canonical campaign/output topic settings in producer config | ✅ committed |
 | Normalized events preserve Kafka topic, partition, offset, file URI/path, `payload_ref` | ✅ committed — `kafka_output.py` copies `topic/partition/offset` into `payload_ref`; integration test asserts all three fields |
-| `IsShotCounterXX`-gated authoritative shot number in normalized event | 🔴 blocked-on: `shotcounter` merge and cross-system shot-number authority decision |
+| `IsShotCounterXX`-gated authoritative shot number in normalized event | ✅ superseded 2026-10-02 — the watchdog takes `shot_number` from the shot authority's ZMQ :2951 republish (marked `shot_number_authoritative`), not from `IsShotCounterXX`; a local count stays in `metadata` |
 | Configure production deployment with canonical campaign and output topic | 🟡 config exists; deployment not yet pointed at it |
 | Real broker roundtrip and restart/replay test | 🟡 DAMNIT's `-DockerTests` suite covers this; planet-watchdog-specific pass not yet run |
 
@@ -251,7 +256,10 @@ Branch: `main` (all committed)
 
 ### `GitLab/shotcounter`
 
-Branch: `feature/hzdr-canonical-trigger-event` (not yet merged to main)
+Branch: `feature/hzdr-canonical-trigger-event` — parked since 2026-10-02 (not
+merged, not deployed, not needed: the shot authority publishes `draco.trigger`).
+`main` is deployed and sends ZMQ triggers on :2950 without a shot number. The
+rows below record the branch's state when it was parked.
 
 | Item | Status |
 | --- | --- |
@@ -262,8 +270,8 @@ Branch: `feature/hzdr-canonical-trigger-event` (not yet merged to main)
 | Operator-configurable `ShotNumber` with debounce; `IsShotCounterXX` per channel | ✅ on branch |
 | `IsShotCounterXX` defaults | ✅ decided — default `False`, opt-in per channel; startup warning fires when `KafkaEnabled=True` but no channel is set |
 | Kafka smoke test script (`scripts/kafka_smoke_test.py`) | ✅ written, verified green against `kafka-broker-docker` locally |
-| Smoke test on **deployment broker** with `KafkaEnabled=1` | 🟡 one remaining gate item before merge |
-| Merge to main | 🟡 pending deployment-broker smoke test |
+| Smoke test on **deployment broker** with `KafkaEnabled=1` | ⏸ parked with the branch (2026-10-02) |
+| Merge to main | ⏸ parked (2026-10-02) — not needed while the shot authority writes `draco.trigger` |
 | `shotcounter`'s `hzdr-event-v1` Kafka envelope consumed by DAMNIT normalizer | ✅ committed — `_normalize_hzdr_event_v1_trigger` added; 4 unit + 1 integration test |
 
 ### `GitHub/DAMNIT-web-hzdr`
@@ -318,15 +326,26 @@ which is exactly what DAMNIT needs to register a campaign NeXus file by path.
 
 ## Shot Number Authority
 
-`shot_number` is `int | None` in the canonical model — nullable by design while
-no cross-system-authoritative source exists. The three options, in order of
-effort:
+**Decided 2026-10-02:** the shot authority (`planet-watchdog-shot-authority`
+on fwkt-webapps) is the only issuer of `shot_number` and `shot_id`: a whole
+number, never decreasing except by a deliberate manual rebase, surviving
+restarts, starting at 1. It stamps
+each shotcounter trigger, republishes it on ZMQ :2951 to the instrument-PC
+watchdogs and LabFrog, and publishes `draco.trigger` to Kafka with
+`experiment_id: "unassigned"`. DAMNIT joins a LabFrog row to a trigger only on
+the row's `authority_shot_number` (ruling R3, 2026-10-03). Full story:
+`planet-watchdog/docs/SHOT_AUTHORITY.md` and the hub page
+[Shot numbers](https://fwkt-data-management-hub.readthedocs.io/en/latest/architecture/shot-numbers/).
+
+`shot_number` stays `int | None`: null is valid for an event with no shot (e.g.
+a file event). The options weighed before the decision, kept as history, in
+order of effort:
 
 1. **TANGO-preferred with timestamp fallback** — use shotcounter/TANGO
    `ShotNumber` as the preferred live shot number when it is present, but keep
    DAMNIT's timestamp matcher for missing, duplicated, or delayed shot numbers.
    Exact curated `kafka_event_id`/transport-position matches outrank both.
-   Chosen for the pilot, but since superseded: the governed number now comes only
+   Chosen for the pilot, but since superseded: `shot_number` now comes only
    from the persistent shot authority in `planet-watchdog` (2026-10-02), and
    DAMNIT no longer time-matches by default (`TIME_MATCH_AUTOASSIGN=false`).
 
@@ -343,8 +362,9 @@ effort:
    self-archiving as a metadata source*) — a control-system archiver is the
    natural home for reading such a counter alongside other device attributes.
 
-The decision to use Option 1 for the pilot is recorded. Options 2 and 3 remain
-open for post-pilot evaluation.
+Option 1 was chosen for the pilot. All three are superseded by the
+2026-10-02 decision above; the shot authority is a dedicated service like
+Option 3, but in `planet-watchdog`, not a TANGO device.
 
 ## Schema Fix Review (2026-06-23)
 
@@ -356,11 +376,17 @@ What landed and is solid:
 
 - **Identity-first matcher.** `_match_event` now resolves in the documented
   order: `kafka_event_id` → transport position (`topic/partition/offset`) →
-  same-day TANGO `shot_number` → duplicate-shot timestamp disambiguation
+  same-day `shot_number` → duplicate-shot timestamp disambiguation
   (`exact_day_shot_number_time_window`) → `shot_number` + nearest time →
   nearest time → ambiguous/unmatched. `MATCH_RANK` ordering is internally
   consistent (disambiguated < unique exact-day), and `MATCH_RANK.get(q, 0)`
   tolerates the non-ranked `ambiguous`/`unmatched` qualities without a KeyError.
+  *(Changed since. Ruling A7 (2026-09-30): an authoritative `shot_number` held
+  by exactly one shot matches on its day or any other, and the time-based ranks
+  only propose review candidates unless `TIME_MATCH_AUTOASSIGN` is on.
+  Ruling R3 (2026-10-03): a LabFrog row matches a trigger only on its
+  `authority_shot_number`, never on a typed number. The current order is in
+  `hzdr/docs/architecture.md` and `CLAUDE.md` § Match quality ranks.)*
 - **Curated SQLite reader.** `read_labfrog_sqlite_shots()` now preserves the
   Kafka/identity/linking columns and the `damnit_*` hints, prefers `date_time_utc`
   for timestamp matching while keeping local `date_time` for date-scoping, and
@@ -581,7 +607,8 @@ DAMNIT adapter) + external (control-system devices) · **Added:** 2026-06-26
 The goal is to let **TANGO devices write their own data and metadata** into the
 canonical campaign record, instead of DAMNIT relying only on producer-embedded
 values or the emulator's synthetic fields. Today the only TANGO touchpoint is
-`shotcounter` (one device server emitting `draco.trigger` to Kafka).
+`shotcounter` (one device server sending ZMQ triggers, without a shot number, to
+the shot authority, which publishes `draco.trigger`).
 
 **Reference evaluated:** CALA's `pyds_archivingserver` (`ArchivingServer` device),
 `gitlab.lrz.de/cala-public/tangodeviceservers/pyds_archivingserver`. CALA (Centre
@@ -597,9 +624,9 @@ from the actual `ArchivingServer.py` source (shared 2026-06-26), not assumptions
 > LaserData), and operator entry — including the manual / wiki-selected
 > [target ontology](../target-ontology.md), which needs no TANGO integration at all.
 > Treat everything below as the eventual *automation* layer that replaces manual /
-> producer-embedded capture, not a prerequisite for go-live. Consequently
-> `shotcounter` + Shot Number Authority **Option 1** remain the near-term shot-number
-> path; `ArchivingShotNo` (Option 3) is revisited only when this work begins.
+> producer-embedded capture, not a prerequisite for go-live. Shot numbers are
+> settled independently of it: the shot authority issues `shot_number` (decided
+> 2026-10-02), and `ArchivingShotNo` could only ever be a device count beside it.
 
 ### What `ArchivingServer` actually is
 
@@ -634,7 +661,7 @@ shot-numbered, date-foldered file tree each device writes into.
 
 | `ArchivingServer` field | DAMNIT concept | Note |
 | --- | --- | --- |
-| `ArchivingShotNo` | `shot_number` | **Candidate authoritative TANGO counter** — every device already keys off it (see Shot Number Authority Option 3) |
+| `ArchivingShotNo` | `shot_number` | A device count every device keys off. Not a second source of `shot_number`: the shot authority issues that (2026-10-02), so this would have to be set from it, or kept in `metadata` as a count |
 | `ArchivingShotTime` (`YYYYMMDD_HHmmssfff`) | `fired_at` / event `timestamp` | Local wall-clock; convert with campaign timezone (DAMNIT already does) |
 | `ArchivingExperimentPath` (`YYYYMMDD`) | local-date in `shot_key` `<exp_id>:<YYYYMMDD>:<NNNNNN>` | The day-folder convention *is* DAMNIT's date-scoping |
 | `ArchivingRun` | `metadata.run.*` (run index) | |
@@ -649,7 +676,8 @@ what this server already broadcasts, so no new matching concept is required.
 1. **Bridge subscriber → `hzdr-event-v1` → existing spool** *(recommended)*. Write a
    small `ArchivingDevice` subscriber (or an external Tango client listening to the
    server's change-events) that, per shot, emits one `hzdr-event-v1` event:
-   `shot_number` = `ArchivingShotNo`, `timestamp` from `ArchivingShotTime`,
+   `shot_number` = the shot authority's number (`ArchivingShotNo` only if set
+   from it), `timestamp` from `ArchivingShotTime`,
    experiment day from `ArchivingExperimentPath`, `payload_ref.path` = the shot's
    archive folder, and `metadata.archiving` = the failed-device / completeness list.
    It flows straight through the Kafka/ASAPO consumers already built. Medium; reuses
@@ -658,20 +686,19 @@ what this server already broadcasts, so no new matching concept is required.
    `<root>/<YYYYMMDD>/` layout is exactly a watch root; file-arrival events become
    data products. Needs shot-number association — either parse it from the
    path/filename, or join to the bridge from option 1 for authoritative shot context.
-3. **Adopt `ArchivingShotNo` as the authoritative shot number** — directly realizes
-   **Shot Number Authority Option 3** below. Requires deciding how this relates to
-   HZDR's `shotcounter` `ShotNumber` (same role, two facilities) — they must not both
-   claim authority for the same campaign.
+3. **Adopt `ArchivingShotNo` as the authoritative shot number** — superseded
+   2026-10-02: the shot authority issues `shot_number`. Planned as **Shot Number
+   Authority Option 3**; there must never be two sources of the number.
 4. **Per-shot completeness as QA metadata** — ingest
    `ArchivingPreviousShotsFailedDevices` into `metadata.archiving.*` so the review UI
    can flag incompletely-archived shots. Genuinely new signal; no analogue today.
 
 ### Decisions / things to confirm
 
-- **`shotcounter` vs. `ArchivingShotNo` authority.** Does HZDR run this CALA server,
-  an equivalent, or just adopt the pattern? Whichever supplies `shot_number` must be
-  the single authority per campaign (ties into the unresolved Shot Number Authority
-  decision — currently Option 1 for the pilot).
+- **`ArchivingShotNo` vs. the shot authority.** Does HZDR run this CALA server,
+  an equivalent, or just adopt the pattern? Either way `shot_number` comes only
+  from the shot authority (decided 2026-10-02); `ArchivingShotNo` would be set
+  from it or kept as a count.
 - **Timezone.** `ArchivingShotTime` and the path date are **local**; the bridge must
   emit UTC in the envelope `timestamp` (or DAMNIT interprets them in the campaign tz,
   as it already does for naive LabFrog times).

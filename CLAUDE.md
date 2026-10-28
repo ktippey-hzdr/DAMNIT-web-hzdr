@@ -170,8 +170,8 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     catalog. Gated by `DW_API_HZDR_SCICAT__*`.
   - `services.py`, `routers.py`, `models.py`, `gql.py` — the matcher/reconciler,
     REST + GraphQL surfaces, and API models. Matching is identity-first
-    (`kafka_event_id` → transport position → same-day TANGO shot number → timestamp
-    fallbacks); the full order is in `hzdr/docs/architecture.md`.
+    (`kafka_event_id` → transport position → a `shot_number` held by exactly one
+    shot, same day then any day → timestamp fallbacks); the full order is in `hzdr/docs/architecture.md`.
 - `consumer/` — durable spool consumers sharing one claim → write+fsync → ack →
   dedup loop: `spool.py` (`HZDRSpoolConsumer` base), `asapo.py` (`AsapoSpoolConsumer`),
   `kafka.py` (`KafkaSpoolConsumer`, manual offset commit). `builder_trigger.py`
@@ -225,8 +225,8 @@ builds every listed or spooled campaign, every campaign an `unassigned` event
 resolves to, and the `_unassigned` bucket, each to `<root>/<campaign>/<campaign>.nxs`
 with its export found as `<curated_root>/<campaign>/<campaign>.sqlite`, merged
 into one shared catalog (source key = `experiment_id`) that the API must serve.
-Only the listed and spooled campaigns' exports take part in resolution step 1
-(LabFrog numbers restart per campaign). SciCat registration of the built NeXus file
+Only the listed and spooled campaigns' exports take part in resolution step 1,
+which keys on `authority_shot_number` only (ruling R3). SciCat registration of the built NeXus file
 is the separate `DW_API_HZDR_SCICAT__*` block (best-effort, off by default).
 `DW_API_HZDR_LASER__*` (`SYSTEM`, `WAVELENGTH`, `REPETITION_RATE`, `POLARIZATION`)
 states the deployment's *fixed* laser-system constants — the `metadata.laser.*`
@@ -290,7 +290,7 @@ update this table together when the model changes).
 | `event_id` | str | yes\* | stable + deterministic; a publish retry must resend the same id |
 | `experiment_id` | str | yes | canonical campaign id, or the sentinel `unassigned` (`UNASSIGNED_EXPERIMENT_ID`) when the producer does not know it |
 | `shot_id` | str | yes | join key together with `experiment_id` |
-| `shot_number` | int \| null | no (null) | TANGO is the authority; a whole number (JSON integer >= 0; never a boolean, float or string, all refused since 2026-09-30); `null` is valid, not an error |
+| `shot_number` | int \| null | no (null) | issued only by the shot authority (planet-watchdog); a whole number (JSON integer >= 0; never a boolean, float or string, all refused since 2026-09-30); `null` is valid, not an error |
 | `source` | str | yes | producer/source label |
 | `kind` | str | yes | event kind, e.g. `draco.trigger` |
 | `timestamp` | str | yes | UTC ISO-8601 |
@@ -306,8 +306,13 @@ loading a legacy file that omits it (`EVENT_REQUIRED_FIELDS` is the looser loade
 - **No extra top-level fields.** The one tolerated producer-dialect field is `trigger_role`;
   the producer folds it into `metadata.trigger.role` so the wire envelope stays closed.
   The normalizer keeps a `pop("trigger_role")` shim for in-flight events from older producers.
-- **`shot_number` authority is TANGO.** `null` means "no authoritative number yet" and is
-  expected; a non-authoritative local counter belongs in `metadata`, never in this field.
+- **Only the shot authority issues `shot_number`** (planet-watchdog's
+  `planet-watchdog-shot-authority` on fwkt-webapps, since 2026-10-02; see
+  `planet-watchdog/docs/SHOT_AUTHORITY.md`). The shotcounter's counts are not shot
+  numbers (`Channel_counter` restarts with the device server, `10Hz_counter`
+  wraps). `null` means the event carries no shot number (e.g. a file event not
+  attributed to a shot) and is expected; a local count belongs in `metadata`,
+  never in this field.
 - **`values` is small data only:** ≤ `MAX_VALUES_ITEMS` (4096) leaf items counted recursively
   **and** ≤ `MAX_VALUES_BYTES` (64 KiB) serialized JSON, enforced by `check_values_size()`.
   Anything larger is a producer-side bug — put a reference in `payload_ref`
@@ -508,7 +513,7 @@ for the full rationale and HELPMI cross-walk.
 
 ### NeXus bridge profile: `hzdr-canonical-shot-v5`
 
-Stamped as `damnit_bridge_profile` on HDF5 root and `/entry/shots`. Current value: `"hzdr-canonical-shot-v5"`. Version 2 added the shot-aligned `target_metadata_json` column so campaign-varying targets are not lost behind the `/entry/sample` snapshot. **Version 3 (2026-08-31)** adds `/entry/source_events/producer_instance_id`, promoted from `metadata.producer.instance_id`, so a reviewed openPMD projection rule can name the emitting PC; see [hzdr/docs/plans/openpmd-projection-plan.md](hzdr/docs/plans/openpmd-projection-plan.md). **Version 4 (2026-09-29)** adds `/entry/shots/experiment_id_source` (why the shot is in this campaign: `labfrog` / `schedule` / `ruling` / `producer` / `unassigned`, see [architecture.md](hzdr/docs/architecture.md#campaign-resolution)) and `/entry/source_events/instrument_id` (from `metadata.instrument.id`, `""` when absent). **Version 5 (2026-10-01)** adds `/entry/shots/labfrog_local_count`: LabFrog's `shots.local_count` (labfrog-sqlite-tools schema v12), the experimenters' Count from LabFrog's local-counter reset, written beside each shot as a user aid so the NeXus file can be searched by the number on the Shotsheet. It is *not* an identifier and never stands in for the governed `shot_number`; the dataset's `description` attribute says so, and the name deliberately avoids a `shot_number` prefix (the shot aligner's rule G8). `-1` where LabFrog has no count (no active reset, a pre-v12 export, a LabFrog NeXus source, or a trigger-only shot). Bump this string if the bridge table layout changes (columns added/removed from the shot or source-events groups).
+Stamped as `damnit_bridge_profile` on HDF5 root and `/entry/shots`. Current value: `"hzdr-canonical-shot-v5"`. Version 2 added the shot-aligned `target_metadata_json` column so campaign-varying targets are not lost behind the `/entry/sample` snapshot. **Version 3 (2026-08-31)** adds `/entry/source_events/producer_instance_id`, promoted from `metadata.producer.instance_id`, so a reviewed openPMD projection rule can name the emitting PC; see [hzdr/docs/plans/openpmd-projection-plan.md](hzdr/docs/plans/openpmd-projection-plan.md). **Version 4 (2026-09-29)** adds `/entry/shots/experiment_id_source` (why the shot is in this campaign: `labfrog` / `schedule` / `ruling` / `producer` / `unassigned`, see [architecture.md](hzdr/docs/architecture.md#campaign-resolution)) and `/entry/source_events/instrument_id` (from `metadata.instrument.id`, `""` when absent). **Version 5 (2026-10-01)** adds `/entry/shots/labfrog_local_count`: LabFrog's `shots.local_count` (labfrog-sqlite-tools schema v12), the experimenters' Count from LabFrog's local-counter reset, written beside each shot as a user aid so the NeXus file can be searched by the number on the Shotsheet. It is *not* an identifier and never stands in for the shot authority's `shot_number`; the dataset's `description` attribute says so, and the name deliberately avoids a `shot_number` prefix (the shot aligner's rule G8). `-1` where LabFrog has no count (no active reset, a pre-v12 export, a LabFrog NeXus source, or a trigger-only shot). Bump this string if the bridge table layout changes (columns added/removed from the shot or source-events groups).
 
 **Axes.** `/entry/shots/*` is the only shot-indexed group. `/entry/source_events` is event-indexed and `/entry/data_products` is product-indexed; both carry a `shot_key` column and must be *joined*, never zipped by position.
 
@@ -541,7 +546,7 @@ tries them top down: the event's Kafka `event_id`, then its `topic/partition/off
 then — by default (`TIME_MATCH_AUTOASSIGN=false`, ruling A7) — an authoritative
 `shot_number` held by exactly one shot, on its day (`exact_day_shot_number`) or
 any other (`shot_number`, plan W6.2). Then, and for a number several shots hold,
-the TANGO `shot_number` on the event's campaign-local day (disambiguated by
+the `shot_number` on the event's campaign-local day (disambiguated by
 time when that day has several), the same number on any day within the
 tolerance, and nearest time alone. `event_identity` marks events on a shot
 built from the events themselves, grouped by shot number with no LabFrog record

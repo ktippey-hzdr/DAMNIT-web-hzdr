@@ -113,14 +113,15 @@ flowchart TD
    SQLite + NeXus bundle (every 15 minutes on fwkt-webapps), stamping the
    canonical `experiment_id`, the claimed `authority_shot_number` (schema 13)
    and linking columns (`kafka_event_id`, transport offsets, `damnit_*` hints).
-3. **shotcounter** sends a ZMQ message per laser trigger to the **shot
-   authority** (planet-watchdog on fwkt-webapps, since 2026-10-02). The
-   authority gives the trigger the next `shot_number`/`shot_id` (never
-   decreasing, kept across restarts), republishes it on ZMQ `:2951` for
-   LabFrog and the DAQ File Watchdogs, and writes it to Kafka `draco.trigger`
-   with `experiment_id: "unassigned"`: it does not know campaigns.
-4. **Instrument producers** publish immutable *source events* keyed by that shot
-   number:
+3. **shotcounter** sends a ZMQ message for each channel that fires to the
+   **shot authority**, a separate service on fwkt-webapps built from
+   planet-watchdog's code (since 2026-10-02). The authority gives each shot its
+   `shot_number`/`shot_id` (never decreasing except by a manual rebase, kept
+   across restarts), republishes the stamped message on ZMQ `:2951` for LabFrog
+   and the DAQ File Watchdogs, and writes it to Kafka `draco.trigger` with
+   `experiment_id: "unassigned"`: it does not know campaigns.
+4. **Instrument producers** publish immutable *source events*, carrying that
+   shot number when they can attribute the data to one shot:
    - **planet-watchdog** (DAQ File Watchdog) parses new instrument files and
      publishes Watchdog events to DAMNIT over Kafka `planet.watchdog.events`.
      No instrument PC runs one yet.
