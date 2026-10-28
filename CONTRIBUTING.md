@@ -56,7 +56,7 @@ Overall `damnit_api` line coverage from that run: **83.00%**.
 | GraphQL and data access | <progress value="82" max="100">82%</progress> Good | `api/tests/test_data.py` | Subscription lifecycles under a real client, and the schema directives |
 | Context file | <progress value="83" max="100">83%</progress> Good | `api/tests/test_contextfile.py` | Variable evaluation against a real DAMNIT context file on disk |
 | Authentication and directory | <progress value="51" max="100">51%</progress> Needs attention | `api/tests/test_auth_modes.py` | A real LDAP bind and the OAuth routers, neither reachable from the offline suite |
-| App core, database and settings | <progress value="80" max="100">80%</progress> Good | `api/tests/test_db.py`, `api/tests/test_hzdr_config.py`, `api/tests/test_runtime_config.py`, `api/tests/test_hzdr_flow_activity.py` | Application startup against a real database, and the ASGI entry point |
+| App core, database and settings | <progress value="80" max="100">80%</progress> Good | `api/tests/test_db.py`, `api/tests/test_hzdr_config.py`, `api/tests/test_runtime_config.py`, `api/tests/test_hzdr_flow_activity.py`, `api/tests/test_logging_masks.py` | Application startup against a real database, and the ASGI entry point |
 | MyMDC integration (vendored upstream) | <progress value="78" max="100">78%</progress> Good | _no dedicated suite_ | Upstream European XFEL code this deployment does not use; revendor rather than test around it |
 
 <!-- test-coverage-map-end -->
