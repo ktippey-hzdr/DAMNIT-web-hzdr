@@ -37,6 +37,14 @@ Description=DAMNIT Web API (HZDR, user checkout)
 After=network-online.target
 Wants=network-online.target
 
+# The builder writes DW_API_HZDR_BUILDER__OUTPUT_ROOT. When that is on a network
+# share (fwkt-webapps: the bigdata share under ~/mnt/bigdata), start only after
+# it is mounted; otherwise a boot that loses the race writes the campaign files
+# into the empty mount point on the local disk. Use this line only when the
+# share is listed in /etc/fstab (check: findmnt --fstab <mount point>), because
+# systemd needs a mount unit to wait for. Delete it when OUTPUT_ROOT is local.
+RequiresMountsFor=<REPLACE: the mount point holding OUTPUT_ROOT, e.g. /home/tippey/mnt/bigdata>
+
 [Service]
 Type=simple
 User=<REPLACE ...>
@@ -59,8 +67,11 @@ RestartSec=5
 # The spool consumer must finish flushing before the process exits.
 TimeoutStopSec=30
 
-# Must match DW_API_DAMNIT_PATH in .env.
-ReadWritePaths=/data/damnit/hzdr
+# Every path the API writes: DW_API_DAMNIT_PATH (the spool) and
+# DW_API_HZDR_BUILDER__OUTPUT_ROOT (the campaign files) in .env. Without
+# ProtectSystem= this only documents them, but it keeps the unit correct if it
+# is ever hardened. The "-" lets the unit start while OUTPUT_ROOT is not set up.
+ReadWritePaths=/data/damnit/hzdr -<REPLACE: OUTPUT_ROOT, e.g. /home/tippey/mnt/bigdata/HPLexp/nexus>
 PrivateTmp=true
 
 # NoNewPrivileges is incompatible with a snap-packaged uv: snap-confine is
