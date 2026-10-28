@@ -275,7 +275,7 @@ def projection_plan(*, source_ref: str) -> dict[str, Any]:
                 "target_name": "hzdr.shot_number",
                 "materialization": "inline",
                 "required": True,
-                "description": "TANGO-authoritative shot number after reconciliation.",
+                "description": "Canonical shot number after DAMNIT's reconciliation.",
             },
             {
                 "source": "damnit",

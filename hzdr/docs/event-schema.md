@@ -40,8 +40,8 @@ envelope by the reconciler.
 | `schema_version` | `"hzdr-event-v1"` | Drift detection: a schema bump fails CI in every producer until copies re-sync. Pattern-validated so a typo is rejected at parse time. |
 | `event_id` | str (required) | Stable, deterministic, producer-assigned. Enables idempotent replay: if the same event arrives twice with the same `event_id`, the consumer deduplicates and acks without writing twice. Must not be a random UUID that changes on retry. |
 | `experiment_id` | str | Canonical campaign identifier, derived from the operator's MediaWiki campaign page choice in LabFrog. Cross-repo join key. Format: `Title_Words_MM.YYYY` (underscores = MediaWiki page title convention). |
-| `shot_id` | str | Producer-local shot identifier, combined with `experiment_id` for the join key. Not the authoritative shot number. |
-| `shot_number` | `int \| None` | The governed shot number, stamped by the shot authority (`planet-watchdog-shot-authority`, `draco.trigger`); null when not yet propagated. A whole number: strict JSON integer `>= 0` (since 2026-09-30; lax parsing had made `true` shot 1 and `42.0` shot 42, so booleans, floats and strings are refused). Explicitly nullable because blocking a producer on an unavailable authoritative number is worse than recording null and letting the reconciler sort it out. See §Shot Number Authority in `integration-roadmap.md`. |
+| `shot_id` | str | Shot identifier, combined with `experiment_id` for the join key. A string, not a number: `shot-%06d` of `shot_number` (the shot authority issues it on each `draco.trigger`; a producer that received the authority's number derives it the same way), or `unassigned-<event_id>` for an event with no shot number. |
+| `shot_number` | `int \| None` | The shot number, issued only by the shot authority (`planet-watchdog-shot-authority`, since 2026-10-02; see `planet-watchdog/docs/SHOT_AUTHORITY.md`): never decreasing except by a deliberate manual rebase, surviving restarts. Null when the event carries no shot number (e.g. a file event not attributed to a shot; a number found in its payload stays in `metadata`). A whole number: strict JSON integer `>= 0` (since 2026-09-30; lax parsing had made `true` shot 1 and `42.0` shot 42, so booleans, floats and strings are refused). Explicitly nullable because blocking a producer on an unavailable authoritative number is worse than recording null and letting the reconciler sort it out. See §Shot Number Authority in `integration-roadmap.md`. |
 | `source` | str | Human-readable producer name (`"DAQ-File-Watchdog"`, `"DRACO-Trigger"`, `"LaserData"`). Used in the UI and for grouping. |
 | `kind` | str | Producer-defined event sub-type (`"draco.trigger"`, `"watchdog.file"`, `"camera_raw"`). |
 | `timestamp` | str (UTC ISO-8601) | Required to be timezone-aware UTC at the transport layer; naive LabFrog times are interpreted in the campaign timezone during reconciliation. |
@@ -59,9 +59,10 @@ top level for historical reasons; the normalizer folds it into `metadata.trigger
 before validation. New producer-specific fields always go into `metadata`.
 
 **`shot_number` is nullable by design:**
-The alternative — blocking a trigger event until an authoritative shot number is
-available — would stall the pipeline when the TANGO device is unavailable or the
-cross-system clock hasn't propagated. Null is the correct value, not an error.
+The alternative — blocking an event until a shot number is available — would
+stall the pipeline when the shot authority is unreachable, and would never
+release an event that has no shot (a file event). Null is the correct value, not
+an error.
 The reconciler matches primarily on identity (`kafka_event_id`, transport position) and
 only falls back to `shot_number` when that is the best available hint.
 

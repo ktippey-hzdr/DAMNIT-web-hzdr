@@ -38,7 +38,10 @@ source_key:       hzdr-solenoid-beamline-tests-01-2025
 timezone:         Europe/Berlin
 ```
 
-Shot numbers may restart each day. The canonical shot key is:
+For a shot that comes from LabFrog, the number in the canonical shot key is
+the LabFrog row's own `shot_number`, which an operator may type and which can
+start again every day (radbio types 1-70 daily). The key
+(`hzdr_nexus.make_shot_key`) therefore carries the local date:
 
 ```text
 <experiment_id>:<local YYYYMMDD>:<shot_number padded to 6>
@@ -102,8 +105,8 @@ campaign the chain routes an `unassigned` event to, and the `_unassigned`
 bucket, into one shared catalog. Step 1 then reads the exports of the listed
 and spooled campaigns only, the same records in every build of the run, each
 record naming its campaign, so every build routes an event to the same single
-campaign and no shot is counted in two. Older exports stay out because LabFrog
-numbers restart per campaign. Settings and layout:
+campaign and no shot is counted in two. Step 1 keys on `authority_shot_number`
+only (ruling R3), so a typed LabFrog number never routes an event. Settings and layout:
 [deployment plan, Step 2b](plans/deployment-plan.md#every-campaign-at-once-output_root-recommended).
 
 Each canonical shot records the outcome in `/entry/shots/experiment_id_source`
@@ -142,8 +145,10 @@ today:
 
 - `DAMNIT-web-hzdr/api/src/damnit_api/metadata/hzdr_event.py` — **canonical source**
 - `planet-watchdog/watchdog_core/hzdr_event.py` — the DAQ-File-Watchdog producer (GitLab repo slug `planet-watchdog`)
-- the shotcounter producer (`hzdrTangoDSShotcounter`), which builds a
-  plain-dict event of the same shape
+- the parked shotcounter branch (`hzdrTangoDSShotcounter`,
+  `feature/hzdr-canonical-trigger-event`; not merged, not deployed), which
+  builds a plain-dict event of the same shape. Since 2026-10-02 `draco.trigger`
+  is produced by the shot authority (`planet-watchdog`), not by shotcounter.
 
 **Canonical source + drift check.** DAMNIT-web-hzdr's copy is authoritative. The
 model's JSON Schema and a sample event are exported to a committed artifact
@@ -192,27 +197,25 @@ the NeXus bridge and `hzdr_sources.json` catalog.
 
 `shot_number` is a required *key*, but its value is nullable
 (`int | None`). The shot authority (planet-watchdog, see
-`planet-watchdog/docs/SHOT_AUTHORITY.md`) is the only source of the governed
-number since 2026-10-02; shotcounter's own counters reset on restart and, like
-channel counters, 10 Hz counters, Kafka offsets and nicknames, are not
-substitutes. (The `HZDREventV1.shot_number` field description still names
-TANGO; rewording it is a vendored contract change.)
+`planet-watchdog/docs/SHOT_AUTHORITY.md`) is the only issuer of
+`shot_number` since 2026-10-02. The shotcounter's counts are not
+substitutes either, like Kafka offsets and nicknames: `Channel_counter`
+restarts with the device server, `10Hz_counter` is upstream timing that wraps a
+few times a year, and `ShotNumber` exists only on the parked branch.
 `Draco01` to `Draco16` are stable channel IDs. Nicknames remain free operator
 display text.
 
-A null `shot_number` means no authoritative shot number is available for
-this event - that is expected, not an error, for example from a producer that
-did not receive the authority's number (see Pilot Identity and the integration
-roadmap).
-Producers are not blocked from emitting an event just because they lack an
-authoritative shot number.
+A null `shot_number` means the event carries no shot number - that is
+expected, not an error, for example a file event the watchdog did not
+attribute to a trigger. Producers are not blocked from emitting an event just
+because they lack a shot number.
 
-DAQ File Watchdog may still observe a non-authoritative, nested/local shot
-number (e.g. whatever is embedded in an attached DRACO/ZMQ payload). It may
-carry that value as the canonical `shot_number` rather than leaving it null,
-but only together with explicit provenance in `metadata` (e.g.
-`metadata.shot_number_provenance = {"authoritative": false, ...}`) so a
-consumer can never mistake it for the shot authority's number.
+DAQ File Watchdog may still see a local count (e.g. whatever is embedded in
+an attached DRACO/ZMQ payload). It keeps that only in `metadata`
+(`metadata.local_shot_number`, with
+`metadata.shot_number_provenance = {"authoritative": false, ...}`) and leaves
+`shot_number` null, so a consumer can never mistake it for the shot
+authority's number.
 
 ### `payload_ref`
 
@@ -260,7 +263,7 @@ them.
 
 Transport timestamps must be timezone-aware UTC. Naive LabFrog times are
 interpreted in the campaign timezone. DAMNIT prefers deterministic identity and
-TANGO shotcounter matches, with timestamp matching available as a disambiguator
+`shot_number` matches, with timestamp matching available as a disambiguator
 and fallback:
 
 1. Exact LabFrog/Kafka event identity (`kafka_event_id`) when a curated export
@@ -311,7 +314,7 @@ local-counter resets. DAMNIT reads it when the column exists (an older export
 still loads) and writes it beside each shot as
 `/entry/shots/labfrog_local_count` (bridge profile v5), so someone holding the
 Shotsheet can find a shot by the number they wrote down. It is a user aid, not
-an identifier: matching and building never read it, the governed
+an identifier: matching and building never read it, the shot authority's
 `shot_number` is unchanged, the name never starts with `shot_number` (the shot
 aligner's rule G8), and the dataset's `description` attribute says all of
 this. `-1` means LabFrog has no count for the shot: no active reset covers it,

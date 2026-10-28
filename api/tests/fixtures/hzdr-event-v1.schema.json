@@ -154,7 +154,7 @@
         }
       ],
       "default": null,
-      "description": "TANGO's shot counter is the authority. A whole number: a JSON integer >= 0, never a boolean, float or string. Null means no authoritative shot number is available yet for this event - this is expected, not an error, while labfrog/DRACO do not yet propagate one. Producers may still carry a non-authoritative nested/local counter, but only as provenance in metadata, never as this field.",
+      "description": "Issued only by the shot authority (planet-watchdog), which stamps every DRACO trigger. A whole number: a JSON integer >= 0, never a boolean, float or string. Null is valid and means this event carries no shot number, as for a file event not attributed to a shot. A producer's own counter belongs in metadata as provenance, never in this field.",
       "title": "Shot Number"
     },
     "source": {
