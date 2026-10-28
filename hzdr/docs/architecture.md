@@ -2,25 +2,28 @@
 
 ## Vision
 
-LabFrog owns campaign and shot context. shotcounter is the trigger authority: it
-emits the `draco.trigger` event whose `shot_id`/trigger context the other
-producers key off. Transport systems publish immutable source events. DAMNIT
-performs matching once and publishes one canonical campaign view.
+LabFrog owns campaign and shot context. The shot authority (planet-watchdog
+on fwkt-webapps, since 2026-10-02) owns the shot number: it numbers every
+shotcounter trigger and publishes the `draco.trigger` event whose
+`shot_number`/`shot_id` the other producers key off. Transport systems publish
+immutable source events. DAMNIT performs matching once and publishes one
+canonical campaign view.
 
 ```text
-operators -> shotcounter (DRACO-Trigger)
-                  |
-                  +-- Kafka draco.trigger (shot_id) --> LabFrog -> Mongo/SQLite/NeXus --+
-                  +-- Kafka draco.trigger (shot_id) --> planet-watchdog -> Kafka -------+
-                  +-- Kafka draco.trigger (shot_id) --> LaserData -> ASAPO ------------+  future/deferred
-                                                                                       |
-                                                          durable event spool <--------+
-                                                                  |
-                                                          DAMNIT reconciler
-                                                                  |
-                                                   canonical NeXus + catalog
-                                                                  |
-                                                          API + frontend
+shotcounter (TANGO) --ZMQ :2950--> shot authority (planet-watchdog, fwkt-webapps)
+                                        |
+                                        +-- ZMQ :2951 (shot_number) --> LabFrog -> Mongo/SQLite export --+
+                                        +-- ZMQ :2951 (shot_number) --> DAQ File Watchdog -> Kafka ------+
+                                        +-- Kafka draco.trigger (experiment_id "unassigned") -----------+
+                    LaserData -> ASAPO (optional) -----------------------------------------------------+
+                                                                                                       |
+                                                                          durable event spool <--------+
+                                                                                  |
+                                                                          DAMNIT reconciler
+                                                                                  |
+                                                                   canonical NeXus + catalog
+                                                                                  |
+                                                                          API + frontend
 ```
 
 Producers must not edit the canonical NeXus file or make independent timestamp
@@ -188,14 +191,19 @@ the NeXus bridge and `hzdr_sources.json` catalog.
 ### `shot_number`
 
 `shot_number` is a required *key*, but its value is nullable
-(`int | None`). TANGO's shot counter is the authority; channel counters,
-10 Hz counters, Kafka offsets, and nicknames are not substitutes.
+(`int | None`). The shot authority (planet-watchdog, see
+`planet-watchdog/docs/SHOT_AUTHORITY.md`) is the only source of the governed
+number since 2026-10-02; shotcounter's own counters reset on restart and, like
+channel counters, 10 Hz counters, Kafka offsets and nicknames, are not
+substitutes. (The `HZDREventV1.shot_number` field description still names
+TANGO; rewording it is a vendored contract change.)
 `Draco01` to `Draco16` are stable channel IDs. Nicknames remain free operator
 display text.
 
-A null `shot_number` means no authoritative shot number is available yet for
-this event - that is expected, not an error, while LabFrog/DRACO do not yet
-propagate one end to end (see Pilot Identity and the integration roadmap).
+A null `shot_number` means no authoritative shot number is available for
+this event - that is expected, not an error, for example from a producer that
+did not receive the authority's number (see Pilot Identity and the integration
+roadmap).
 Producers are not blocked from emitting an event just because they lack an
 authoritative shot number.
 
@@ -204,7 +212,7 @@ number (e.g. whatever is embedded in an attached DRACO/ZMQ payload). It may
 carry that value as the canonical `shot_number` rather than leaving it null,
 but only together with explicit provenance in `metadata` (e.g.
 `metadata.shot_number_provenance = {"authoritative": false, ...}`) so a
-consumer can never mistake it for TANGO's authoritative counter.
+consumer can never mistake it for the shot authority's number.
 
 ### `payload_ref`
 

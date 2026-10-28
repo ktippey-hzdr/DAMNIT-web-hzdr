@@ -100,7 +100,7 @@ name or units, and which are simply missing.
 
 | Standard field | DAPHNE4NFDI / HELPMI term | Current HZDR location | Notes |
 | --- | --- | --- | --- |
-| Shot number | shot_number | `HZDRShot.shot_number` | TANGO-authoritative; nullable; cross-system unique with `experiment_id` |
+| Shot number | shot_number | `HZDRShot.shot_number` | Issued by the shot authority (planet-watchdog); nullable; cross-system unique with `experiment_id` |
 | Timestamp | `start_time` (NeXus `NXentry`) | `HZDRShot.fired_at` (UTC ISO-8601) | Present; same format as NeXus requirement |
 | Shot key | — | `HZDRShot.shot_key` (`exp_id:YYYYMMDD:NNNNNN`) | HZDR-specific stable ID; more useful than numeric index alone |
 | Match status | — | `HZDRShot.match_status` | `matched`, `labfrog-only`, `unmatched`; no DAPHNE4NFDI equivalent |

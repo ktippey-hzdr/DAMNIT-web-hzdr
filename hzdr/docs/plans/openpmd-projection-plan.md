@@ -60,7 +60,7 @@ most important thing a projection plan has to get right.
 | --- | --- |
 | `/entry/shots/shot_index` | iteration index (0-based, stable order) |
 | `/entry/shots/shot_key` | **stable shot identity** — there is no `shot_id` column |
-| `/entry/shots/shot_number` | TANGO-authoritative number (shotcounter) |
+| `/entry/shots/shot_number` | authoritative number (the shot authority, planet-watchdog) |
 | `/entry/shots/fired_at` | earliest source-event timestamp = trigger time |
 | `/entry/shots/match_status`, `match_quality`, `match_time_delta_s` | reconciliation evidence |
 | `/entry/shots/target_metadata_json` | per-shot LabFrog target context (JSON text) |

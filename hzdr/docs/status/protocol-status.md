@@ -13,9 +13,9 @@ reports its server unit deployed, but it still needs the current code, restart
 check, and consumer connections described in the combo root's `planning/CHECK_FWKT.md`.
 The older rows below describe the 2026-09-15 assessment; their claim that
 watchdog and LabFrog must wait for the shotcounter branch merge is superseded.
-The shotcounter merge and its deployment-broker smoke test remain separate open
-gates. **2026-10-02:** the shot authority has been running since today; governed
-`shot_number` comes only from it.
+The shotcounter merge and its deployment-broker smoke test are parked: nothing
+waits on them. **2026-10-02:** the shot authority has been running since today; governed
+`shot_number` comes only from it, and it writes `draco.trigger`.
 
 Per-source, per-repo implementation status for the HZDR DAMNIT pipeline data-transfer
 protocols. See `integration-roadmap.md` for the full work-order history; see
@@ -42,7 +42,10 @@ per-repo implementation detail; where the two would overlap, the ledger wins.
 
 **Transport:** Kafka (topic `draco.trigger`, registered in `kafka-broker-docker/topics.env`)
 **Protocol:** `hzdr-event-v1` JSON envelope, manual-commit consumer group
-**Branch status:** producer on `feature/hzdr-canonical-trigger-event` (not yet merged to main)
+**Branch status:** producer on `feature/hzdr-canonical-trigger-event`, parked
+(not merged). Since 2026-10-02 the shot authority (planet-watchdog) writes
+`draco.trigger` instead; the shotcounter rows below describe the parked
+branch, and the DAMNIT rows hold for either producer.
 
 | Repo | What | Status |
 |------|------|--------|
@@ -106,16 +109,17 @@ broker, then merge the shotcounter branch.
 | **labfrog-sqlite-tools** | `bundle-complete.json` completion marker (atomic rename, per-file sha256) signals the pair is ready | ✅ committed |
 | **labfrog-sqlite-tools** | Opt-in immutable `retain_exports` snapshots via `export-campaign` CLI | ✅ committed |
 | **labfrog-sqlite-tools** | Linking columns in curated SQLite: `kafka_event_id`, `kafka_topic/partition/offset`, `damnit_*` hints | ✅ committed (curated schema v7/v8) |
-| **labfrog-sqlite-tools** | Schedule campaign-scoped exports (cron/systemd) | ⬜ external infra; not yet decided |
+| **labfrog-sqlite-tools** | Schedule campaign-scoped exports (cron/systemd) | 🟡 `labfrog-export-refresh.timer` in fwkt-webapps (every 15 minutes) |
 | **DAMNIT** | `read_labfrog_sqlite_shots()` reads curated SQLite; preserves all linking columns | ✅ committed |
 | **DAMNIT** | Size guard (< 1 KiB → `ValueError`) catches a partially written export before opening | ✅ committed |
-| **DAMNIT** | Identity-first matcher uses `kafka_event_id` → transport position → same-day TANGO shot number → timestamp | ✅ committed |
+| **DAMNIT** | Identity-first matcher uses `kafka_event_id` → transport position → authoritative shot number → timestamp | ✅ committed |
 | **DAMNIT** | `_mark_superseded_labfrog_rows()` — non-active duplicates flagged, not matched | ✅ committed |
 | **labfrog** | Map MediaWiki campaign choice to canonical `experiment_id`; store UTC timezone fields | ✅ merged to `develop` |
-| **labfrog** | Store/import authoritative TANGO shot number | 🔴 blocked on: shotcounter merge + shot-number authority wired end-to-end |
+| **labfrog** | Store/import the authoritative shot number | ✅ from the shot authority over ZMQ `:2951` (2026-10-02); exported as `authority_shot_number` (schema 13); first live claim waits for a DRACO shot |
 
-**Outstanding:** (a) schedule exports (external infra decision);
-(b) authoritative TANGO shot number in labfrog (post-shotcounter merge).
+**Outstanding:** (a) the export timer (`labfrog-export-refresh.timer` in
+fwkt-webapps, every 15 minutes) is built; confirm it on the host;
+(b) the first live authority claim in LabFrog.
 
 ---
 
