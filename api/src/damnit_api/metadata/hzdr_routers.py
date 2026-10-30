@@ -568,11 +568,14 @@ async def get_hzdr_shot_detail(
     "/hzdr/sources/{source_key}/shots/{shot_number}/datasets/{dataset_name:path}"
 )
 async def preview_hzdr_dataset(
-    source_key: str, shot_number: int, dataset_name: str
+    source_key: str,
+    shot_number: int,
+    dataset_name: str,
+    shot_key: str | None = None,
 ) -> HZDRDatasetPreview | None:
     """Preview one HDF5 dataset for a selected HZDR shot."""
     return HZDRSourceProvider(settings.metadata).get_dataset_preview(
-        source_key, shot_number, dataset_name
+        source_key, shot_number, dataset_name, shot_key=shot_key
     )
 
 

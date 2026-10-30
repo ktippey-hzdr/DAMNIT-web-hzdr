@@ -152,7 +152,7 @@ export function ContextBuilderPage() {
   const { source_key } = useParams()
   const [source, setSource] = useState<HZDRSource>()
   const [shots, setShots] = useState<HZDRShot[]>([])
-  const [selectedShotNumber, setSelectedShotNumber] = useState<number>()
+  const [selectedShotIndex, setSelectedShotIndex] = useState<number>()
   const [shotDetail, setShotDetail] = useState<HZDRShotDetail>()
   const [contextFile, setContextFile] = useState<CampaignContextFile>()
   const [contextContent, setContextContent] = useState('')
@@ -197,7 +197,7 @@ export function ContextBuilderPage() {
         }
         const nextShots = loadedShots as HZDRShot[]
         setShots(nextShots)
-        setSelectedShotNumber(nextShots[0]?.shot_number)
+        setSelectedShotIndex(nextShots.length ? 0 : undefined)
       })
       .catch(() => setSaveStatus('Could not load source shots.'))
     fetch(`/contextfile/campaign/${source_key}/me`)
@@ -217,15 +217,38 @@ export function ContextBuilderPage() {
       .catch(() => setContextFiles([]))
   }, [source_key])
 
+  // Select a row rather than a shot number: numbers may repeat across days,
+  // and older catalogs may not include canonical shot keys.
+  const selectedShot =
+    selectedShotIndex === undefined ? undefined : shots[selectedShotIndex]
+  const shotDetailPath =
+    source_key && selectedShot
+      ? `/metadata/hzdr/sources/${source_key}/shots/${
+          selectedShot.shot_key
+            ? `by-key/${encodeURIComponent(selectedShot.shot_key)}`
+            : selectedShot.shot_number
+        }`
+      : undefined
+
   useEffect(() => {
-    if (!source_key || !selectedShotNumber) {
+    setShotDetail(undefined)
+    setDatasetPreview(undefined)
+    if (!shotDetailPath) {
       return
     }
-    fetch(`/metadata/hzdr/sources/${source_key}/shots/${selectedShotNumber}`)
+    let active = true
+    fetch(shotDetailPath)
       .then((response) => requireJson<HZDRShotDetail>(response))
-      .then(setShotDetail)
-      .catch(() => setShotDetail(undefined))
-  }, [source_key, selectedShotNumber])
+      .then((detail) => {
+        if (active) setShotDetail(detail)
+      })
+      .catch(() => {
+        if (active) setShotDetail(undefined)
+      })
+    return () => {
+      active = false
+    }
+  }, [shotDetailPath])
 
   useEffect(() => {
     if (!fieldNameOverridden) {
@@ -233,9 +256,6 @@ export function ContextBuilderPage() {
     }
   }, [fieldNameOverridden, fieldTitle])
 
-  const selectedShot = shots.find(
-    (shot) => shot.shot_number === selectedShotNumber
-  )
   const metadataKeys = useMemo(
     () =>
       contextScope === 'set'
@@ -569,11 +589,14 @@ export function ContextBuilderPage() {
     if (
       usesHdf5VisualPreview &&
       source_key &&
-      selectedShotNumber &&
+      selectedShot &&
       selectedDataset
     ) {
+      const query = selectedShot.shot_key
+        ? `?${new URLSearchParams({ shot_key: selectedShot.shot_key })}`
+        : ''
       fetch(
-        `/metadata/hzdr/sources/${source_key}/shots/${selectedShotNumber}/datasets/${selectedDataset.previewName}`
+        `/metadata/hzdr/sources/${source_key}/shots/${selectedShot.shot_number}/datasets/${selectedDataset.previewName}${query}`
       )
         .then((response) => response.json())
         .then(setDatasetPreview)
@@ -741,14 +764,14 @@ export function ContextBuilderPage() {
                         />
                         <Select
                           label="Example shot"
-                          value={selectedShotNumber?.toString()}
+                          value={selectedShotIndex?.toString() ?? null}
                           onChange={(value) =>
-                            setSelectedShotNumber(
+                            setSelectedShotIndex(
                               value ? Number(value) : undefined
                             )
                           }
-                          data={shots.map((shot) => ({
-                            value: shot.shot_number.toString(),
+                          data={shots.map((shot, index) => ({
+                            value: index.toString(),
                             label: `${shot.shot_number} - ${shot.fired_at}`,
                           }))}
                         />
