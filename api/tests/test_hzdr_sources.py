@@ -4,9 +4,11 @@ import h5py
 import numpy as np
 import orjson
 import pytest
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 
 from damnit_api.metadata.hzdr_event import lint_metadata_keys
-from damnit_api.metadata.hzdr_routers import append_emulated_shot
+from damnit_api.metadata.hzdr_routers import append_emulated_shot, hzdr_router
 from damnit_api.metadata.hzdr_sources import (
     HZDRShot,
     HZDRSourceProvider,
@@ -16,6 +18,7 @@ from damnit_api.metadata.hzdr_sources import (
     preview_hdf5_dataset,
 )
 from damnit_api.shared.settings import MetadataSettings
+from damnit_api.shared.settings import settings as app_settings
 
 
 def write_source_fixture(tmp_path: Path) -> Path:
@@ -275,6 +278,62 @@ def test_local_provider_can_lookup_shot_by_date_scoped_key(tmp_path: Path):
 
     assert detail is not None
     assert detail.shot.fired_at == "2026-05-06T08:15:00Z"
+
+
+@pytest.mark.parametrize(
+    ("shot_key", "expected"),
+    [
+        (None, 5.0),
+        ("exp:20260505:000001", 5.0),
+        ("exp:20260506:000001", 6.0),
+        ("missing", None),
+    ],
+)
+def test_dataset_preview_selects_date_scoped_shot(
+    tmp_path: Path, monkeypatch, shot_key: str | None, expected: float | None
+):
+    shots = []
+    for day in (5, 6):
+        path = tmp_path / f"day-{day}.h5"
+        with h5py.File(path, "w") as handle:
+            handle.create_dataset("signal", data=float(day))
+        shots.append({
+            "source_key": "hzdr-local",
+            "shot_number": 1,
+            "shot_key": f"exp:202605{day:02d}:000001",
+            "fired_at": f"2026-05-{day:02d}T08:15:00Z",
+            "hdf5_path": str(path),
+        })
+    sources = tmp_path / "hzdr_sources.json"
+    sources.write_bytes(
+        orjson.dumps({
+            "sources": [
+                {
+                    "key": "hzdr-local",
+                    "title": "Repeated shot numbers",
+                    "damnit_path": "damnit/hzdr-local",
+                    "shots": shots,
+                }
+            ]
+        })
+    )
+    monkeypatch.setattr(
+        app_settings,
+        "metadata",
+        MetadataSettings(provider="local", sources_file=sources),
+    )
+    app = FastAPI()
+    app.include_router(hzdr_router)
+    with TestClient(app) as client:
+        response = client.get(
+            "/metadata/hzdr/sources/hzdr-local/shots/1/datasets/signal",
+            params={"shot_key": shot_key} if shot_key is not None else {},
+        )
+    assert response.status_code == 200
+    if expected is None:
+        assert response.json() is None
+    else:
+        assert response.json()["preview"] == expected
 
 
 def test_labfrog_local_count_is_a_shot_field_not_metadata():

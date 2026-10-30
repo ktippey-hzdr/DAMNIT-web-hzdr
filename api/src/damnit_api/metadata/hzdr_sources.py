@@ -368,10 +368,19 @@ class HZDRSourceProvider:
         return detail
 
     def get_dataset_preview(
-        self, key: str, shot_number: int, dataset_name: str
+        self,
+        key: str,
+        shot_number: int,
+        dataset_name: str,
+        *,
+        shot_key: str | None = None,
     ) -> HZDRDatasetPreview | None:
-        """Return a small JSON-safe preview for one HDF5 dataset."""
-        shot = self.get_shot(key, shot_number)
+        """Return a small JSON-safe preview, preferring a date-scoped shot key."""
+        shot = (
+            self.get_shot_by_key(key, shot_key)
+            if shot_key is not None
+            else self.get_shot(key, shot_number)
+        )
         if shot is None:
             return None
         local_path = self.local_hdf5_path(shot)
