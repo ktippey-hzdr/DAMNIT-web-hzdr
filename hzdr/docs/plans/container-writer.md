@@ -337,7 +337,10 @@ master), backgrounds (`<campaign>_backgrounds.nxs`), and an entry-level plot
   a manual move. It never
   touches the lock, its guard, the pending marker, the manifest, temp or
   tombstone files, or any other name. A master with no acquisition at all
-  collects nothing. A file held open on Windows is retried on a later pass.
+  collects nothing, except the `_unassigned` bucket's: the bucket drains as
+  its shots are routed to campaigns (a late LabFrog export, a ruling), and its
+  containers go with them (D-E14, found by the constellation emulator's E14,
+  2026-11-14). A file held open on Windows is retried on a later pass.
   Only campaigns the worker converts are collected, so the `_unassigned`
   bucket keeps its containers unless it is converted (`--include-unassigned`).
   That is intended (maintainer, 2026-10-20).

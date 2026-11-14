@@ -161,7 +161,8 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
     the worker moves this campaign's containers (by their own `shot_key`)
     whose shot has no acquisition in the published master to `shots/.trash`,
     purged after 7 days; never the lock, guard, pending marker, manifest or
-    temp files, and nothing when the master has no acquisition at all. Shot
+    temp files, and nothing when the master has no acquisition at all
+    (except the `_unassigned` bucket's, which drains: D-E14). Shot
     detail follows the shot's link (`hzdr_sources.list_container_datasets`),
     listing its datasets as `<stem>/...`; previews read
     them through the campaign file, one strided frame at a time.

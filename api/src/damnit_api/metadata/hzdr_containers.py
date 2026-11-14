@@ -42,6 +42,7 @@ import PIL
 
 from ..shared.hzdr_paths import map_path, parse_path_map
 from . import hzdr_packs
+from .hzdr_event import UNASSIGNED_EXPERIMENT_ID
 from .hzdr_nexus import (
     SHOTS_DIRNAME,
     BuilderAlreadyRunningError,
@@ -1241,10 +1242,13 @@ def _collect_garbage(
     an unreadable file is left for a person. It is moved to ``shots/.trash``,
     not deleted, and purged after ``TRASH_GRACE_S``: a build that missed a
     producer for once costs a reconversion, never the containers. A master with
-    no acquisition at all collects nothing.
+    no acquisition at all collects nothing, except the ``unassigned`` bucket's:
+    the bucket is meant to drain as its shots are routed to campaigns (a late
+    LabFrog export, a ruling), and without this their containers stayed in it
+    beside the campaign's copies (emulator E14, D-E14).
     """
     _purge_trash(folder / TRASH_DIRNAME)
-    if not planned:
+    if not planned and experiment_id != UNASSIGNED_EXPERIMENT_ID:
         logger.warning(
             "No shot in %s's master has an acquisition; not collecting %s",
             folder.parent.name,

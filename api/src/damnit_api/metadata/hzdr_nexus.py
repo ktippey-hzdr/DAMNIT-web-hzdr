@@ -1459,7 +1459,16 @@ def _warn_if_active_row_not_latest(
 
 
 def _mark_superseded_labfrog_rows(shots: list[dict[str, Any]]) -> None:
-    """Prefer current LabFrog rows when curated exports include history rows."""
+    """Prefer current LabFrog rows when curated exports include history rows.
+
+    An ``archived`` row is a previous version whatever its shot number: a
+    correction may change the number itself (a typed 44 corrected to 4), so
+    grouping by number alone left the typo current beside its correction
+    (D-E13, found by the constellation emulator's E13).
+    """
+    for shot in shots:
+        if str(shot.get("metadata", {}).get("status", "")).casefold() == "archived":
+            shot.setdefault("metadata", {})["has_newer_version"] = True
     grouped: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
     for shot in shots:
         grouped[

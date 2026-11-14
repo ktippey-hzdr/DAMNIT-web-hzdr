@@ -6,6 +6,24 @@ behaviour; the merge PR has the details.
 
 ## 2026-11-14
 
+### A corrected LabFrog record replaces its typo (D-E13)
+- The export keeps every version of a record; DAMNIT marked the older ones
+  `has_newer_version` only within the same (campaign, day, LabFrog shot
+  number), so a correction of the number itself (a typed 44 corrected to 4)
+  left the archived typo current beside it: an extra shot 44 in the catalogue
+  and the NeXus file. An `archived` row is now always a previous version.
+  Found by the constellation emulator's E13.
+
+### Containers of a drained `_unassigned` bucket are collected (D-E14)
+- A shot built in the `_unassigned` bucket (no LabFrog record yet, so no
+  campaign) and routed to its campaign by a later build left its container
+  in `_unassigned/shots/`: the same raw file was then in two containers. The
+  worker refused to collect on a master with no acquisition at all, which is
+  exactly what a drained bucket is. The bucket's master now collects (to
+  `.trash`, purged after 7 days as before); a campaign's master with no
+  acquisition still collects nothing. Found by the constellation emulator's
+  E14 (LabFrog export one cycle late).
+
 ### Spool consumer durability (review findings R01, R02, R08)
 - **A refused spool write is retried, never committed past (R01).** The
   consumer keeps a claimed batch until every event in it is on disk and only
