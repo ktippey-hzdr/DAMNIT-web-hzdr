@@ -4,6 +4,31 @@ Notable changes to the HZDR fork of DAMNIT-web. Newest first. Upstream
 (European-XFEL/DAMNIT-web) changes are summarised only where they reach HZDR
 behaviour; the merge PR has the details.
 
+## 2026-11-14
+
+### Spool consumer durability (review findings R01, R02, R08)
+- **A refused spool write is retried, never committed past (R01).** The
+  consumer keeps a claimed batch until every event in it is on disk and only
+  then commits; a failed write retries the same batch after the poll interval
+  instead of claiming the next one. Already-written events are skipped by
+  dedup. A failed commit after a durable batch is logged and let go (the
+  broker redelivers; dedup absorbs).
+- **A torn last spool line is repaired before the next append (R02).** A
+  tail that is valid JSON gets its missing newline; anything else is moved to
+  `<spool>.torn-<n>` beside the spool and the spool is truncated to its last
+  complete line, so a crash mid-append no longer glues the next event onto a
+  fragment and stops every build. Malformed interior lines are left alone.
+- **The spool keeps the broker's coordinates (R08).** Each Kafka record's
+  observed `topic`, `partition` and `offset` are written into `payload_ref`;
+  a producer-supplied position that disagrees is kept under
+  `payload_ref.producer_position` and logged.
+
+### Rewritten files (emulator E4)
+- An event that a later one replaces (`payload_ref.replaces`, the file
+  watchdog's marked re-delivery of a file the instrument rewrote) stays in the
+  shot's events as history but gets no data product, and the per-shot
+  container records the replacement's sha256, not the stale first one.
+
 ## 2026-11-13
 
 ### SciCat campaign publishing
