@@ -243,3 +243,22 @@ def test_every_link_name_is_in_the_contract_and_aliases_point_inside_it():
         if "link" in node:
             assert node["link"] in nodes, path
             assert "link" not in nodes[node["link"]], path
+
+
+def test_a_replaced_event_keeps_its_history_but_has_no_product():
+    """Emulator E4: a file rewritten after its event went out is delivered
+    again with ``payload_ref.replaces``; only the replacement gets a product."""
+    import copy
+
+    events = [_normalize_event(event) for event in _events()]
+    first = next(e for e in events if e["payload_ref"].get("path"))
+    replacement = copy.deepcopy(first)
+    replacement["event_id"] = f"{first['event_id']}-rewrite"
+    replacement["payload_ref"]["replaces"] = {"event_id": first["event_id"]}
+    products = build_event_data_products(
+        [*events, replacement], shot_key="reference-fixture:20251201:001042"
+    )
+    owners = [p["metadata"]["event_id"] for p in products]
+    assert first["event_id"] not in owners
+    assert replacement["event_id"] in owners
+    assert len(products) == len(events)

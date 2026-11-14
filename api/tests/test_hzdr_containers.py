@@ -722,6 +722,67 @@ def test_changing_one_raws_bytes_rewrites_only_that_shot(campaign):
     assert {n for n in after if after[n] != before[n]} == {"20251201_001044.nxs"}
 
 
+def test_a_marked_replacement_of_a_rewritten_raw_carries_its_new_sha256(campaign):
+    """Emulator E4: the instrument rewrites a delivered file; the watchdog sends
+    a second event marked ``payload_ref.replaces``. The first event keeps its
+    old sha256 (it is history), the replacement's describes the bytes on disk.
+    The container must follow the replacement, not the first event it saw."""
+    read_path = _read_path(campaign["raw"])
+    hc.convert_campaign(campaign["master"], read_path=read_path)
+
+    events = copy.deepcopy(campaign["events"])
+    csv = (
+        campaign["raw"]
+        / "1044"
+        / "M1_Spec_Fib_Cer"
+        / "set1_2025-12-01_15h-59m-04s_2.csv"
+    )
+    old = hashlib.sha256(csv.read_bytes()).hexdigest()
+    csv.write_bytes(csv.read_bytes().replace(b"Comment", b"Remark ", 1))
+    digest = hashlib.sha256(csv.read_bytes()).hexdigest()
+    first = next(
+        e
+        for e in events
+        if any(
+            m["path"].endswith("/1044/M1_Spec_Fib_Cer/" + csv.name)
+            for m in e["payload_ref"].get("members") or []
+        )
+    )
+    replacement = copy.deepcopy(first)
+    replacement["event_id"] = f"{first['event_id']}-rewrite"
+    replacement["payload_ref"]["replaces"] = {
+        "event_id": first["event_id"],
+        "sha256": old,
+    }
+    for member in replacement["payload_ref"]["members"]:
+        if member["path"].endswith(csv.name):
+            member["sha256"] = digest
+    events.append(replacement)
+    _build_master(campaign["master"], events)
+
+    run = hc.convert_campaign(campaign["master"], read_path=read_path)
+    assert run.written == ["20251201_001044.nxs"]
+    recorded: list[str] = []
+    with h5py.File(
+        hc.shots_dir(campaign["master"]) / "20251201_001044.nxs", "r"
+    ) as handle:
+        handle.visititems(
+            lambda name, node: (
+                recorded.append(node.asstr()[()])
+                if name.endswith("file_metadata/sha256")
+                and isinstance(node, h5py.Dataset)
+                else None
+            )
+        )
+    line = next(
+        row
+        for text in recorded
+        for row in text.splitlines()
+        if row.startswith(csv.name)
+    )
+    assert line == f"{csv.name} {digest}"
+
+
 def test_a_code_or_catalogue_change_rebuilds_every_container(campaign, monkeypatch):
     read_path = _read_path(campaign["raw"])
     hc.convert_campaign(campaign["master"], read_path=read_path)
