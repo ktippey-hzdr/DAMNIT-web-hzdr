@@ -633,6 +633,51 @@ def test_reads_every_claimed_authority_number_from_schema_14(tmp_path: Path):
     assert "authority_shot_numbers" not in by_id["set-a"]["metadata"]
 
 
+def test_an_archived_labfrog_version_is_not_a_shot(tmp_path: Path):
+    """D-E13: a corrected record replaces its earlier version, never joins it."""
+    sqlite_path = tmp_path / "campaign.sqlite"
+    with contextlib.closing(sqlite3.connect(sqlite_path)) as connection, connection:
+        connection.execute(
+            "CREATE TABLE shots (mongo_id TEXT PRIMARY KEY, shot_number INTEGER, "
+            "date_time TEXT, campaign TEXT, mode TEXT, status TEXT, "
+            "authority_shot_number INTEGER, filler TEXT)"
+        )
+        connection.executemany(
+            "INSERT INTO shots VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    "typo",
+                    44,
+                    "2026-11-14T10:00:00",
+                    "C",
+                    "shot",
+                    "archived",
+                    4,
+                    "x" * 600,
+                ),
+                (
+                    "fixed",
+                    4,
+                    "2026-11-14T10:00:00",
+                    "C",
+                    "shot",
+                    "active",
+                    4,
+                    "x" * 600,
+                ),
+                ("old", 5, "2026-11-14T10:05:00", "C", "shot", None, 5, "x" * 600),
+            ],
+        )
+
+    shots = read_labfrog_sqlite_shots(sqlite_path)
+    newer = {s["record_id"]: s["metadata"].get("has_newer_version") for s in shots}
+
+    # History is kept, marked: only the archived typo has a newer version.
+    assert newer["typo"] is True
+    assert not newer["fixed"]
+    assert not newer["old"]
+
+
 def test_reads_labfrog_sqlite_target_columns_as_metadata_target(tmp_path: Path):
     sqlite_path = tmp_path / "campaign.sqlite"
     with sqlite3.connect(sqlite_path) as connection:

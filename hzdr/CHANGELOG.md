@@ -6,6 +6,14 @@ behaviour; the merge PR has the details.
 
 ## 2026-11-14
 
+### A corrected LabFrog record replaces its typo (D-E13)
+- The export keeps every version of a record; DAMNIT marked the older ones
+  `has_newer_version` only within the same (campaign, day, LabFrog shot
+  number), so a correction of the number itself (a typed 44 corrected to 4)
+  left the archived typo current beside it: an extra shot 44 in the catalogue
+  and the NeXus file. An `archived` row is now always a previous version.
+  Found by the constellation emulator's E13.
+
 ### Containers of a drained `_unassigned` bucket are collected (D-E14)
 - A shot built in the `_unassigned` bucket (no LabFrog record yet, so no
   campaign) and routed to its campaign by a later build left its container
