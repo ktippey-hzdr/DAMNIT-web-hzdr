@@ -1635,7 +1635,10 @@ def test_a_shot_that_left_the_master_loses_its_container(campaign):
         assert "20251201_001045" not in master
 
 
-def test_a_master_with_no_acquisition_removes_nothing(campaign, tmp_path):
+def test_a_master_with_no_acquisition_removes_nothing(campaign, tmp_path, monkeypatch):
+    # The fixture's master is the unassigned bucket, which drains by design
+    # (D-E14); held here as any campaign's master, the guard must hold.
+    monkeypatch.setattr(hc, "UNASSIGNED_EXPERIMENT_ID", "no-bucket-here")
     hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
     shots = hc.shots_dir(campaign["master"])
     before = sorted(p.name for p in shots.glob("*.nxs"))
@@ -1644,6 +1647,18 @@ def test_a_master_with_no_acquisition_removes_nothing(campaign, tmp_path):
     run = hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
     assert run.removed == []
     assert sorted(p.name for p in shots.glob("*.nxs")) == before
+
+
+def test_the_drained_bucket_master_collects_its_containers(campaign):
+    """D-E14, end to end: every shot routed away, the bucket keeps nothing."""
+    hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    shots = hc.shots_dir(campaign["master"])
+    before = sorted(p.name for p in shots.glob("*.nxs"))
+    trigger_only = [{**e, "metadata": {}} for e in campaign["events"]]
+    _republish(campaign, trigger_only)
+    run = hc.convert_campaign(campaign["master"], read_path=_read_path(campaign["raw"]))
+    assert sorted(run.removed) == before
+    assert list(shots.glob("*.nxs")) == []
 
 
 def test_the_shot_detail_lists_its_container_through_the_master(campaign):
@@ -1809,6 +1824,26 @@ def test_another_campaigns_container_in_the_folder_is_never_collected(campaign):
     assert run.removed == []
     assert other.is_file()
     assert (shots / "20240101_000008.nxs").is_file()
+
+
+def test_a_drained_unassigned_bucket_collects_its_containers(tmp_path):
+    """D-E14: shots routed out of the bucket leave no containers behind it."""
+    shots = tmp_path / "shots"
+    shots.mkdir()
+    for number in (4, 5):
+        with h5py.File(shots / f"20261114_00000{number}.nxs", "w") as handle:
+            handle.attrs["shot_key"] = f"unassigned:20261114:00000{number}"
+            handle.create_group("entry")
+    removed = hc._collect_garbage(shots, "unassigned", set(), {}, None)
+    assert removed == ["20261114_000004.nxs", "20261114_000005.nxs"]
+    trashed = sorted(p.name.rsplit(".", 1)[0] for p in (shots / ".trash").iterdir())
+    assert trashed == removed
+    # A campaign's master with no acquisition still collects nothing.
+    with h5py.File(shots / "20261114_000006.nxs", "w") as handle:
+        handle.attrs["shot_key"] = "campaign-a:20261114:000006"
+        handle.create_group("entry")
+    assert hc._collect_garbage(shots, "campaign-a", set(), {}, None) == []
+    assert (shots / "20261114_000006.nxs").is_file()
 
 
 def test_the_trash_is_purged_after_its_grace(campaign, monkeypatch):
