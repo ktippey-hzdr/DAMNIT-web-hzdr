@@ -78,13 +78,88 @@ def _load_staged_identities(path: Path) -> set[str]:
     return identities
 
 
+def _repair_torn_tail(path: Path) -> Path | None:
+    """Make sure a spool file ends with a complete line before it grows.
+
+    A crash (or a refused write) partway through an append leaves the last
+    line without its newline. Appending to it would glue the next event onto
+    the fragment, so the line stays invalid JSON and the builder refuses the
+    whole spool (review finding R02). A tail that is valid JSON only lacks
+    its newline and gets one. Anything else is moved, byte for byte, to a
+    quarantine file beside the spool (``<name>.torn-<n>``) and the spool is
+    truncated back to its last complete line; both are fsynced. Malformed
+    lines *inside* the file are not touched here: they are history, and
+    deciding about them is not this function's job.
+
+    Returns the quarantine file, or None when nothing was moved.
+    """
+    if not path.exists():
+        return None
+    with path.open("rb+") as fh:
+        fh.seek(0, os.SEEK_END)
+        size = fh.tell()
+        if size == 0:
+            return None
+        fh.seek(size - 1)
+        if fh.read(1) == b"\n":
+            return None
+        # Find the start of the unterminated tail (after the last newline).
+        start = size
+        chunk = 65536
+        while start > 0:
+            step = min(chunk, start)
+            fh.seek(start - step)
+            block = fh.read(step)
+            cut = block.rfind(b"\n")
+            if cut != -1:
+                start = start - step + cut + 1
+                break
+            start -= step
+        fh.seek(start)
+        tail = fh.read()
+        try:
+            json.loads(tail.decode("utf-8"))
+            complete = True
+        except (UnicodeDecodeError, json.JSONDecodeError):
+            complete = False
+        if complete:
+            fh.seek(0, os.SEEK_END)
+            fh.write(b"\n")
+            fh.flush()
+            os.fsync(fh.fileno())
+            logger.warning(
+                "Spool %s ended without a newline; completed its last record", path
+            )
+            return None
+        n = 1
+        while (quarantine := path.with_name(f"{path.name}.torn-{n}")).exists():
+            n += 1
+        with quarantine.open("wb") as out:
+            out.write(tail)
+            out.flush()
+            os.fsync(out.fileno())
+        fh.truncate(start)
+        fh.flush()
+        os.fsync(fh.fileno())
+    logger.warning(
+        "Spool %s had a torn last record (%d bytes); moved it to %s and truncated "
+        "the spool to its last complete line",
+        path,
+        len(tail),
+        quarantine,
+    )
+    return quarantine
+
+
 def _append_event_durable(path: Path, message: dict[str, Any]) -> None:
     """Append one event to a JSONL spool file and fsync before returning.
 
     Uses append mode so concurrent readers always see complete lines.
     fsync guarantees the line is on disk before the caller acks the broker.
+    A torn tail left by an earlier crash is repaired first (R02).
     """
     path.parent.mkdir(parents=True, exist_ok=True)
+    _repair_torn_tail(path)
     line = json.dumps(message, sort_keys=True) + "\n"
     with path.open("a", encoding="utf-8") as fh:
         fh.write(line)
@@ -194,6 +269,7 @@ class HZDRSpoolConsumer(ABC):
         if not self._loaded:
             self._staged = set()
             for path in self.config.all_spool_files():
+                _repair_torn_tail(path)
                 self._staged |= _load_staged_identities(path)
             self._loaded = True
 
@@ -239,6 +315,25 @@ class HZDRSpoolConsumer(ABC):
     async def _ack(self, token: Any) -> None:
         """Commit broker position.  Called only after all writes succeed."""
 
+    async def _finish_batch(self, token: Any, written: list[Path]) -> None:
+        """Commit a durable batch, then notify; neither failure loses events.
+
+        Every event is on disk before this runs. A failed commit is only
+        logged: the broker redelivers uncommitted records and dedup absorbs
+        them, so the batch can be let go.
+        """
+        try:
+            await self._ack(token)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Broker commit failed after a durable batch; continuing")
+        if written:
+            try:
+                self.on_new_events(written)
+            except Exception:
+                logger.exception("New-events hook failed; the batch is already durable")
+
     async def run(self, stop: asyncio.Event) -> None:
         """Poll loop.  Exits cleanly when stop is set."""
         logger.info(
@@ -246,23 +341,38 @@ class HZDRSpoolConsumer(ABC):
             self.config.campaign,
             self.config.consumer_group,
         )
+        # A claimed batch stays claimed until every event in it is durable and
+        # its position is committed. A refused write retries the *same*
+        # batch instead of claiming the next one, whose commit would move
+        # the group past the event that never reached disk (review finding
+        # R01). Events already written are skipped on the retry by dedup.
+        pending: tuple[list[dict[str, Any]], Any] | None = None
+        written: list[Path] = []
         while not stop.is_set():
             try:
-                messages, token = await self._claim()
-                if not messages:
-                    await asyncio.sleep(self.config.poll_interval)
-                    continue
-                written: list[Path] = []
+                if pending is None:
+                    messages, token = await self._claim()
+                    if not messages:
+                        await asyncio.sleep(self.config.poll_interval)
+                        continue
+                    pending, written = (messages, token), []
+                messages, token = pending
                 for msg in messages:
                     path = self.consume_one(msg)
                     if path is not None:
                         written.append(path)
-                await self._ack(token)
-                if written:
-                    self.on_new_events(written)
             except asyncio.CancelledError:
                 raise
             except Exception:
-                logger.exception("Spool consumer error; retrying after poll interval")
+                logger.exception(
+                    "Spool consumer error; %s after the poll interval (nothing "
+                    "is committed until the batch is durable)",
+                    f"retrying the same {len(pending[0])}-event batch"
+                    if pending
+                    else "claiming again",
+                )
                 await asyncio.sleep(self.config.poll_interval)
+                continue
+            await self._finish_batch(token, written)
+            pending = None
         logger.info("Spool consumer stopped")

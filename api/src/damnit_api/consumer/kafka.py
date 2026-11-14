@@ -76,6 +76,45 @@ def _offset_and_metadata(offset: int) -> Any:
     )
 
 
+def _with_transport_position(
+    value: dict[str, Any], tp: Any, offset: int
+) -> dict[str, Any]:
+    """A copy of ``value`` whose ``payload_ref`` names where the broker put it.
+
+    The producer cannot know the partition and offset before publishing, so
+    the consumer records what it observed (review finding R08); the builder's
+    exact-transport-position match and spool-to-broker provenance need it.
+    Other producer fields are kept. A producer-supplied position that
+    disagrees with the observed one is kept under ``producer_position`` and
+    logged, never silently overwritten.
+    """
+    ref = value.get("payload_ref")
+    ref = dict(ref) if isinstance(ref, dict) else {}
+    observed = {
+        "topic": getattr(tp, "topic", None),
+        "partition": getattr(tp, "partition", None),
+        "offset": offset,
+    }
+    observed = {key: item for key, item in observed.items() if item is not None}
+    conflicting = {
+        key: ref[key]
+        for key, item in observed.items()
+        if ref.get(key) is not None and ref[key] != item
+    }
+    if conflicting:
+        logger.warning(
+            "Kafka record %s: producer-supplied position %s differs from the "
+            "broker's %s; keeping the broker's, the producer's under "
+            "payload_ref.producer_position",
+            value.get("event_id", "?"),
+            conflicting,
+            observed,
+        )
+        ref["producer_position"] = conflicting
+    ref.update(observed)
+    return {**value, "payload_ref": ref}
+
+
 class KafkaSpoolConsumer(HZDRSpoolConsumer):
     """Durable Kafka consumer that spools ``hzdr-event-v1`` trigger envelopes.
 
@@ -120,7 +159,7 @@ class KafkaSpoolConsumer(HZDRSpoolConsumer):
                         record.offset,
                     )
                     continue
-                messages.append(value)
+                messages.append(_with_transport_position(value, tp, record.offset))
                 offsets[tp] = _offset_and_metadata(record.offset + 1)
         return messages, offsets
 

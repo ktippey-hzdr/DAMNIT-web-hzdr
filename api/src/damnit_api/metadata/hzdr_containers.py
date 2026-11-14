@@ -342,7 +342,8 @@ def _text_slice(group: h5py.Group, name: str, start: int, stop: int) -> list[str
 
 
 def _compact_payload(payload: dict) -> dict:
-    """The payload fields a container uses: paths and their sha256."""
+    """The payload fields a container uses: paths, their sha256, and which
+    earlier event a re-delivery replaces (its checksum supersedes that one's)."""
     keep = ("path", "sha256", "size_bytes")
     members = [
         {k: m[k] for k in keep if k in m}
@@ -350,6 +351,9 @@ def _compact_payload(payload: dict) -> dict:
         if isinstance(m, dict)
     ]
     compact = {k: payload[k] for k in keep if k in payload}
+    replaces = payload.get("replaces")
+    if isinstance(replaces, dict) and replaces.get("event_id"):
+        compact["replaces"] = {"event_id": replaces["event_id"]}
     if members:
         compact["members"] = members
     return compact
@@ -534,6 +538,12 @@ def _add_event(
         )
         if recorded not in acquisition.sha256:
             acquisition.files.append(recorded)
+            acquisition.sha256[recorded] = member.get("sha256")
+        elif payload.get("replaces") or (
+            isinstance(member, dict) and member.get("replaces")
+        ):
+            # The watchdog's marked re-delivery of a rewritten file: its
+            # checksum describes the bytes on disk, the first one no longer.
             acquisition.sha256[recorded] = member.get("sha256")
         if when and (not acquisition.when or when < acquisition.when):
             acquisition.when = when

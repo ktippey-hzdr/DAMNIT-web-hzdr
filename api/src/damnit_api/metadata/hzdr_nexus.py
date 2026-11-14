@@ -595,7 +595,7 @@ def append_review_decision(
         fh.write(json.dumps(record) + "\n")
         fh.flush()
         os.fsync(fh.fileno())
-    # Rolling backup — copied after fsync so it is always a coherent snapshot.
+    # Rolling backup - copied after fsync so it is always a coherent snapshot.
     # If the sidecar is lost, recover by renaming this file back to the sidecar
     # path. At most one decision is lost (the one written before the failure).
     shutil.copy2(sidecar, review_sidecar_backup_path(sources_file))
@@ -1227,7 +1227,7 @@ def read_labfrog_sqlite_shots(path: Path) -> list[dict[str, Any]]:
     stat = path.stat()
     if stat.st_size < 1024:
         message = (
-            f"{path} is {stat.st_size} bytes — too small to be a complete "
+            f"{path} is {stat.st_size} bytes - too small to be a complete "
             "LabFrog curated export. The export may still be running, or a "
             "previous run may have crashed before the atomic rename completed."
         )
@@ -2091,13 +2091,34 @@ def reconcile_canonical_shots(  # noqa: C901
     return canonical, normalized_events
 
 
+def _superseded_event_ids(events: Iterable[dict[str, Any]]) -> set[str]:
+    """Event ids that another event names in ``payload_ref.replaces``."""
+    replaced: set[str] = set()
+    for event in events:
+        ref = event.get("payload_ref")
+        marker = ref.get("replaces") if isinstance(ref, dict) else None
+        if isinstance(marker, dict) and marker.get("event_id"):
+            replaced.add(str(marker["event_id"]))
+    return replaced
+
+
 def build_event_data_products(
     events: Iterable[dict[str, Any]], *, shot_key: str
 ) -> list[dict[str, Any]]:
-    """Build compact product descriptors from normalized source events."""
+    """Build compact product descriptors from normalized source events.
+
+    An event that a later one replaces (``payload_ref.replaces.event_id``: the
+    file watchdog's marked re-delivery of a file the instrument rewrote) gets
+    no product of its own: its checksum no longer describes the bytes on
+    disk. The event itself stays in the shot's event list as history.
+    """
+    events = list(events)
+    superseded = _superseded_event_ids(events)
     products: list[dict[str, Any]] = []
     for event in events:
         event_id = str(event["event_id"])
+        if event_id in superseded:
+            continue
         source = str(event["source"])
         kind = str(event["kind"])
         values = event.get("values")
@@ -2221,7 +2242,7 @@ def write_nexus_bridge(
     """Preserve a LabFrog NeXus file and add the DAMNIT bridge tables.
 
     Writes to a sibling .tmp.nxs file first, then atomically replaces
-    output_path on success — the same pattern as write_json_atomic(). A crash
+    output_path on success - the same pattern as write_json_atomic(). A crash
     or exception mid-write leaves the previous output_path intact and a stale
     .tmp.nxs sibling that is cleaned up on the next invocation.
 
@@ -2315,7 +2336,7 @@ def _write_campaign_time_bounds(entry: h5py.Group, shots: list[dict[str, Any]]) 
     Derived from the earliest/latest parseable shot `fired_at` (itself the
     minimum event timestamp per shot, or the LabFrog date_time fallback).
     Standard NeXus catalog tooling and the SciCat mapping read these first, so
-    they are refreshed on every rebuild as the campaign grows — but only when
+    they are refreshed on every rebuild as the campaign grows - but only when
     DAMNIT wrote them: an existing dataset without the `damnit_source` marker
     (e.g. from a future LabFrog projection) is preserved, mirroring the
     `_claim_damnit_group` rule for groups.
@@ -2659,7 +2680,7 @@ def write_nexus_laser_group(
 
 
 # HZDR-local NXhzdr_target profile version. Bump on any semantic-map change
-# (fields added/removed/retyped) covered by the application definition — since
+# (fields added/removed/retyped) covered by the application definition - since
 # v0.6 that is the whole canonical entry (sample, instrument/laser,
 # sample/environment, detector series, start_time/end_time), not just the
 # metadata.target.* -> /entry/sample mapping; the profile doc version AND the
@@ -2934,7 +2955,7 @@ def write_nexus_sample(entry_group: h5py.Group, target: Any) -> None:
     hzdr/docs/nxhzdr-target-profile.md). The profile's NXDL lives at
     hzdr/nxdl/NXhzdr_target.nxdl.xml (declared via /entry/definition, written
     by write_nexus_bridge). Decision closed 2026-07-18 (profile doc §6):
-    NX_class stays "NXsample" permanently — /entry/definition plus
+    NX_class stays "NXsample" permanently - /entry/definition plus
     damnit_nx_class carry the profile identity, and swapping the class would
     break generic NXsample consumers for no validation gain.
     """
@@ -3000,12 +3021,12 @@ def write_nexus_vacuum_group(entry_group: h5py.Group, vacuum: dict[str, Any]) ->
     """Write `/entry/sample/environment` (`NXenvironment`) from `metadata.vacuum.*`.
 
     The chamber vacuum describes the sample surroundings, so it lands under
-    NXsample as an NXenvironment group — the canonical placement the
+    NXsample as an NXenvironment group - the canonical placement the
     nexus-design-studio catalog assigns the class (BASE_CLASS_PATHS:
     NXenvironment -> /entry/sample/environment). `@units` come from
     METADATA_KEY_REGISTRY like every other namespaced writer. Since profile
     v0.6 the NXhzdr_target application definition covers this group (optional
-    NXenvironment under sample — see hzdr/docs/nexus-semantic-maps.md §3); the
+    NXenvironment under sample - see hzdr/docs/nexus-semantic-maps.md §3); the
     sample profile marker attrs are still stamped when absent so a vacuum-only
     file keeps /entry/sample certifiable.
     """
@@ -3252,8 +3273,8 @@ def _claim_damnit_group(parent: h5py.Group, name: str, damnit_source: str) -> bo
     """Delete a previously DAMNIT-written child so it can be rewritten.
 
     Returns False (claim refused) when the name is taken by anything that
-    does not carry the matching `damnit_source` marker — e.g. a preserved
-    LabFrog projection group — so preserved content is never overwritten.
+    does not carry the matching `damnit_source` marker - e.g. a preserved
+    LabFrog projection group - so preserved content is never overwritten.
     """
     existing = parent.get(name)
     if existing is None:
@@ -3376,7 +3397,7 @@ def write_sources_catalog(
         "combined_hdf5_path": str(nexus_path),
         "catalog_built_at": datetime.now(UTC).isoformat(),
     }
-    # SciCat registration (scicat_pid, dataset URL, version hash, …) is stamped
+    # SciCat registration (scicat_pid, dataset URL, version hash, ...) is stamped
     # here so it flows to the /scicat API endpoint and back-populates
     # payload_ref.scicat_pid via the NeXus bridge target reader.
     if scicat:
