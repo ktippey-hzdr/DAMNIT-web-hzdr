@@ -6,6 +6,25 @@ behaviour; the merge PR has the details.
 
 ## 2026-11-20
 
+### Context Builder: generated columns that cannot break a context file
+- A LabFrog variable named like a Python keyword, builtin or one of the
+  file's own names (`class`, `str`, `float`, `np`, `Skip`) produced a
+  function that did not compile, or one that replaced `float`/`np` for every
+  other column in the file. Such names now get a suffix (`class_column`),
+  in suggestions and in a new workspace's starter `context.py`.
+- A LabFrog name with a dot in it ("E. field") gave a column that was always
+  Missing, since `meta#` paths split on dots; it is now read by name.
+- Values "nan" and "inf" no longer count as numbers ("from nan to nan").
+- A suggestion is hidden only when the file reads its data, not when some
+  column merely shares its function name.
+- Switching campaigns drops the earlier campaign's late suggestions, so Add
+  cannot write them into the wrong file.
+- Dataset previews: an image side of 65-127 pixels is strided instead of
+  cut to its first 64 (the summary was a corner's); a lineout is read whole
+  only up to 8 MiB; text, compound and HDF5 array values get no summary; the
+  summary is `np.nanmean`'s, none when infinite; a lineout's missing values
+  leave gaps instead of drawing as zero. Previews already read are reused.
+
 ### Context Builder: previews show the real column, and follow the form
 - One preview for the builder and for each "Help me choose" suggestion (a
   **Preview** button on every card). *In the table* is the example shot's
@@ -35,19 +54,14 @@ behaviour; the merge PR has the details.
   reads its data.
 - API: `GET /contextfile/campaign/{campaign}/assist` (`contextfile/assist.py`).
   LabFrog values are ranked as the starter is (its picks marked "Top pick");
-  beyond them only registered metadata keys with their canonical unit (degC
-  shown as °C) and the trigger's ADC value are offered, never counters or
-  bookkeeping. Each suggestion's `@Variable` is self-contained, so it works
+  beyond them registered metadata keys whose values are varying numbers,
+  with their canonical unit (degC shown as °C), and the trigger's ADC value
+  are offered, never the record namespaces (acquisition, attribution,
+  instrument, producer, run) or counters. Each suggestion's `@Variable` is self-contained, so it works
   in any existing file. The example shot's HDF5 images, lineouts and scalars
   are suggested by the browser.
 - Screenshots: a seventh capture, `context-assist.png`; the capture can use
   an installed Chromium (`HZDR_CHROMIUM_EXECUTABLE`).
-
-### Context Builder: the empty preview names the right button
-- A column preview with no value yet told the user to "Click Preview
-  column", a button Context Builder no longer has. It now says "Click
-  Preview example data", the button's current label (as in the operations
-  guide).
 
 ## 2026-11-16
 

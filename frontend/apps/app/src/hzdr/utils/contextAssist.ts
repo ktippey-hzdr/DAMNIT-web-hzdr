@@ -99,14 +99,14 @@ export function datasetSuggestions(
 
 /**
  * True when the context file already reads this suggestion's data: its path
- * appears quoted in the file, or a column has its function name.
+ * (or, for a LabFrog name with a dot, the name) appears quoted in the file.
+ * A column that merely shares the function name reads other data, so it
+ * does not count; adding the suggestion renames its function instead.
  */
 export function isAlreadyInContext(
   suggestion: ColumnSuggestion,
-  contextContent: string,
-  existingNames: Set<string>
+  contextContent: string
 ) {
-  if (existingNames.has(suggestion.function)) return true
   return [`"${suggestion.path}"`, `'${suggestion.path}'`].some((quoted) =>
     contextContent.includes(quoted)
   )

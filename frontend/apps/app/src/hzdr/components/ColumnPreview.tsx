@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import {
   Group,
   Loader,
@@ -219,10 +220,13 @@ function DatasetPreview({
       {opensAs === 'line' && input.display !== 'hdf5' ? (
         <Section title="On double-click">
           <MetadataTrendPreview
-            values={(preview.preview as number[]).map((value, index) => ({
-              shotNumber: index,
-              value,
-            }))}
+            values={(preview.preview as Array<number | null>).flatMap(
+              // NaN and infinities arrive as null: leave a gap, not a zero.
+              (value, index) =>
+                typeof value === 'number' && Number.isFinite(value)
+                  ? [{ shotNumber: index, value }]
+                  : []
+            )}
             title={title}
             xLabel="sample"
           />
@@ -268,7 +272,35 @@ export function ColumnPreview({
     )
   }
 
-  const across = campaignValues(shots, input.field)
+  return (
+    <MetadataPreview
+      title={title}
+      input={input}
+      exampleShot={exampleShot}
+      shots={shots}
+      shotLabel={shotLabel}
+    />
+  )
+}
+
+function MetadataPreview({
+  title,
+  input,
+  exampleShot,
+  shots,
+  shotLabel,
+}: {
+  title: string
+  input: Extract<ColumnPreviewInput, { source: 'metadata' }>
+  exampleShot?: HZDRShot
+  shots: HZDRShot[]
+  shotLabel: string
+}) {
+  // Every shot is read once per campaign and field, not on each render.
+  const across = useMemo(
+    () => campaignValues(shots, input.field),
+    [shots, input.field]
+  )
   const type =
     input.type === 'auto' ? (across.numeric ? 'number' : 'text') : input.type
   const cell = cellValue(exampleShot, input.field, type)

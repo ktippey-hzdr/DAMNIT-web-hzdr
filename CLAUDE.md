@@ -199,8 +199,11 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
   `laser.pulse_energy`). HZDR additions: `suggested.py` (a new workspace's
   starter `context.py`) and `assist.py` (`GET .../campaign/{c}/assist`, Context
   Builder's "Help me choose": ranked suggestions with a reason and a
-  self-contained `@Variable` block each; LabFrog values, then only registered
-  metadata keys plus `trigger.adc_value`, never counters).
+  self-contained `@Variable` block each; LabFrog values, then registered
+  numeric metadata keys plus `trigger.adc_value`, never the record namespaces
+  or counters). Generated function names avoid keywords, builtins and the
+  file's globals (`suggested.RESERVED_NAMES`); a LabFrog name with a dot is
+  read by name (`suggested.labfrog_argument`).
 - API docs build with zensical (`api/zensical.toml`; `uv run --group docs zensical
   build` in `api/`). Upstream's character check (`scripts/check-characters`) runs in
   pre-commit and CI; fork-owned HZDR paths keep their typographic punctuation and

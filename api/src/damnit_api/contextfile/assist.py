@@ -30,12 +30,13 @@ from .suggested import (
     MAX_TEXT_VALUES,
     NUMERIC_SHARE,
     _collect,
+    _columns_from,
     _pretty,
     _python_name,
     _title,
     _unit,
     as_number,
-    suggested_columns,
+    labfrog_argument,
 )
 
 if TYPE_CHECKING:
@@ -47,6 +48,15 @@ if TYPE_CHECKING:
 MAX_SUGGESTIONS = 24
 #: Registered keys the shot table already shows as fixed columns.
 EXCLUDED_METADATA = frozenset({"laser.pulse_energy", "target.thickness"})
+#: Registered namespaces that describe a record (audit, attribution, who sent
+#: it), not the shot: never a column suggestion, numbers or not.
+EXCLUDED_NAMESPACES = frozenset({
+    "acquisition",
+    "attribution",
+    "instrument",
+    "producer",
+    "run",
+})
 #: Unregistered numbers that are measurements, with where their unit is.
 EXTRA_METADATA_UNITS = {"trigger.adc_value": "trigger.adc_unit"}
 
@@ -74,47 +84,55 @@ def _safe_docstring(text: str) -> str:
     return " ".join(text.replace("\\", "/").replace('"', "'").split())
 
 
-def _number_block(title: str, function: str, path: str, docstring: str) -> str:
-    docstring = _safe_docstring(docstring)
+def _block(
+    title: str,
+    function: str,
+    argument: tuple[str, str],
+    docstring: str,
+    body: list[str],
+) -> str:
+    parameter, expression = argument
     return "\n".join([
         _IMPORTS,
         "",
         "",
         f"@Variable(title={title!r})",
-        f"def {function}(run, value: {path!r} = None):",
-        f'    """{docstring}"""',
+        f"def {function}(run, {parameter}):",
+        f'    """{_safe_docstring(docstring)}"""',
+        *([] if expression == "value" else [f"    value = {expression}"]),
         '    if value in (None, ""):',
         '        raise Skip("No value recorded for this shot")',
-        "    try:",
-        '        return float(str(value).strip().replace(",", "."))',
-        "    except ValueError:",
-        '        raise Skip(f"Not a number: {value!r}") from None',
+        *body,
         "",
     ])
 
 
-def _text_block(title: str, function: str, path: str, docstring: str) -> str:
-    docstring = _safe_docstring(docstring)
-    return "\n".join([
-        _IMPORTS,
-        "",
-        "",
-        f"@Variable(title={title!r})",
-        f"def {function}(run, value: {path!r} = None):",
-        f'    """{docstring}"""',
-        '    if value in (None, ""):',
-        '        raise Skip("No value recorded for this shot")',
-        "    return str(value)",
-        "",
-    ])
+def _number_block(
+    title: str, function: str, argument: tuple[str, str], docstring: str
+) -> str:
+    return _block(
+        title,
+        function,
+        argument,
+        docstring,
+        [
+            "    try:",
+            '        return float(str(value).strip().replace(",", "."))',
+            "    except ValueError:",
+            '        raise Skip(f"Not a number: {value!r}") from None',
+        ],
+    )
+
+
+def _text_block(
+    title: str, function: str, argument: tuple[str, str], docstring: str
+) -> str:
+    return _block(title, function, argument, docstring, ["    return str(value)"])
 
 
 def _numbers_reason(values: Counter, count: int, total: int, unit: str) -> str:
-    numbers = [
-        number
-        for value in values.elements()
-        if (number := as_number(value)) is not None
-    ]
+    # Distinct values are enough for a range: no need to parse repeats.
+    numbers = [number for value in values if (number := as_number(value)) is not None]
     spread = (
         f"from {_format(min(numbers))} to {_format(max(numbers))}"
         f"{f' {unit}' if unit else ''}"
@@ -160,7 +178,8 @@ def _labfrog_suggestions(
     shots: list[HZDRShot], taken: set[str]
 ) -> list[dict[str, Any]]:
     seen, total = _collect(shots)
-    starter = {column["name"] for column in suggested_columns(shots)}
+    # The starter's picks, from the same single pass over the shots.
+    starter = {column["name"] for column in _columns_from(seen, total)}
     minimum = max(3, round(total * 0.1))
     ranked = []
     for name, record in seen.items():
@@ -192,12 +211,14 @@ def _labfrog_suggestions(
     for *_, name, record, unit, kind in sorted(ranked):
         title = _title(name, unit)
         function = _python_name(name, taken)
-        path = f"meta#labfrog_variables.{name}.value"
+        argument = labfrog_argument(name)
+        # What the browser looks for, quoted, to tell the column is there.
+        path = name if "." in name else f"meta#labfrog_variables.{name}.value"
         docstring = f"LabFrog: {name}, as typed on the Shotsheet."
         block = (
-            _number_block(title, function, path, docstring)
+            _number_block(title, function, argument, docstring)
             if kind == "number"
-            else _text_block(title, function, path, docstring)
+            else _text_block(title, function, argument, docstring)
         )
         suggestions.append({
             "id": f"labfrog:{name}",
@@ -229,10 +250,13 @@ def _metadata_suggestions(
 ) -> list[dict[str, Any]]:
     total = len(shots)
     minimum = max(3, round(total * 0.1))
+    # Every registered key of a shot namespace; string keys drop out below,
+    # since their values do not parse as numbers.
     keys = {
-        key: unit
+        key: unit or ""
         for key, unit in METADATA_KEY_REGISTRY.items()
-        if unit is not None and key not in EXCLUDED_METADATA
+        if key not in EXCLUDED_METADATA
+        and key.split(".", 1)[0] not in EXCLUDED_NAMESPACES
     }
     keys.update(dict.fromkeys(EXTRA_METADATA_UNITS, ""))
     suggestions = []
@@ -259,7 +283,10 @@ def _metadata_suggestions(
         function = _python_name(key, taken)
         path = f"meta#{key}"
         block = _number_block(
-            title, function, path, f"Shot metadata: {key} (registered key)."
+            title,
+            function,
+            (f"value: {path!r} = None", "value"),
+            f"Shot metadata: {key} (registered key).",
         )
         suggestions.append({
             "id": f"metadata:{key}",

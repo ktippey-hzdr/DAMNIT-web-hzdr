@@ -2,6 +2,7 @@
 
 import json
 from types import SimpleNamespace
+from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
@@ -10,10 +11,15 @@ from damnit_api.contextfile.assist import column_suggestions
 from damnit_api.contextfile.suggested import suggested_columns
 from damnit_api.main import create_app
 from damnit_api.shared.settings import AuthSettings, settings
-from tests.test_hzdr_context_suggested import _shots
+from tests.test_hzdr_context_suggested import _shots as _namespace_shots
 
 
-def _with_metadata(shots):
+def _shots() -> list[Any]:
+    """Shots as the catalog would hold them (duck-typed stand-ins)."""
+    return list(_namespace_shots())
+
+
+def _with_metadata(shots: list[Any]) -> list[Any]:
     for index, shot in enumerate(shots):
         shot.metadata.update({
             "laser": {"pulse_duration": 30 + index, "pulse_energy": index},
@@ -83,13 +89,15 @@ def test_every_block_runs_on_its_own(tmp_path):
         value = routers._call_context_variable(function, shots[3])
         assert value is not None, suggestion["id"]
         with pytest.raises(routers.ContextSkip):
-            routers._call_context_variable(
-                function, SimpleNamespace(shot_number=99, metadata={})
-            )
+            routers._call_context_variable(function, _missing_shot())
+
+
+def _missing_shot() -> Any:
+    return SimpleNamespace(shot_number=99, metadata={})
 
 
 def test_a_name_with_quotes_still_compiles():
-    shots = [
+    shots: list[Any] = [
         SimpleNamespace(
             shot_number=index,
             metadata={
@@ -149,3 +157,109 @@ def test_endpoint_lists_the_suggestions(tmp_path, monkeypatch):
     assert "labfrog:ICT integrated charge" in ids
     assert "metadata:laser.pulse_duration" in ids
     assert unknown.json()["suggestions"] == []
+
+
+#: LabFrog names a campaign really could hold, each one a past way to break a
+#: generated file: keywords, builtins, the file's own globals, a dot (``meta#``
+#: paths split on dots), quotes and a backslash.
+AWKWARD_NAMES = (
+    "class",
+    "lambda",
+    "str",
+    "float",
+    "np",
+    "Skip",
+    "E. field",
+    'it\'s "quoted"\\',
+    "ä energy",
+)
+
+
+def _awkward_shots(count: int = 6) -> list[Any]:
+    return [
+        SimpleNamespace(
+            shot_number=index + 1,
+            metadata={
+                "labfrog_variables": {
+                    name: {"value": f"{index},5", "unit": "V"} for name in AWKWARD_NAMES
+                },
+                "laser": {"contrast_ratio": 1e9 * (index + 1)},
+                "attribution": {"delta_s": 0.1 * index},
+                "acquisition": {"laserdata_counter": 100 + index},
+                "diagnostic": {"xray_counts": "nan" if index == 0 else index},
+            },
+        )
+        for index in range(count)
+    ]
+
+
+def test_every_suggestion_together_still_runs(tmp_path):
+    """All suggestions in one file: none breaks the file or another column."""
+    from damnit_api.contextfile import routers
+
+    shots = _awkward_shots()
+    suggestions = column_suggestions(shots)
+    labfrog = [s for s in suggestions if s["origin"] == "labfrog"]
+    assert len(labfrog) == len(AWKWARD_NAMES)
+    functions = [s["function"] for s in suggestions]
+    assert len(set(functions)) == len(functions)
+    assert {"class_column", "lambda_column", "str_column", "float_column"} <= set(
+        functions
+    )
+    assert "np_column" in functions
+    assert "skip_column" in functions
+
+    bodies = []
+    for suggestion in suggestions:
+        imports, _, body = suggestion["block"].partition("\n\n\n")
+        assert imports == "from damnit_ctx import Skip, Variable"
+        bodies.append(body)
+    path = tmp_path / "context.py"
+    path.write_text(
+        "import numpy as np\nfrom damnit_ctx import Skip, Variable\n\n\n"
+        + "\n\n".join(bodies),
+        encoding="utf-8",
+    )
+    variables = routers._load_context_variables(path, shots)
+    assert len(variables) == len(suggestions)
+    functions_by_title: dict[str, Any] = {}
+    for function in variables.values():
+        annotated: Any = function
+        functions_by_title[annotated._damnit_title] = function
+    by_title = functions_by_title
+    for suggestion in labfrog:
+        value = routers._call_context_variable(by_title[suggestion["title"]], shots[2])
+        assert value == pytest.approx(2.5), suggestion["id"]
+
+
+def test_a_dotted_name_is_read_by_name_not_by_path():
+    shots = _awkward_shots()
+    (dotted,) = [s for s in column_suggestions(shots) if s["id"] == "labfrog:E. field"]
+    assert "meta#labfrog_variables'" in dotted["block"]
+    assert "'E. field'" in dotted["block"]
+    # the browser finds it in a file by its quoted name
+    assert dotted["path"] == "E. field"
+
+
+def test_metadata_by_namespace_not_by_unit():
+    by_id = {s["id"]: s for s in column_suggestions(_awkward_shots())}
+    # dimensionless, but a number that varies: offered
+    assert "metadata:laser.contrast_ratio" in by_id
+    # audit and provenance namespaces: never, though numeric and varying
+    assert "metadata:attribution.delta_s" not in by_id
+    assert "metadata:acquisition.laserdata_counter" not in by_id
+    # "nan" is not a number to show
+    assert "nan" not in by_id["metadata:diagnostic.xray_counts"]["reason"]
+
+
+def test_the_starter_file_runs_with_awkward_names(tmp_path):
+    from damnit_api.contextfile import routers
+    from damnit_api.contextfile.suggested import suggested_context
+
+    shots = _awkward_shots()
+    path = tmp_path / "context.py"
+    path.write_text(suggested_context("Odd", shots), encoding="utf-8")
+    variables = routers._load_context_variables(path, shots)
+    assert variables
+    for function in variables.values():
+        assert routers._call_context_variable(function, shots[2]) == pytest.approx(2.5)

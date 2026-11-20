@@ -185,6 +185,7 @@ function SuggestionCard({
             variant="subtle"
             color="gray"
             onClick={() => setShowCode((shown) => !shown)}
+            aria-expanded={showCode}
           >
             {showCode ? 'Hide code' : 'Show code'}
           </Button>

@@ -236,25 +236,41 @@ export function ContextBuilderPage() {
         )
       })
       .catch(() => setContextFiles([]))
+  }, [source_key])
+
+  // Suggestions for this campaign only: a late answer for the campaign the
+  // page showed before is dropped, so Add never writes its blocks here.
+  useEffect(() => {
+    if (!source_key) {
+      return
+    }
+    let active = true
     setIgnoredSuggestionIds(loadIgnoredSuggestions(source_key))
+    setServerSuggestions([])
     setSuggestionsLoading(true)
     setSuggestionsError('')
     fetch(`/contextfile/campaign/${source_key}/assist`)
       .then((response) =>
         requireJson<{ suggestions?: ColumnSuggestion[] }>(response)
       )
-      .then((loaded) =>
+      .then((loaded) => {
+        if (!active) return
         setServerSuggestions(
           Array.isArray(loaded.suggestions) ? loaded.suggestions : []
         )
-      )
+      })
       .catch(() => {
-        setServerSuggestions([])
+        if (!active) return
         setSuggestionsError(
           'Could not load suggestions for this campaign. You can still build columns yourself.'
         )
       })
-      .finally(() => setSuggestionsLoading(false))
+      .finally(() => {
+        if (active) setSuggestionsLoading(false)
+      })
+    return () => {
+      active = false
+    }
   }, [source_key])
 
   // Select a row rather than a shot number: numbers may repeat across days,
@@ -380,24 +396,32 @@ export function ContextBuilderPage() {
       ),
     [exampleShotLabel, shotDetail?.hdf5_datasets]
   )
-  const existingColumnNames = new Set(
-    contextVariables.map((block) => block.name)
-  )
-  const allSuggestions = [...serverSuggestions, ...shotDatasetSuggestions]
-  const suggestionsInContext = allSuggestions.filter((suggestion) =>
-    isAlreadyInContext(suggestion, contextContent, existingColumnNames)
-  )
-  const ignoredSuggestions = new Set(ignoredSuggestionIds)
-  const openSuggestions = allSuggestions.filter(
-    (suggestion) =>
-      !ignoredSuggestions.has(suggestion.id) &&
-      !suggestionsInContext.includes(suggestion)
-  )
-  const ignoredOpenCount = allSuggestions.filter(
-    (suggestion) =>
-      ignoredSuggestions.has(suggestion.id) &&
-      !suggestionsInContext.includes(suggestion)
-  ).length
+  // Sorted once per change of the file, the list or what is ignored (not on
+  // every render, e.g. each keystroke elsewhere on the page).
+  const { openSuggestions, inContextCount, ignoredOpenCount } = useMemo(() => {
+    const ignored = new Set(ignoredSuggestionIds)
+    const open: ColumnSuggestion[] = []
+    let inContext = 0
+    let ignoredOpen = 0
+    for (const suggestion of [
+      ...serverSuggestions,
+      ...shotDatasetSuggestions,
+    ]) {
+      if (isAlreadyInContext(suggestion, contextContent)) inContext += 1
+      else if (ignored.has(suggestion.id)) ignoredOpen += 1
+      else open.push(suggestion)
+    }
+    return {
+      openSuggestions: open,
+      inContextCount: inContext,
+      ignoredOpenCount: ignoredOpen,
+    }
+  }, [
+    contextContent,
+    ignoredSuggestionIds,
+    serverSuggestions,
+    shotDatasetSuggestions,
+  ])
   const showMongoFields = fieldKind === 'mongo-filter'
   const showFunctionFields = fieldKind === 'function'
   const actionCanUseMultipleInputs = fieldKind === 'function'
@@ -987,7 +1011,7 @@ export function ContextBuilderPage() {
                         destination={selectedContextFile}
                         busy={saving || !contextFile}
                         ignoredCount={ignoredOpenCount}
-                        addedCount={suggestionsInContext.length}
+                        addedCount={inContextCount}
                         onAdd={addSuggestion}
                         onIgnore={ignoreSuggestion}
                         onCustomise={customiseSuggestion}

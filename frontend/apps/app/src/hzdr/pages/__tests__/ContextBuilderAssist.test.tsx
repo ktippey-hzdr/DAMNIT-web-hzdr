@@ -12,6 +12,7 @@ import { MantineProvider } from '@mantine/core'
 import { MemoryRouter, Route, Routes } from 'react-router'
 
 import { ContextBuilderPage } from '../ContextBuilderPage'
+import { clearDatasetPreviewCache } from '../../utils/columnPreview'
 
 vi.mock('@damnit-frontend/ui', () => ({
   HomePage: ({ main }: { main: ReactNode }) => main,
@@ -180,6 +181,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  clearDatasetPreviewCache()
   vi.unstubAllGlobals()
   window.localStorage.clear()
   Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')

@@ -218,9 +218,18 @@ export function CanvasImage({
       context = null
     }
     if (!canvas || !context || !width || !height) return
-    const finite = values.flat().filter(Number.isFinite)
-    const minimum = Math.min(...finite)
-    const range = Math.max(...finite) - minimum || 1
+    // A loop, not Math.min(...values): spreading a large image overflows
+    // the call stack.
+    let minimum = Infinity
+    let maximum = -Infinity
+    for (const row of values) {
+      for (const value of row) {
+        if (!Number.isFinite(value)) continue
+        if (value < minimum) minimum = value
+        if (value > maximum) maximum = value
+      }
+    }
+    const range = maximum - minimum || 1
     const image = context.createImageData(width, height)
     values.forEach((row, y) =>
       row.forEach((value, x) => {

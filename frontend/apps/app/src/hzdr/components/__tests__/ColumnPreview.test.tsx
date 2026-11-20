@@ -194,6 +194,26 @@ describe('ColumnPreview', () => {
     expect(screen.getByText(/estimated from the preview/)).toBeInTheDocument()
   })
 
+  it('leaves gaps in a lineout where values are not numbers', () => {
+    renderPreview({
+      source: 'hdf5',
+      display: 'lineout-preview',
+      loading: false,
+      preview: {
+        name: 'spec/line',
+        dtype: 'float64',
+        shape: [3],
+        // NaN and infinities arrive from JSON as null
+        preview: [1, null, 3] as unknown as number[],
+        preview_kind: 'line',
+        summary: null,
+        summary_exact: true,
+      },
+    })
+    expect(screen.getByText('Trend: Charge (2 points)')).toBeInTheDocument()
+    expect(screen.getByText('Not a number')).toBeInTheDocument()
+  })
+
   it('says why a computed column has no preview', () => {
     renderPreview({ source: 'computed', note: 'Computed at load.' })
     expect(screen.getByText('Computed at load.')).toBeInTheDocument()

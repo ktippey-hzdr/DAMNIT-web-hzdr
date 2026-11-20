@@ -50,14 +50,22 @@ Context builder opens on **Help me choose**: ranked suggestions for the
 campaign (`GET /contextfile/campaign/{campaign}/assist`), each with why it was
 picked, a few example values and what the column will do. LabFrog values that
 vary come first (the starter's picks marked **Top pick**), then registered
-metadata keys with their canonical unit (and the trigger's ADC value), then
-the example shot's HDF5 images, lineouts and scalars. **Add this column**
+metadata keys whose values are numbers that vary, with their canonical unit
+(and the trigger's ADC value; never the record namespaces `acquisition`,
+`attribution`, `instrument`, `producer` and `run`, so no counter), then the
+example shot's HDF5 images, lineouts and scalars. A column's function name
+never takes a Python keyword or builtin, or a name the file uses (`np`,
+`Skip`, ...): `class` becomes `class_column`. A LabFrog name with a dot in it
+is read by name from `meta#labfrog_variables`, since `meta#` paths split on
+dots. **Add this column**
 appends that suggestion's `@Variable` to the destination file and saves it;
 **Ignore this suggestion** hides it in this browser only (localStorage, per
 campaign; **Show ignored suggestions again** brings them back); **Customise**
 opens it in the builder. A suggestion drops off once the file reads its data
-path or has its function name; a column reading the same data through a
-helper is not recognised, so that suggestion stays until it is ignored.
+path (quoted); a column that only shares its function name reads other data,
+so the suggestion stays and is renamed when added. A column reading the same
+data through a helper is not recognised either, so that suggestion stays
+until it is ignored.
 
 In **Build a column myself**, choose a field from **LabFrog fields**, **Shot metadata**
 or an HDF5 dataset group. Field counts show availability across the campaign;

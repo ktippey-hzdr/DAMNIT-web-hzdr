@@ -73,23 +73,24 @@ describe('datasetSuggestions', () => {
 })
 
 describe('isAlreadyInContext', () => {
-  it('matches the quoted path or an existing function name', () => {
+  it('matches the data the file reads, not a shared function name', () => {
     const entry = suggestion()
-    expect(isAlreadyInContext(entry, '', new Set())).toBe(false)
+    expect(isAlreadyInContext(entry, '')).toBe(false)
     expect(
       isAlreadyInContext(
         entry,
-        "def x(run, value: 'meta#labfrog_variables.ICT charge.value' = None):",
-        new Set()
+        "def x(run, value: 'meta#labfrog_variables.ICT charge.value' = None):"
       )
     ).toBe(true)
-    expect(isAlreadyInContext(entry, '', new Set(['ict_charge']))).toBe(true)
+    // a column that only shares the name reads other data
+    expect(
+      isAlreadyInContext(entry, 'def ict_charge(run, value: "meta#other"):')
+    ).toBe(false)
     // a longer path that only starts with this one is a different field
     expect(
       isAlreadyInContext(
         entry,
-        '"meta#labfrog_variables.ICT charge.value.extra"',
-        new Set()
+        '"meta#labfrog_variables.ICT charge.value.extra"'
       )
     ).toBe(false)
   })

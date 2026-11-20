@@ -98,6 +98,27 @@ export function isDatasetPreview(value: unknown): value is HZDRDatasetPreview {
  * The example shot's preview of one HDF5 dataset, fetched whenever the shot
  * or the dataset changes (nothing is fetched while `datasetName` is empty).
  */
+/** Previews already read, newest last: reopening a card or switching mode
+ * shows them at once instead of reading the dataset again. Only successful
+ * reads are kept, and only the most recent few. */
+const PREVIEW_CACHE_SIZE = 32
+const previewCache = new Map<string, HZDRDatasetPreview>()
+
+function rememberPreview(url: string, preview: HZDRDatasetPreview) {
+  previewCache.delete(url)
+  previewCache.set(url, preview)
+  while (previewCache.size > PREVIEW_CACHE_SIZE) {
+    const oldest = previewCache.keys().next().value
+    if (oldest === undefined) break
+    previewCache.delete(oldest)
+  }
+}
+
+/** For tests: start from an empty cache. */
+export function clearDatasetPreviewCache() {
+  previewCache.clear()
+}
+
 export function useDatasetPreview(
   sourceKey: string | undefined,
   shot: HZDRShot | undefined,
@@ -113,8 +134,10 @@ export function useDatasetPreview(
     error?: string
   }>({})
 
+  const cached = url ? previewCache.get(url) : undefined
+
   useEffect(() => {
-    if (!url) return
+    if (!url || previewCache.has(url)) return
     let active = true
     fetch(url)
       .then((response) => {
@@ -123,6 +146,7 @@ export function useDatasetPreview(
       })
       .then((preview) => {
         if (!isDatasetPreview(preview)) throw new Error('Not a preview')
+        rememberPreview(url, preview)
         if (active) setState({ url, preview })
       })
       .catch(() => {
@@ -137,7 +161,11 @@ export function useDatasetPreview(
     }
   }, [url])
 
-  const current = state.url === url ? state : {}
+  const current = cached
+    ? { preview: cached, error: undefined }
+    : state.url === url
+      ? state
+      : {}
   return {
     preview: current.preview,
     error: current.error,
