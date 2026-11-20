@@ -6,6 +6,27 @@ behaviour; the merge PR has the details.
 
 ## 2026-11-20
 
+### Context Builder: "Help me choose" suggests columns to add or ignore
+- Context Builder now opens on **Help me choose**: a ranked list of columns
+  worth adding, each saying why it was picked (how many shots record it, the
+  range or labels it holds, example values) and what the column will do
+  (number, label, image or lineout preview). **Add this column** appends it
+  to the context file and saves; **Ignore this suggestion** hides it in this
+  browser (per campaign; it can be shown again); **Customise** opens it in
+  the builder. The old form is **Build a column myself**; its preview and
+  generated-code panels show only there. Six suggestions show first, the
+  rest behind **Show more**; a suggestion leaves the list once the file
+  reads its data.
+- API: `GET /contextfile/campaign/{campaign}/assist` (`contextfile/assist.py`).
+  LabFrog values are ranked as the starter is (its picks marked "Top pick");
+  beyond them only registered metadata keys with their canonical unit (degC
+  shown as °C) and the trigger's ADC value are offered, never counters or
+  bookkeeping. Each suggestion's `@Variable` is self-contained, so it works
+  in any existing file. The example shot's HDF5 images, lineouts and scalars
+  are suggested by the browser.
+- Screenshots: a seventh capture, `context-assist.png`; the capture can use
+  an installed Chromium (`HZDR_CHROMIUM_EXECUTABLE`).
+
 ### Context Builder: the empty preview names the right button
 - A column preview with no value yet told the user to "Click Preview
   column", a button Context Builder no longer has. It now says "Click

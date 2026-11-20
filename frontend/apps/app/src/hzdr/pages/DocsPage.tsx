@@ -147,6 +147,18 @@ def laser_energy_mj(run, laser_energy_j=None):
     return laser_energy_j * 1000`}
                   </Code>
                   <Text size="sm">
+                    <b>Help me choose</b> (where Context opens) lists what is
+                    worth a column: values this campaign&apos;s shots record
+                    that change from shot to shot, and the example shot&apos;s
+                    HDF5 images, lineouts and numbers. Each suggestion says why
+                    it was picked (how many shots record it, the range it spans)
+                    and what the column will do. Press <b>Add this column</b> to
+                    save it to your context file straight away,{' '}
+                    <b>Ignore this suggestion</b> to hide it in this browser, or{' '}
+                    <b>Customise</b> to open it in the builder first.{' '}
+                    <b>Build a column myself</b> is the full builder.
+                  </Text>
+                  <Text size="sm">
                     <b>To start with</b>, your first context file for a campaign
                     has a few suggested columns: values the campaign&apos;s
                     LabFrog records hold that change from shot to shot (numbers

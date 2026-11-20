@@ -182,6 +182,11 @@ Select any table cell to inspect it in the right panel.
 
 Open a source, then choose **Context builder** from the table toolbar.
 
+It opens on **Help me choose**: suggested columns from what the campaign's
+shots record (`GET /contextfile/campaign/{campaign}/assist`), each with the
+reason it was picked and what the column will do, to add, ignore or customise
+one at a time. **Build a column myself** is the builder below.
+
 The builder writes editable context files under the configured API-side context
 workspace:
 

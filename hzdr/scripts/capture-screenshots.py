@@ -1,8 +1,11 @@
-"""Capture the six HZDR frontend documentation views from a local fixture stack.
+"""Capture the seven HZDR frontend documentation views from a local fixture stack.
 
 Run from the repository root:
 
     uv run python hzdr/scripts/capture-screenshots.py
+
+Set HZDR_CHROMIUM_EXECUTABLE to a Chromium binary to launch that instead of
+Playwright's own download (for a machine with a browser already installed).
 
 The command builds two disposable campaigns in a temporary directory -
 normalized `hzdr-event-v1` packages for a multi-day run and a shorter one, a
@@ -670,13 +673,27 @@ def _open_details_section(page: Page, title: str) -> None:
         summary.click()
 
 
+def _prepare_context_assist(page: Page) -> None:
+    """Show the builder's default "Help me choose" view with its suggestions.
+
+    Waits for the campaign's suggestion cards and for the "Show more" button
+    that appears once the example shot's dataset suggestions have joined them
+    (the capture campaign has more than the first six).
+    """
+    _open_details_section(page, "Target and example shot")
+    page.get_by_text("Suggested columns").first.wait_for()
+    page.get_by_role("article").first.wait_for()
+    page.get_by_role("button", name="more suggestions").wait_for()
+
+
 def _prepare_context_builder(page: Page) -> None:
     """Build one image column so the page shows a real recipe, not empty slots.
 
-    Picks the per-shot camera frame, chooses the image-preview action, and
-    renders the preview, with the target/example-shot and generated-Python
-    panels unfolded around it.
+    Switches to "Build a column myself", picks the per-shot camera frame,
+    chooses the image-preview action, and renders the preview, with the
+    target/example-shot and generated-Python panels unfolded around it.
     """
+    page.get_by_text("Build a column myself").click()
     _open_details_section(page, "Target and example shot")
     data_picker = page.get_by_role("textbox", name="Data to use")
     data_picker.click()
@@ -743,6 +760,13 @@ SHOTS = (
         "selector",
         "table",
         _select_camera_image_cell,
+    ),
+    Shot(
+        "context-assist.png",
+        f"/source/{PRIMARY.source_key}/context-builder",
+        "heading",
+        "Context builder",
+        _prepare_context_assist,
     ),
     Shot(
         "context-builder.png",
@@ -908,7 +932,12 @@ def capture() -> None:
 
             with sync_playwright() as playwright:
                 try:
-                    browser = playwright.chromium.launch(headless=True)
+                    # HZDR_CHROMIUM_EXECUTABLE: a Chromium to use instead of
+                    # Playwright's own download (a preinstalled browser).
+                    executable = os.environ.get("HZDR_CHROMIUM_EXECUTABLE")
+                    browser = playwright.chromium.launch(
+                        headless=True, executable_path=executable or None
+                    )
                 except PlaywrightError as exc:
                     raise SystemExit(
                         "Playwright Chromium is not installed. Run "

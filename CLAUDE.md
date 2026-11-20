@@ -37,12 +37,13 @@ pnpm run dev:app          # Vite dev server at http://localhost:5173
 # point it at the API via apps/app/.env or root .env:  VITE_API=http://127.0.0.1:8000
 ```
 
-**Refresh all six HZDR documentation screenshots:**
+**Refresh all seven HZDR documentation screenshots:**
 ```
 uv run playwright install chromium  # one-time
 uv run python hzdr/scripts/capture-screenshots.py
 ```
-The capture uses only a disposable local package-emulator stack.
+The capture uses only a disposable local package-emulator stack
+(`HZDR_CHROMIUM_EXECUTABLE` launches an already-installed Chromium instead).
 
 **Whole stack (API + frontend + local broker):**
 ```
@@ -195,7 +196,11 @@ python api/scripts/regen_hzdr_event_fixtures.py    # regenerate the canonical hz
   `DW_API_METADATA__PROVIDER=mymdc`), `contextfile/` - the original DAMNIT-web
   machinery. Context-file arguments read flat metadata keys, then a `meta#a.b` path or
   the registry key a legacy name maps to (`laser_energy_j` ->
-  `laser.pulse_energy`).
+  `laser.pulse_energy`). HZDR additions: `suggested.py` (a new workspace's
+  starter `context.py`) and `assist.py` (`GET .../campaign/{c}/assist`, Context
+  Builder's "Help me choose": ranked suggestions with a reason and a
+  self-contained `@Variable` block each; LabFrog values, then only registered
+  metadata keys plus `trigger.adc_value`, never counters).
 - API docs build with zensical (`api/zensical.toml`; `uv run --group docs zensical
   build` in `api/`). Upstream's character check (`scripts/check-characters`) runs in
   pre-commit and CI; fork-owned HZDR paths keep their typographic punctuation and
@@ -212,6 +217,10 @@ workspace. HZDR-specific UI code lives under `apps/app/src/hzdr/`:
   `preview`, `context`
 - `types.ts`, `hooks.ts`, `index.ts`
 
+`ContextBuilderPage` opens on "Help me choose" (`components/ContextAssistant`,
+`utils/contextAssist`: the API's suggestions plus the example shot's HDF5
+datasets; Add appends and saves, Ignore is per browser in localStorage,
+Customise fills the builder form) beside "Build a column myself".
 `ShotPage.tsx` fetches shot detail via the `by-key/{shot_key}` route when a
 `shot_key` is present (falling back to `{shot_number}`).
 The `ReviewMatchesPage` (`/review-matches`; the old `/link-shot-records` path

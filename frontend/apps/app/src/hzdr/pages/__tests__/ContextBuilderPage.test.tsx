@@ -114,6 +114,8 @@ describe('ContextBuilderPage example shots', () => {
             : `${base}/shots/${shotNumber}`
         )
       )
+      // The builder opens on "Help me choose"; the form is the other mode.
+      await user.click(screen.getByText('Build a column myself'))
       const data = screen.getByRole('textbox', { name: 'Data to use' })
       await user.click(data)
       expect(

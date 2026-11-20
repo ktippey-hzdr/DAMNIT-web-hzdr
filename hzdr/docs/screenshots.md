@@ -1,6 +1,6 @@
 # Screenshots
 
-All six images are generated from a disposable local fixture stack at a
+All seven images are generated from a disposable local fixture stack at a
 1920×1080 viewport:
 
 Install frontend dependencies first with `pnpm --dir frontend install --frozen-lockfile`
@@ -19,6 +19,8 @@ The command creates the fixture campaigns, runs the real package emulator,
 FastAPI service, and Vite frontend on ephemeral localhost ports, drives every
 page below, writes `screenshots/capture-receipt.json`, and stops the processes.
 It requires no broker, MongoDB, credentials, or production service.
+To use a Chromium that is already installed instead of Playwright's download,
+set `HZDR_CHROMIUM_EXECUTABLE` to its binary.
 Server output and browser errors are printed to the terminal for troubleshooting.
 
 ## What the fixture stack contains
@@ -60,9 +62,20 @@ so the panel shows the full preview and that column's trend across the run.
 
 ![Shot table](screenshots/shot-table.png)
 
-## Context builder
+## Context builder: Help me choose
 
-`/source/{source_key}/context-builder`: building one context column from a
+`/source/{source_key}/context-builder` as it opens: the campaign's suggested
+columns, each with why it was picked (how many shots record it, the range it
+spans, example values) and what the column will do, and **Add this column**,
+**Ignore this suggestion** and **Customise**. The first six show; the rest
+are behind **Show more**, which in this capture holds the example shot's HDF5
+image, lineout and scalar suggestions.
+
+![Context builder, Help me choose](screenshots/context-assist.png)
+
+## Context builder: Build a column myself
+
+`/source/{source_key}/context-builder`, the other mode: building one context column from a
 per-shot HDF5 dataset — pick the data, pick what the column should do, and see
 the rendered cell, the exact values behind it, and the Python that will be
 appended to `context.py`.
