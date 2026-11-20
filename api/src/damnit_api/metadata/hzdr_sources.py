@@ -258,6 +258,29 @@ class HZDRDatasetPreview(BaseModel):
     shape: list[int]
     preview: list | float | int | None = None
     preview_kind: str
+    #: What a summarizing context column shows in the table: the value of a
+    #: scalar, the mean of a lineout or image (``None`` when not numeric).
+    summary: float | None = None
+    #: False when ``summary`` comes from the strided preview, not every value.
+    summary_exact: bool = True
+
+
+#: Lineout points a preview sends; longer lineouts are thinned evenly.
+PREVIEW_LINE_POINTS = 512
+#: Up to this many samples a lineout is read whole, so its mean is exact.
+PREVIEW_LINE_READ_WHOLE = 1_000_000
+
+
+def _finite_mean(values) -> float | None:
+    import numpy as np
+
+    try:
+        data = np.asarray(values, dtype=float)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(data).any():
+        return None
+    return float(np.nanmean(np.where(np.isfinite(data), data, np.nan)))
 
 
 class HZDRSourceProvider:
@@ -522,12 +545,24 @@ def preview_hdf5_dataset(path: Path, dataset_name: str) -> HZDRDatasetPreview:
         # Read only what the preview shows: through a container link a
         # name can reach a camera stack of gigabytes, so the leading axes are
         # indexed to their first frame and the frame is read strided.
+        summary_exact = True
         if len(shape) == 0 or (len(shape) == 1 and shape[0] == 1):
             data = np.asarray(dataset[()])  # pyright: ignore[reportIndexIssue]
             preview = data.reshape(-1)[0].item()
             preview_kind = "scalar"
+            summary = _finite_mean(preview)
         elif len(shape) == 1:
-            data = np.asarray(dataset[: min(shape[0], 200)])  # pyright: ignore[reportIndexIssue]
+            # The whole length, thinned evenly: the first N samples alone
+            # misdraw any lineout longer than the preview.
+            stride = max(1, -(-shape[0] // PREVIEW_LINE_POINTS))
+            if shape[0] <= PREVIEW_LINE_READ_WHOLE:
+                whole = np.asarray(dataset[()])  # pyright: ignore[reportIndexIssue]
+                summary = _finite_mean(whole)
+                data = whole[::stride]
+            else:
+                data = np.asarray(dataset[::stride])  # pyright: ignore[reportIndexIssue]
+                summary = _finite_mean(data)
+                summary_exact = False
             preview = data.astype(float).tolist()
             preview_kind = "line"
         else:
@@ -537,6 +572,9 @@ def preview_hdf5_dataset(path: Path, dataset_name: str) -> HZDRDatasetPreview:
             window = (*lead, slice(None, None, y_stride), slice(None, None, x_stride))
             image = np.asarray(dataset[window]).astype(float)  # pyright: ignore[reportIndexIssue]
             image = image[:64, :64]
+            # From the strided frame: an estimate of what the column shows.
+            summary = _finite_mean(image)
+            summary_exact = image.size == int(np.prod(shape[-2:])) and not lead
             minimum = float(np.nanmin(image))
             maximum = float(np.nanmax(image))
             if maximum > minimum:
@@ -550,6 +588,8 @@ def preview_hdf5_dataset(path: Path, dataset_name: str) -> HZDRDatasetPreview:
             shape=[int(value) for value in dataset.shape],  # pyright: ignore[reportAttributeAccessIssue]
             preview=preview,
             preview_kind=preview_kind,
+            summary=summary,
+            summary_exact=summary_exact,
         )
 
 

@@ -30,13 +30,13 @@ import type {
   HZDRShot,
   HZDRShotDetail,
   HZDRSource,
-  HZDRDatasetPreview,
   CampaignContextFile,
   ContextFileEntry,
   SelectOptionGroup,
 } from '../types'
 import { AppHeader } from '../components/AppHeader'
-import { VisualPreview } from '../components/previews'
+import { ColumnPreview } from '../components/ColumnPreview'
+import type { ColumnPreviewInput } from '../components/ColumnPreview'
 import { ContextAssistant } from '../components/ContextAssistant'
 import {
   buildHdf5DatasetOptions,
@@ -67,7 +67,7 @@ import {
   metadataFieldLabel,
 } from '../utils/metadata'
 import { formatContextValue, formatSelectedInput } from '../utils/format'
-import { buildColumnPreview } from '../utils/preview'
+import { useDatasetPreview } from '../utils/columnPreview'
 import { requireJson } from '../utils/api'
 import {
   datasetSuggestions,
@@ -190,8 +190,6 @@ export function ContextBuilderPage() {
     'np.nanmean(hdf5_values) * float(metadata_value)'
   )
   const [generatedDraft, setGeneratedDraft] = useState('')
-  const [columnDetails, setColumnDetails] = useState('')
-  const [datasetPreview, setDatasetPreview] = useState<HZDRDatasetPreview>()
   const [saveStatus, setSaveStatus] = useState('')
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null)
   const [generatedEditorCompact, setGeneratedEditorCompact] = useState(true)
@@ -274,8 +272,6 @@ export function ContextBuilderPage() {
 
   useEffect(() => {
     setShotDetail(undefined)
-    setDatasetPreview(undefined)
-    setColumnDetails('')
     if (!shotDetailPath) {
       return
     }
@@ -405,13 +401,42 @@ export function ContextBuilderPage() {
   const showMongoFields = fieldKind === 'mongo-filter'
   const showFunctionFields = fieldKind === 'function'
   const actionCanUseMultipleInputs = fieldKind === 'function'
-  const usesHdf5VisualPreview = [
+  // The builder's preview follows the form: what the column would show on
+  // the example shot, read again whenever the data or the shot changes.
+  const selectedDatasetOption = selectedInputs
+    .map((value) => datasetOptions.find((option) => option.value === value))
+    .find(Boolean)
+  const previewsDataset = [
     'hdf5',
     'lineout-preview',
     'image-preview',
     'plotly-trend',
-    'function',
   ].includes(fieldKind)
+  const builderDataset = useDatasetPreview(
+    source_key,
+    selectedShot,
+    mode === 'build' && previewsDataset
+      ? selectedDatasetOption?.previewName
+      : undefined
+  )
+  const builderPreviewInput: ColumnPreviewInput = !selectedInputs.length
+    ? {
+        source: 'computed',
+        note: 'Choose data to see what this column will show.',
+      }
+    : fieldKind === 'metadata' && selectedMetadataPath
+      ? { source: 'metadata', field: selectedMetadataPath, type: 'auto' }
+      : previewsDataset && selectedDatasetOption
+        ? { source: 'hdf5', display: fieldKind, ...builderDataset }
+        : fieldKind === 'function'
+          ? {
+              source: 'computed',
+              note: 'A custom function is calculated when the shot table loads, so its value cannot be shown here. Check each input first by previewing it as its own column.',
+            }
+          : {
+              source: 'computed',
+              note: 'This value is looked up in MongoDB when the shot table loads, so it cannot be shown here.',
+            }
   const rawSnippet = buildComputedFieldSnippet({
     fieldKind,
     contextScope,
@@ -543,8 +568,6 @@ export function ContextBuilderPage() {
     setFieldTitle(state.fieldTitle)
     setFieldTitleEdited(true)
     setFieldNameOverridden(false)
-    setColumnDetails('')
-    setDatasetPreview(undefined)
     setSaveStatus(
       `Loaded “${suggestion.title}” into the builder. Adjust it, preview, then Add to context.`
     )
@@ -600,8 +623,6 @@ export function ContextBuilderPage() {
     if (formState.combineExpression) {
       setCombineExpression(formState.combineExpression)
     }
-    setColumnDetails('')
-    setDatasetPreview(undefined)
     setGeneratedDraft(selectedBlock.block.trim())
     setSaveStatus(`Loaded ${selectedBlock.name} into the builder form`)
   }
@@ -685,42 +706,6 @@ export function ContextBuilderPage() {
       .join('\n\n')}\n${suffix}`
     setSaveStatus(`Moving ${selectedBlock.name}...`)
     saveContextContent(fileContent, `Moved ${selectedBlock.name}`)
-  }
-
-  const previewColumn = () => {
-    if (!canBuildColumn) {
-      setColumnDetails('Choose data before previewing a column.')
-      setDatasetPreview(undefined)
-      return
-    }
-    const preview = buildColumnPreview({
-      fieldKind,
-      selectedInputs,
-      selectedShot,
-      datasetOptions,
-      combineExpression,
-    })
-    setColumnDetails(preview)
-    const selectedDataset = selectedInputs
-      .map((value) => datasetOptions.find((option) => option.value === value))
-      .find(Boolean)
-    if (
-      usesHdf5VisualPreview &&
-      source_key &&
-      selectedShot &&
-      selectedDataset
-    ) {
-      const query = selectedShot.shot_key
-        ? `?${new URLSearchParams({ shot_key: selectedShot.shot_key })}`
-        : ''
-      fetch(
-        `/metadata/hzdr/sources/${source_key}/shots/${selectedShot.shot_number}/datasets/${selectedDataset.previewName}${query}`
-      )
-        .then((response) => response.json())
-        .then(setDatasetPreview)
-    } else {
-      setDatasetPreview(undefined)
-    }
   }
 
   const saveManualContext = () => {
@@ -891,8 +876,6 @@ export function ContextBuilderPage() {
     }
     setSelectedInputs(nextInputs)
     setSaveStatus('')
-    setColumnDetails('')
-    setDatasetPreview(undefined)
     const hasMetadata = nextInputs.some((input) =>
       input.startsWith('metadata:')
     )
@@ -1009,6 +992,9 @@ export function ContextBuilderPage() {
                         onIgnore={ignoreSuggestion}
                         onCustomise={customiseSuggestion}
                         onRestoreIgnored={() => updateIgnoredSuggestions([])}
+                        sourceKey={source_key}
+                        exampleShot={selectedShot}
+                        shots={shots}
                       />
                     ) : null}
                     {mode === 'build' ? (
@@ -1422,74 +1408,19 @@ export function ContextBuilderPage() {
                     <>
                       <ContextBuilderDisclosure
                         title="Preview"
-                        description="Check input data on the example shot. Saved calculations are evaluated in the shot table."
+                        description="What this column will show for the example shot, and across the campaign. It follows your choices as you make them."
                         summary={contextRecipeLabel(fieldKind)}
                         open
                       >
-                        <Group justify="space-between" gap="sm">
-                          <Stack gap={2}>
-                            <Text size="xs" c="dimmed">
-                              Selected input
-                            </Text>
-                            <Text size="sm" fw={600}>
-                              {selectedInputSummary}
-                            </Text>
-                          </Stack>
-                          <Button
-                            onClick={previewColumn}
-                            variant="light"
-                            disabled={!canBuildColumn}
-                          >
-                            Preview example data
-                          </Button>
-                        </Group>
-                        <Grid gutter="sm">
-                          <Grid.Col span={{ base: 12, md: 7 }}>
-                            <Paper
-                              withBorder
-                              radius={4}
-                              p="sm"
-                              bg="var(--mantine-color-blue-0)"
-                              h="100%"
-                            >
-                              <Stack gap="xs">
-                                <Text size="sm" fw={700}>
-                                  Visual preview
-                                </Text>
-                                <VisualPreview
-                                  contextScope={contextScope}
-                                  datasetPreview={datasetPreview}
-                                  fieldKind={fieldKind}
-                                  fieldTitle={fieldTitle}
-                                  columnDetails={columnDetails}
-                                  shots={shots}
-                                />
-                              </Stack>
-                            </Paper>
-                          </Grid.Col>
-                          <Grid.Col span={{ base: 12, md: 5 }}>
-                            <Paper
-                              withBorder
-                              radius={4}
-                              p="sm"
-                              bg="var(--mantine-color-gray-0)"
-                              h="100%"
-                            >
-                              <Stack gap="xs">
-                                <Text size="sm" fw={700}>
-                                  Technical values
-                                </Text>
-                                <Text size="xs" c="dimmed">
-                                  Exact values used to build the visual result.
-                                </Text>
-                                <Code block>
-                                  {columnDetails ||
-                                    'Choose data, then preview the example.'}
-                                </Code>
-                              </Stack>
-                            </Paper>
-                          </Grid.Col>
-                        </Grid>
+                        <Text size="xs" c="dimmed">
+                          Data: {selectedInputSummary}
+                        </Text>
+                        <ColumnPreview
+                          title={fieldTitle}
+                          input={builderPreviewInput}
+                          exampleShot={selectedShot}
+                          shots={shots}
+                        />
                       </ContextBuilderDisclosure>
                       <ContextBuilderDisclosure
                         title="Generated variable"

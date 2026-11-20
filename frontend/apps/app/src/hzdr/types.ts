@@ -128,6 +128,10 @@ export type HZDRDatasetPreview = {
   shape: number[]
   preview: number[][] | number[] | number | null
   preview_kind: 'image' | 'line' | 'scalar'
+  /** What a summarizing column shows: the scalar, or the mean. */
+  summary?: number | null
+  /** False when `summary` is estimated from the strided preview. */
+  summary_exact?: boolean
 }
 
 export type FlowPacket = {
@@ -450,6 +454,8 @@ export type ColumnSuggestion = {
   examples: string[]
   reason: string
   starter: boolean
+  /** HDF5 only: the example shot's own dataset name, for its preview. */
+  previewName?: string
   /** A self-contained @Variable block, imports first. */
   block: string
   /** What the column does: the builder's field kind for HDF5 suggestions. */

@@ -17,7 +17,13 @@ vi.mock('@damnit-frontend/ui', () => ({
   HomePage: ({ main }: { main: ReactNode }) => main,
 }))
 vi.mock('../../components/AppHeader', () => ({ AppHeader: () => null }))
-vi.mock('../../components/previews', () => ({ VisualPreview: () => null }))
+// Plotly is heavy in jsdom; the charts themselves are not under test here.
+vi.mock('../../components/previews', () => ({
+  MetadataTrendPreview: ({ title }: { title: string }) => (
+    <div>Trend: {title}</div>
+  ),
+  CanvasImage: () => <div role="img" aria-label="Image preview" />,
+}))
 
 const base = '/metadata/hzdr/sources/radbio'
 const filesBase = '/contextfile/campaign/radbio/me/files'
@@ -106,26 +112,39 @@ function setup() {
         ? shots
         : url === base
           ? { key: 'radbio', title: 'Radbio' }
-          : url.endsWith('/assist')
-            ? { campaign: 'radbio', suggestions }
-            : url.endsWith('/files')
-              ? [{ name: 'context.py', active: true }]
-              : url.includes('/shots/')
-                ? {
-                    shot: shots[0],
-                    hdf5_datasets: [
-                      {
-                        name: 'cam/image',
-                        shape: [64, 64],
-                        dtype: 'uint16',
-                      },
-                    ],
-                    hdf5_exists: true,
-                  }
-                : {
-                    fileContent:
-                      'from damnit_ctx import Variable\n\n\n@Variable(title="Existing")\ndef existing(run):\n    return 1\n',
-                  }
+          : url.includes('/datasets/')
+            ? {
+                name: 'cam/image',
+                dtype: 'uint16',
+                shape: [64, 64],
+                preview: [
+                  [0, 1],
+                  [1, 0],
+                ],
+                preview_kind: 'image',
+                summary: 42,
+                summary_exact: true,
+              }
+            : url.endsWith('/assist')
+              ? { campaign: 'radbio', suggestions }
+              : url.endsWith('/files')
+                ? [{ name: 'context.py', active: true }]
+                : url.includes('/shots/')
+                  ? {
+                      shot: shots[0],
+                      hdf5_datasets: [
+                        {
+                          name: 'cam/image',
+                          shape: [64, 64],
+                          dtype: 'uint16',
+                        },
+                      ],
+                      hdf5_exists: true,
+                    }
+                  : {
+                      fileContent:
+                        'from damnit_ctx import Variable\n\n\n@Variable(title="Existing")\ndef existing(run):\n    return 1\n',
+                    }
     return Promise.resolve({ ok: true, json: () => Promise.resolve(value) })
   })
   vi.stubGlobal('fetch', fetchMock)
@@ -227,6 +246,27 @@ describe('Context Builder "Help me choose"', () => {
       screen.getByRole('button', { name: 'Show ignored suggestions again' })
     )
     expect(await card('Shot group')).toBeInTheDocument()
+  })
+
+  it('previews a suggestion on the example shot before adding it', async () => {
+    const user = userEvent.setup()
+    const { fetchMock } = setup()
+    const charge = await card('ICT charge (nC)')
+    await user.click(within(charge).getByRole('button', { name: 'Preview' }))
+    expect(within(charge).getByText('1.5 nC')).toBeInTheDocument()
+    expect(
+      within(charge).getByText('Across the campaign: 2 of 2 shots')
+    ).toBeInTheDocument()
+
+    const image = await card('Image')
+    await user.click(within(image).getByRole('button', { name: 'Preview' }))
+    expect(await within(image).findByText('42')).toBeInTheDocument()
+    expect(
+      within(image).getByRole('img', { name: 'Image preview' })
+    ).toBeInTheDocument()
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${base}/shots/1/datasets/cam/image?${new URLSearchParams({ shot_key: shots[0].shot_key })}`
+    )
   })
 
   it('customises a suggestion in the builder form', async () => {

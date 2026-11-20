@@ -17,7 +17,13 @@ vi.mock('@damnit-frontend/ui', () => ({
   HomePage: ({ main }: { main: ReactNode }) => main,
 }))
 vi.mock('../../components/AppHeader', () => ({ AppHeader: () => null }))
-vi.mock('../../components/previews', () => ({ VisualPreview: () => null }))
+// Plotly is heavy in jsdom; the charts themselves are not under test here.
+vi.mock('../../components/previews', () => ({
+  MetadataTrendPreview: ({ title }: { title: string }) => (
+    <div>Trend: {title}</div>
+  ),
+  CanvasImage: () => <div role="img" aria-label="Image preview" />,
+}))
 
 afterEach(() => {
   cleanup()
@@ -154,14 +160,15 @@ describe('ContextBuilderPage example shots', () => {
       await user.click(
         await screen.findByRole('option', { name: 'signal (float64, 2)' })
       )
-      await user.click(
-        screen.getByRole('button', { name: 'Preview example data' })
-      )
+      // The preview follows the form: choosing the dataset reads it on the
+      // example shot, with no button to press.
       const query = withKeys
         ? `?${new URLSearchParams({ shot_key: shots[1].shot_key! })}`
         : ''
-      expect(fetchMock).toHaveBeenCalledWith(
-        `${base}/shots/${shotNumber}/datasets/signal${query}`
+      await waitFor(() =>
+        expect(fetchMock).toHaveBeenCalledWith(
+          `${base}/shots/${shotNumber}/datasets/signal${query}`
+        )
       )
     }
   )

@@ -71,6 +71,7 @@ export function datasetSuggestions(
       originLabel: 'HDF5 dataset',
       field: option.name,
       path: option.name,
+      previewName: option.previewName,
       type: option.kind,
       unit: '',
       count: 1,

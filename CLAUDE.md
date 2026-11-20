@@ -220,7 +220,10 @@ workspace. HZDR-specific UI code lives under `apps/app/src/hzdr/`:
 `ContextBuilderPage` opens on "Help me choose" (`components/ContextAssistant`,
 `utils/contextAssist`: the API's suggestions plus the example shot's HDF5
 datasets; Add appends and saves, Ignore is per browser in localStorage,
-Customise fills the builder form) beside "Build a column myself".
+Customise fills the builder form) beside "Build a column myself". Both
+preview a column with `components/ColumnPreview` (`utils/columnPreview`: the
+example shot's cell, the double-click image/curve, the campaign trend or label
+counts; live, no button), which reads `HZDRDatasetPreview.summary`.
 `ShotPage.tsx` fetches shot detail via the `by-key/{shot_key}` route when a
 `shot_key` is present (falling back to `{shot_number}`).
 The `ReviewMatchesPage` (`/review-matches`; the old `/link-shot-records` path

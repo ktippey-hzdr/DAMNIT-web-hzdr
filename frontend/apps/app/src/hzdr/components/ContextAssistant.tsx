@@ -10,9 +10,12 @@ import {
   Stack,
   Text,
 } from '@mantine/core'
-import { IconCheck, IconEyeOff, IconPencil } from '@tabler/icons-react'
+import { IconCheck, IconEye, IconEyeOff, IconPencil } from '@tabler/icons-react'
 
-import type { ColumnSuggestion } from '../types'
+import type { ColumnSuggestion, HZDRShot } from '../types'
+import { useDatasetPreview } from '../utils/columnPreview'
+
+import { ColumnPreview } from './ColumnPreview'
 
 /** Cards shown before "Show more": a short list reads, a long one is skipped. */
 export const FIRST_SUGGESTIONS = 6
@@ -23,20 +26,66 @@ const ORIGIN_COLORS: Record<ColumnSuggestion['origin'], string> = {
   hdf5: 'violet',
 }
 
+/** The column a suggestion would add, on the example shot and the campaign. */
+function SuggestionPreview({
+  suggestion,
+  sourceKey,
+  exampleShot,
+  shots,
+}: {
+  suggestion: ColumnSuggestion
+  sourceKey?: string
+  exampleShot?: HZDRShot
+  shots: HZDRShot[]
+}) {
+  const hdf5 = suggestion.origin === 'hdf5'
+  const dataset = useDatasetPreview(
+    sourceKey,
+    exampleShot,
+    hdf5 ? (suggestion.previewName ?? suggestion.field) : undefined
+  )
+  return (
+    <ColumnPreview
+      title={suggestion.title}
+      exampleShot={exampleShot}
+      shots={shots}
+      input={
+        hdf5
+          ? { source: 'hdf5', display: suggestion.display, ...dataset }
+          : {
+              source: 'metadata',
+              field: suggestion.field,
+              type: suggestion.type === 'text' ? 'text' : 'number',
+              unit: suggestion.unit,
+            }
+      }
+    />
+  )
+}
+
+type PreviewContext = {
+  sourceKey?: string
+  exampleShot?: HZDRShot
+  shots: HZDRShot[]
+}
+
 function SuggestionCard({
   suggestion,
   busy,
+  previewContext,
   onAdd,
   onIgnore,
   onCustomise,
 }: {
   suggestion: ColumnSuggestion
   busy: boolean
+  previewContext: PreviewContext
   onAdd: () => void
   onIgnore: () => void
   onCustomise: () => void
 }) {
   const [showCode, setShowCode] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
   return (
     <Card
       withBorder
@@ -93,6 +142,9 @@ function SuggestionCard({
           </Badge>
           <Text size="xs">{suggestion.displayHelp}</Text>
         </Group>
+        {showPreview ? (
+          <SuggestionPreview suggestion={suggestion} {...previewContext} />
+        ) : null}
         {showCode ? <Code block>{suggestion.block.trim()}</Code> : null}
         <Group gap="xs" mt={2}>
           <Button
@@ -110,6 +162,15 @@ function SuggestionCard({
             onClick={onIgnore}
           >
             Ignore this suggestion
+          </Button>
+          <Button
+            size="xs"
+            variant="subtle"
+            leftSection={<IconEye size={14} />}
+            onClick={() => setShowPreview((shown) => !shown)}
+            aria-expanded={showPreview}
+          >
+            {showPreview ? 'Hide preview' : 'Preview'}
           </Button>
           <Button
             size="xs"
@@ -149,7 +210,13 @@ export function ContextAssistant({
   onIgnore,
   onCustomise,
   onRestoreIgnored,
+  sourceKey,
+  exampleShot,
+  shots = [],
 }: {
+  sourceKey?: string
+  exampleShot?: HZDRShot
+  shots?: HZDRShot[]
   suggestions: ColumnSuggestion[]
   loading: boolean
   error: string
@@ -201,6 +268,7 @@ export function ContextAssistant({
             key={suggestion.id}
             suggestion={suggestion}
             busy={busy}
+            previewContext={{ sourceKey, exampleShot, shots }}
             onAdd={() => onAdd(suggestion)}
             onIgnore={() => onIgnore(suggestion)}
             onCustomise={() => onCustomise(suggestion)}

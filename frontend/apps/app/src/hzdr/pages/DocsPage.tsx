@@ -156,7 +156,11 @@ def laser_energy_mj(run, laser_energy_j=None):
                     save it to your context file straight away,{' '}
                     <b>Ignore this suggestion</b> to hide it in this browser, or{' '}
                     <b>Customise</b> to open it in the builder first.{' '}
-                    <b>Build a column myself</b> is the full builder.
+                    <b>Preview</b> shows the column before you add it: the
+                    example shot&apos;s cell as the table will show it, the
+                    image or curve a double-click opens, and the value across
+                    the campaign. <b>Build a column myself</b> is the full
+                    builder; its preview follows your choices as you make them.
                   </Text>
                   <Text size="sm">
                     <b>To start with</b>, your first context file for a campaign

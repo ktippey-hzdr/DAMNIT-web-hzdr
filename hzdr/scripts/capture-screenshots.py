@@ -678,20 +678,25 @@ def _prepare_context_assist(page: Page) -> None:
 
     Waits for the campaign's suggestion cards and for the "Show more" button
     that appears once the example shot's dataset suggestions have joined them
-    (the capture campaign has more than the first six).
+    (the capture campaign has more than the first six), then opens the first
+    card's preview.
     """
     _open_details_section(page, "Target and example shot")
     page.get_by_text("Suggested columns").first.wait_for()
     page.get_by_role("article").first.wait_for()
     page.get_by_role("button", name="more suggestions").wait_for()
+    # Open the first suggestion's preview: its cell and campaign trend.
+    page.get_by_role("article").first.get_by_role("button", name="Preview").click()
+    page.get_by_text("Across the campaign").first.wait_for()
 
 
 def _prepare_context_builder(page: Page) -> None:
     """Build one image column so the page shows a real recipe, not empty slots.
 
-    Switches to "Build a column myself", picks the per-shot camera frame,
-    chooses the image-preview action, and renders the preview, with the
-    target/example-shot and generated-Python panels unfolded around it.
+    Switches to "Build a column myself", picks the per-shot camera frame and
+    the image-preview action, and waits for the preview the form reads by
+    itself, with the target/example-shot and generated-Python panels
+    unfolded around it.
     """
     page.get_by_text("Build a column myself").click()
     _open_details_section(page, "Target and example shot")
@@ -701,8 +706,8 @@ def _prepare_context_builder(page: Page) -> None:
     page.get_by_role("option").first.click()
     page.get_by_role("textbox", name="What should this column do?").click()
     page.get_by_role("option", name="Image with reduced preview").click()
-    page.get_by_role("button", name="Preview example data").click()
-    page.get_by_text("Image preview").first.wait_for()
+    # The preview follows the form: wait for the image it reads on its own.
+    page.get_by_text("On double-click").first.wait_for()
     _open_details_section(page, "Generated variable")
 
 

@@ -1884,8 +1884,16 @@ def test_a_preview_reads_one_frame_of_a_stack(tmp_path, monkeypatch):
     assert image.preview_kind == "image"
     assert len(image.preview) <= 65
     assert image.shape == [3, 130, 70]
+    assert image.summary is not None
+    assert image.summary_exact is False
     line = preview_hdf5_dataset(path, "line")
-    assert len(line.preview) == 200
+    # The whole lineout, thinned evenly (not its first 200 samples), with
+    # the exact mean of every sample.
+    assert len(line.preview) == 500
+    assert line.preview[0] == 0
+    assert line.preview[-1] == 998
+    assert line.summary == pytest.approx(499.5)
+    assert line.summary_exact is True
 
 
 def test_relink_asks_for_a_build_when_the_master_cannot_be_read(campaign, monkeypatch):

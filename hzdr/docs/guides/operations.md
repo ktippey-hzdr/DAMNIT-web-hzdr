@@ -63,8 +63,21 @@ In **Build a column myself**, choose a field from **LabFrog fields**, **Shot met
 or an HDF5 dataset group. Field counts show availability across the campaign;
 the example value is for the selected shot. If that shot lacks the field,
 **Use a shot with this field** selects one containing it. Choose the display,
-set the column title, and add it to the context file. **Preview example data**
-checks the inputs; saved calculations run when the shot table loads context.
+set the column title, and add it to the context file.
+
+**Preview** (in the builder, and behind each suggestion's **Preview** button)
+follows the choices as they are made, with nothing to press. *In the table*
+is the example shot's cell as the column will show it: the value with its
+unit (a LabFrog decimal comma read as a number), *Missing* when the shot has
+none, red when it is not a number; for a dataset, the scalar or the mean of
+the lineout or image (marked ≈ when estimated from the reduced preview of a
+large image). *On double-click* is the image or curve the cell panel opens.
+*Across the campaign* is the value on every shot: a trend for numbers, the
+labels and how many shots carry each for text. A custom function or a MongoDB
+lookup is calculated only when the shot table loads, and the preview says so.
+The dataset preview (`GET .../shots/{n}/datasets/{name}`) reads one strided
+frame of an image and thins a lineout evenly over its whole length (at most
+512 points), and returns `summary`/`summary_exact` for the cell.
 
 After deploying context fixes, use **Refresh context** on the shot page to
 re-evaluate saved columns. Older generated nested `doc.get(...)` columns work

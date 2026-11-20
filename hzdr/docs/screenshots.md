@@ -67,7 +67,9 @@ so the panel shows the full preview and that column's trend across the run.
 `/source/{source_key}/context-builder` as it opens: the campaign's suggested
 columns, each with why it was picked (how many shots record it, the range it
 spans, example values) and what the column will do, and **Add this column**,
-**Ignore this suggestion** and **Customise**. The first six show; the rest
+**Ignore this suggestion**, **Preview** and **Customise**. The capture opens
+the first card's preview: its cell on the example shot and its trend across
+the campaign. The first six show; the rest
 are behind **Show more**, which in this capture holds the example shot's HDF5
 image, lineout and scalar suggestions.
 
@@ -76,9 +78,9 @@ image, lineout and scalar suggestions.
 ## Context builder: Build a column myself
 
 `/source/{source_key}/context-builder`, the other mode: building one context column from a
-per-shot HDF5 dataset — pick the data, pick what the column should do, and see
-the rendered cell, the exact values behind it, and the Python that will be
-appended to `context.py`.
+per-shot HDF5 dataset — pick the data and what the column should do, and the
+preview follows: the example shot's cell (the image's mean), the image a
+double-click opens, and the Python that will be appended to `context.py`.
 
 ![Context builder](screenshots/context-builder.png)
 

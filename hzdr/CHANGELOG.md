@@ -6,6 +6,22 @@ behaviour; the merge PR has the details.
 
 ## 2026-11-20
 
+### Context Builder: previews show the real column, and follow the form
+- One preview for the builder and for each "Help me choose" suggestion (a
+  **Preview** button on every card). *In the table* is the example shot's
+  actual cell: the value with its unit, *Missing*, or red when not a number,
+  and for a dataset the scalar or the mean, not `nanmean(<path>)` placeholder
+  text. *On double-click* is the image (now drawn on a canvas) or the curve.
+  *Across the campaign* is a trend for numbers or label counts for text.
+- The builder previews as you choose: the **Preview example data** button
+  and the JSON *Technical values* box are gone.
+- LabFrog values typed with a decimal comma now count as numbers in the
+  campaign trend (they were left out).
+- API: a dataset preview returns `summary` (the scalar, or the mean) and
+  `summary_exact`; a lineout is thinned evenly over its whole length (at
+  most 512 points) instead of cut at its first 200 samples. Shot-table image
+  thumbnails draw on a canvas too.
+
 ### Context Builder: "Help me choose" suggests columns to add or ignore
 - Context Builder now opens on **Help me choose**: a ranked list of columns
   worth adding, each saying why it was picked (how many shots record it, the
