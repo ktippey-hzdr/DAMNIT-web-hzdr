@@ -476,7 +476,7 @@ export function ColumnCellPreview({
     details.displayed_value ??
     details.metadata_value ??
     details.mongo_query ??
-    'Click Preview column.'
+    'Click Preview example data.'
   return (
     <Card withBorder radius={4} p="md">
       <Stack gap="xs">

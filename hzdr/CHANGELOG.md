@@ -4,6 +4,14 @@ Notable changes to the HZDR fork of DAMNIT-web. Newest first. Upstream
 (European-XFEL/DAMNIT-web) changes are summarised only where they reach HZDR
 behaviour; the merge PR has the details.
 
+## 2026-11-20
+
+### Context Builder: the empty preview names the right button
+- A column preview with no value yet told the user to "Click Preview
+  column", a button Context Builder no longer has. It now says "Click
+  Preview example data", the button's current label (as in the operations
+  guide).
+
 ## 2026-11-16
 
 ### Context: make a saved variant the active one
