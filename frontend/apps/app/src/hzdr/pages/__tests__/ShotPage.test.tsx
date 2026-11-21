@@ -9,7 +9,7 @@ import {
 } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MantineProvider } from '@mantine/core'
-import { MemoryRouter, Route, Routes } from 'react-router'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router'
 
 import { HZDRShotPage } from '../ShotPage'
 import type { HZDRShot } from '../../types'
@@ -180,7 +180,12 @@ describe('shot page quick filters and keyboard', () => {
     }
   })
 
-  async function renderPage() {
+  function LocationProbe() {
+    const location = useLocation()
+    return <output data-testid="location">{location.search}</output>
+  }
+
+  async function renderPage(entry = '/source/demo') {
     vi.stubGlobal(
       'ResizeObserver',
       class {
@@ -214,9 +219,17 @@ describe('shot page quick filters and keyboard', () => {
     )
     render(
       <MantineProvider>
-        <MemoryRouter initialEntries={['/source/demo']}>
+        <MemoryRouter initialEntries={[entry]}>
           <Routes>
-            <Route path="/source/:source_key" element={<HZDRShotPage />} />
+            <Route
+              path="/source/:source_key"
+              element={
+                <>
+                  <HZDRShotPage />
+                  <LocationProbe />
+                </>
+              }
+            />
           </Routes>
         </MemoryRouter>
       </MantineProvider>
@@ -281,6 +294,22 @@ describe('shot page quick filters and keyboard', () => {
     expect(screen.getByText('4 trend records')).toBeInTheDocument()
     await user.click(screen.getByRole('radio', { name: 'Needs review 2' }))
     expect(screen.getByText('2 trend records')).toBeInTheDocument()
+  })
+
+  it('opens on the shot a link names, and keeps the selection in the URL', async () => {
+    const user = userEvent.setup()
+    const table = await renderPage('/source/demo?shot=demo:20260702:000003')
+    const rows = () => within(table).getAllByRole('row').slice(1)
+    const selected = () =>
+      rows().findIndex((row) => row.getAttribute('aria-selected') === 'true')
+    expect(selected()).toBe(2)
+    const linked = () =>
+      new URLSearchParams(screen.getByTestId('location').textContent ?? '').get(
+        'shot'
+      )
+    expect(linked()).toBe('demo:20260702:000003')
+    await user.click(within(rows()[0]).getAllByRole('button')[5])
+    await waitFor(() => expect(linked()).toBe('demo:20260701:000001'))
   })
 
   it('moves the selection with Up and Down, not inside inputs', async () => {

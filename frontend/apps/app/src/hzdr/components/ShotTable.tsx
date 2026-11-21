@@ -298,7 +298,17 @@ export function StatusBadge({ status }: { status: string }) {
   )
 }
 
-export function HZDRShotSetsPanel({ shots }: { shots: HZDRShot[] }) {
+export function HZDRShotSetsPanel({
+  shots,
+  selectedRowKey,
+  onSelectShot,
+}: {
+  shots: HZDRShot[]
+  /** The table's selected shot, marked on the curve. */
+  selectedRowKey?: string
+  /** Clicking a point selects its shot in the table. */
+  onSelectShot?: (rowKey: string) => void
+}) {
   const numericMetadataKeys = getNumericMetadataKeys(shots)
   const [trendKey, setTrendKey] = useState(numericMetadataKeys[0] ?? '')
 
@@ -334,7 +344,11 @@ export function HZDRShotSetsPanel({ shots }: { shots: HZDRShot[] }) {
           }))}
           searchable
         />
-        <MetadataTrendPreview values={trendValues} />
+        <MetadataTrendPreview
+          values={trendValues}
+          selectedRowKey={selectedRowKey}
+          onSelectPoint={onSelectShot}
+        />
       </Stack>
     </Card>
   )

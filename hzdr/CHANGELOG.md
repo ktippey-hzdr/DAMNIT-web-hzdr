@@ -6,6 +6,14 @@ behaviour; the merge PR has the details.
 
 ## 2026-11-21
 
+### Shot table: links to a shot, and trend points that open their shot
+- The selected shot is in the address (`?shot=<shot_key>`, or a shot
+  number), so a copied URL opens the campaign on that shot; Shot detail has
+  **Copy link** beside the shot key, for a logbook or a chat.
+- A point on the Trends curve is a button: clicking it (or Enter) selects
+  that shot in the table and scrolls to it; the selected shot is marked on
+  the curve.
+
 ### Home: help to get oriented
 - Home opens with what DAMNIT-web is for, the figures at a glance
   (campaigns, shots today, decisions waiting with a link to Review matches,

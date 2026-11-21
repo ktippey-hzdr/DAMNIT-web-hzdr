@@ -27,7 +27,7 @@ import {
   TextInput,
   Title,
 } from '@mantine/core'
-import { Link, useParams } from 'react-router'
+import { Link, useParams, useSearchParams } from 'react-router'
 
 import { history, HomePage } from '@damnit-frontend/ui'
 
@@ -72,7 +72,12 @@ import {
 import { getNestedMetadataValue, formatTargetLabel } from '../utils/metadata'
 import { requireJson } from '../utils/api'
 import { summarizeShotDataSources } from '../utils/data-sources'
-import { formatShotLabel, toTrendValue } from '../utils/shot-key'
+import {
+  formatShotLabel,
+  shotLinkValue,
+  shotMatchesLink,
+  toTrendValue,
+} from '../utils/shot-key'
 import { classifyShotVersions, getShotVersion } from '../utils/shot-versions'
 import {
   SHOT_STATUS_FILTERS,
@@ -98,6 +103,10 @@ import {
 
 export function HZDRShotPage() {
   const { source_key } = useParams()
+  // ?shot=<shot_key or number>: the shot a shared link opens on.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const linkedShot = searchParams.get('shot')
+  const linkedShotRef = useRef(linkedShot)
   const [source, setSource] = useState<HZDRSource>()
   const [shots, setShots] = useState<HZDRShot[]>([])
   const [availableSources, setAvailableSources] = useState<HZDRSource[]>([])
@@ -201,7 +210,13 @@ export function HZDRShotPage() {
           ) {
             return currentRowKey
           }
-          return loadedShots[0] ? getShotRowKey(loadedShots[0]) : undefined
+          const linked = linkedShotRef.current
+            ? loadedShots.find((shot) =>
+                shotMatchesLink(shot, linkedShotRef.current)
+              )
+            : undefined
+          const first = linked ?? loadedShots[0]
+          return first ? getShotRowKey(first) : undefined
         })
         setDataState('ready')
       })
@@ -232,6 +247,22 @@ export function HZDRShotPage() {
   const selectedShot =
     tableShots.find((shot) => getShotRowKey(shot) === selectedRowKey) ??
     tableShots[0]
+
+  // Keep the selected shot in the URL, so the address is a link to it.
+  const selectedShotLink = selectedShot ? shotLinkValue(selectedShot) : null
+  useEffect(() => {
+    if (!selectedShotLink) return
+    linkedShotRef.current = selectedShotLink
+    setSearchParams(
+      (params) => {
+        if (params.get('shot') === selectedShotLink) return params
+        const next = new URLSearchParams(params)
+        next.set('shot', selectedShotLink)
+        return next
+      },
+      { replace: true }
+    )
+  }, [selectedShotLink, setSearchParams])
 
   useEffect(() => {
     const selected = selectedShot
@@ -340,6 +371,20 @@ export function HZDRShotPage() {
     label: `${campaignTitle(entry.title) || entry.key} (${entry.shots.length})`,
   }))
   const tableRef = useRef<HTMLDivElement>(null)
+  const scrollRowIntoView = (rowKey: string) => {
+    Array.from(
+      tableRef.current?.querySelectorAll<HTMLTableRowElement>(
+        'tr[data-row-key]'
+      ) ?? []
+    )
+      .find((element) => element.dataset.rowKey === rowKey)
+      ?.scrollIntoView?.({ block: 'nearest' })
+  }
+  // A point on the trend selects its shot, as a click on its row would.
+  const selectRowFromTrend = (rowKey: string) => {
+    setSelectedRowKey(rowKey)
+    scrollRowIntoView(rowKey)
+  }
   // Up/Down in the table select the previous/next visible shot, as a click on
   // its row would, and keep focus on the same column of the new row.
   const handleTableKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -1233,7 +1278,13 @@ export function HZDRShotPage() {
                   {/* Trends first: pick a value and see it over the shots the
                       table shows (its filters apply). */}
                   <DetailsSection title="Trends" open>
-                    <HZDRShotSetsPanel shots={visibleShots} />
+                    <HZDRShotSetsPanel
+                      shots={visibleShots}
+                      selectedRowKey={
+                        selectedShot && getShotRowKey(selectedShot)
+                      }
+                      onSelectShot={selectRowFromTrend}
+                    />
                   </DetailsSection>
                   <DetailsSection title="Selected cell" open>
                     <SelectedCellPanel
