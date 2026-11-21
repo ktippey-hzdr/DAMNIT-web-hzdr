@@ -254,7 +254,7 @@ describe('shot page quick filters and keyboard', () => {
   it('filters by status and day chips, combined with the text filter', async () => {
     const user = userEvent.setup()
     const table = await renderPage()
-    expect(screen.getByRole('checkbox', { name: 'All 4' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'All 4' })).toBeChecked()
     await user.click(screen.getByRole('radio', { name: 'Needs review 2' }))
     expect(shotNumbers(table)).toEqual(['2', '3'])
     await user.click(screen.getByRole('radio', { name: 'Day 2 1' }))
