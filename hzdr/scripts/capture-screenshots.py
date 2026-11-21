@@ -686,7 +686,7 @@ def _prepare_context_assist(page: Page) -> None:
     _open_details_section(page, "Target and example shot")
     page.get_by_text("Suggested columns").first.wait_for()
     page.get_by_role("button", name="more suggestions").wait_for()
-    ticks = page.get_by_role("checkbox", name="Tick ")
+    ticks = page.get_by_role("checkbox", name=re.compile(r"^Tick (?!all shown)"))
     for index in range(3):
         ticks.nth(index).check()
     page.get_by_text("Across the campaign").first.wait_for()
