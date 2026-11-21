@@ -22,9 +22,7 @@ export function previewableProductDataset(
 ): string | undefined {
   if (product.path || !product.dataset_name) return undefined
   if (product.metadata?.shot_indexed === true) return undefined
-  const kind = PREVIEW_KINDS.includes(String(product.preview_kind))
-    ? String(product.preview_kind)
-    : kindFromShape(product.shape ?? [])
+  const kind = product.preview_kind ?? kindFromShape(product.shape ?? [])
   if (!PREVIEW_KINDS.includes(kind)) return undefined
   return product.dataset_name.replace(/^\/+/, '') || undefined
 }

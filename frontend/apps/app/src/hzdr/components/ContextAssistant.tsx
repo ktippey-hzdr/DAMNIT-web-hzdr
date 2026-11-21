@@ -205,9 +205,7 @@ const SuggestionRow = memo(function SuggestionRow({
       aria-label={`Suggestion: ${suggestion.title}`}
       bg={selected ? 'var(--mantine-color-teal-1)' : undefined}
       style={
-        selected
-          ? { borderColor: 'var(--mantine-color-teal-5)' }
-          : { cursor: 'pointer' }
+        selected ? { borderColor: 'var(--mantine-color-teal-5)' } : undefined
       }
     >
       <Group gap="sm" wrap="nowrap" align="center">

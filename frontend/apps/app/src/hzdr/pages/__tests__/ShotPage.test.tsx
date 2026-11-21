@@ -159,3 +159,135 @@ describe('shot table with repeated canonical keys', () => {
     expect(screen.getByText('4 trend records')).toBeInTheDocument()
   })
 })
+
+describe('shot page quick filters and keyboard', () => {
+  const statuses = [
+    'processed',
+    'needs-review',
+    'needs-review',
+    'revision-needed',
+  ]
+  const shots: HZDRShot[] = statuses.map((status, index) => {
+    const day = index < 2 ? '2026-07-01' : '2026-07-02'
+    return {
+      source_key: 'demo',
+      shot_number: index + 1,
+      shot_key: `demo:${day.replace(/-/g, '')}:${String(index + 1).padStart(6, '0')}`,
+      fired_at: `${day}T10:0${index}:00Z`,
+      metadata: { status, target: `target-${index + 1}` },
+      events: [],
+      data_products: [],
+    }
+  })
+
+  async function renderPage() {
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        observe() {}
+        unobserve() {}
+        disconnect() {}
+      }
+    )
+    const base = '/metadata/hzdr/sources/demo'
+    const source = {
+      key: 'demo',
+      title: 'HZDR canonical campaign (Demo campaign)',
+      shots,
+      metadata: {},
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) => {
+        const value =
+          url === `${base}/shots`
+            ? shots
+            : url === '/metadata/hzdr/sources'
+              ? [source]
+              : url === base
+                ? source
+                : url.includes('/shots/')
+                  ? { shot: shots[0], hdf5_datasets: [], hdf5_exists: false }
+                  : { columns: [], rows: [] }
+        return Promise.resolve({ ok: true, json: () => Promise.resolve(value) })
+      })
+    )
+    render(
+      <MantineProvider>
+        <MemoryRouter initialEntries={['/source/demo']}>
+          <Routes>
+            <Route path="/source/:source_key" element={<HZDRShotPage />} />
+          </Routes>
+        </MemoryRouter>
+      </MantineProvider>
+    )
+    const table = await screen.findByRole('table')
+    await waitFor(() =>
+      expect(within(table).getAllByRole('row')).toHaveLength(5)
+    )
+    return table
+  }
+
+  const shotNumbers = (table: HTMLElement) =>
+    within(table)
+      .getAllByRole('row')
+      .slice(1)
+      .map((row) => within(row).getAllByRole('cell')[0].textContent)
+
+  it('shows the campaign name, a Campaign picker and Add columns', async () => {
+    await renderPage()
+    expect(
+      await screen.findByRole('heading', { name: 'Demo campaign' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: 'Campaign' })
+    ).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'Add columns' })).toHaveAttribute(
+      'href',
+      '/source/demo/context-builder'
+    )
+    expect(
+      screen.queryByRole('link', { name: 'Context builder' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('filters by status and day chips, combined with the text filter', async () => {
+    const user = userEvent.setup()
+    const table = await renderPage()
+    expect(screen.getByRole('checkbox', { name: 'All 4' })).toBeChecked()
+    await user.click(screen.getByRole('radio', { name: 'Needs review 2' }))
+    expect(shotNumbers(table)).toEqual(['2', '3'])
+    await user.click(screen.getByRole('radio', { name: 'Day 2 1' }))
+    expect(shotNumbers(table)).toEqual(['3'])
+    expect(
+      screen.getByRole('radio', { name: 'Needs revision 1' })
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('radio', { name: 'All days 2' }))
+    await user.type(screen.getByRole('textbox', { name: 'Value' }), 'target-2')
+    expect(shotNumbers(table)).toEqual(['2'])
+    await user.click(screen.getByRole('radio', { name: 'Needs revision 0' }))
+    expect(screen.getByText('No shots match the filter.')).toBeInTheDocument()
+  })
+
+  it('moves the selection with Up and Down, not inside inputs', async () => {
+    const user = userEvent.setup()
+    const table = await renderPage()
+    const rows = () => within(table).getAllByRole('row').slice(1)
+    const selected = () =>
+      rows().findIndex((row) => row.getAttribute('aria-selected') === 'true')
+    expect(selected()).toBe(0)
+    await user.click(within(rows()[0]).getAllByRole('button')[5])
+    await user.keyboard('{ArrowDown}')
+    expect(selected()).toBe(1)
+    expect(document.activeElement).toBe(
+      within(rows()[1]).getAllByRole('button')[5]
+    )
+    await user.keyboard('{ArrowDown}{ArrowDown}{ArrowDown}')
+    expect(selected()).toBe(3)
+    await user.keyboard('{ArrowUp}')
+    expect(selected()).toBe(2)
+    await user.click(screen.getByRole('textbox', { name: 'Value' }))
+    await user.keyboard('{ArrowUp}')
+    expect(selected()).toBe(2)
+  })
+})

@@ -105,7 +105,9 @@ describe('ContextBuilderPage example shots', () => {
       // duplicate option values fail here just as they do in the browser.
       const selector = screen.getByRole('textbox', { name: 'Example shot' })
       await waitFor(() =>
-        expect(selector).toHaveValue(formatShotLabel(shotNumber, '2026-05-05T08:15:00Z'))
+        expect(selector).toHaveValue(
+          formatShotLabel(shotNumber, '2026-05-05T08:15:00Z')
+        )
       )
       await user.click(selector)
       await user.click(
@@ -113,7 +115,9 @@ describe('ContextBuilderPage example shots', () => {
           name: formatShotLabel(shotNumber, '2026-05-06T08:15:00Z'),
         })
       )
-      expect(selector).toHaveValue(formatShotLabel(shotNumber, '2026-05-06T08:15:00Z'))
+      expect(selector).toHaveValue(
+        formatShotLabel(shotNumber, '2026-05-06T08:15:00Z')
+      )
       await waitFor(() =>
         expect(fetchMock).toHaveBeenCalledWith(
           withKeys
@@ -150,7 +154,9 @@ describe('ContextBuilderPage example shots', () => {
       await user.click(
         screen.getByRole('button', { name: 'Use a shot with this field' })
       )
-      expect(selector).toHaveValue(formatShotLabel(shotNumber, '2026-05-05T08:15:00Z'))
+      expect(selector).toHaveValue(
+        formatShotLabel(shotNumber, '2026-05-05T08:15:00Z')
+      )
       await user.click(selector)
       await user.click(
         await screen.findByRole('option', {

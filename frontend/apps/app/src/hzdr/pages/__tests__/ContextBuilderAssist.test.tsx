@@ -209,13 +209,17 @@ const card = (title: string) =>
   screen.findByRole('article', { name: `Suggestion: ${title}` })
 
 /** Select a row: on a narrow screen its preview opens under it. */
-async function openCard(user: ReturnType<typeof userEvent.setup>, title: string) {
+async function openCard(
+  user: ReturnType<typeof userEvent.setup>,
+  title: string
+) {
   const row = await card(title)
   await user.click(within(row).getByRole('button', { name: title }))
   return row
 }
 
-const status = () => screen.getAllByRole('status').map((node) => node.textContent)
+const status = () =>
+  screen.getAllByRole('status').map((node) => node.textContent)
 
 describe('Context Builder "Help me choose"', () => {
   it('lists each suggestion in one line and explains the selected one', async () => {
@@ -280,7 +284,9 @@ describe('Context Builder "Help me choose"', () => {
     await card('ICT charge (nC)')
     const add = screen.getByRole('button', { name: 'Add ticked columns' })
     expect(add).toBeDisabled()
-    await user.click(screen.getByRole('checkbox', { name: 'Tick ICT charge (nC)' }))
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Tick ICT charge (nC)' })
+    )
     await user.click(screen.getByRole('checkbox', { name: 'Tick Shot group' }))
     await user.click(screen.getByRole('button', { name: 'Add 2 columns' }))
     await waitFor(() =>
@@ -312,7 +318,9 @@ describe('Context Builder "Help me choose"', () => {
     const user = userEvent.setup()
     setup({ failPut: true })
     await card('ICT charge (nC)')
-    await user.click(screen.getByRole('checkbox', { name: 'Tick ICT charge (nC)' }))
+    await user.click(
+      screen.getByRole('checkbox', { name: 'Tick ICT charge (nC)' })
+    )
     await user.click(screen.getByRole('checkbox', { name: 'Tick Shot group' }))
     await user.click(screen.getByRole('button', { name: 'Add 2 columns' }))
     await waitFor(() =>
@@ -320,7 +328,9 @@ describe('Context Builder "Help me choose"', () => {
         'Save failed: none of the 2 columns was added to context.py.'
       )
     )
-    expect(screen.getByRole('checkbox', { name: 'Tick Shot group' })).toBeChecked()
+    expect(
+      screen.getByRole('checkbox', { name: 'Tick Shot group' })
+    ).toBeChecked()
     expect(await card('ICT charge (nC)')).toBeInTheDocument()
   })
 
@@ -358,7 +368,9 @@ describe('Context Builder "Help me choose"', () => {
     ).toEqual(['labfrog:Shot group', 'hdf5:cam/image'])
     expect(status()).toContain('Ignored 2 suggestions.')
     expect(saved).toEqual({})
-    expect(screen.queryByRole('article', { name: 'Suggestion: Image' })).toBeNull()
+    expect(
+      screen.queryByRole('article', { name: 'Suggestion: Image' })
+    ).toBeNull()
     expect(await card('ICT charge (nC)')).toBeInTheDocument()
   })
 
@@ -419,8 +431,12 @@ describe('Context Builder "Help me choose"', () => {
 
   it('names the campaign in the subtitle', async () => {
     setup()
-    expect(await screen.findByText(/Choose columns for the Radbio shot table/)).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Add columns' })).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Choose columns for the Radbio shot table/)
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Add columns' })
+    ).toBeInTheDocument()
   })
 })
 
@@ -466,13 +482,17 @@ describe('Context Builder existing columns', () => {
     const second = await screen.findByRole('listitem', {
       name: 'Column: Second',
     })
-    await user.click(within(second).getByRole('button', { name: 'Delete Second' }))
+    await user.click(
+      within(second).getByRole('button', { name: 'Delete Second' })
+    )
     const confirm = within(second).getByRole('group', {
       name: 'Confirm deleting Second',
     })
     await user.click(within(confirm).getByRole('button', { name: 'Cancel' }))
     expect(puts).toHaveLength(0)
-    await user.click(within(second).getByRole('button', { name: 'Delete Second' }))
+    await user.click(
+      within(second).getByRole('button', { name: 'Delete Second' })
+    )
     await user.click(
       within(
         within(second).getByRole('group', { name: 'Confirm deleting Second' })
@@ -494,7 +514,9 @@ describe('Context Builder existing columns', () => {
     const second = await screen.findByRole('listitem', {
       name: 'Column: Second',
     })
-    await user.click(within(second).getByRole('button', { name: 'Edit Second' }))
+    await user.click(
+      within(second).getByRole('button', { name: 'Edit Second' })
+    )
     expect(screen.getByRole('textbox', { name: 'Column title' })).toHaveValue(
       'Second'
     )
@@ -502,7 +524,9 @@ describe('Context Builder existing columns', () => {
     expect(
       screen.getByRole('button', { name: 'Replace Second' })
     ).toBeInTheDocument()
-    await user.click(within(second).getByRole('button', { name: 'Stop editing' }))
+    await user.click(
+      within(second).getByRole('button', { name: 'Stop editing' })
+    )
     expect(
       screen.queryByRole('button', { name: 'Replace Second' })
     ).not.toBeInTheDocument()
@@ -522,7 +546,7 @@ describe('Context Builder deep link (?add=)', () => {
     )
     expect(
       screen.getByRole('textbox', { name: 'What should this column do?' })
-    ).toHaveValue(expect.stringMatching(/image/i))
+    ).toHaveValue('Image with reduced preview')
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         expect.stringContaining('/datasets/cam/image')

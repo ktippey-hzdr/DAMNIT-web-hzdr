@@ -13,7 +13,7 @@ import { getShotDateKey } from './shot-key'
  * - an event's values, `entry/<source>/<kind>/<event_id>/values`, for each
  *   event linked to the shot, and each data product's own dataset;
  * - the `shot_key` itself, raw or with the characters HDF5 names drop;
- * - only when none of those matched: the shot's `shot_id` and its
+ * - only when no event id matched: the shot's `shot_id` and its
  *   `shot-<NNNNNN>` token (the emulator's event ids carry them), which can
  *   repeat across days when the counter restarts.
  *
@@ -130,10 +130,10 @@ export function splitShotDatasets<T extends Pick<HZDRHDF5Dataset, 'name'>>(
   let identified = false
   for (const dataset of datasets) {
     const name = stripSlash(dataset.name)
-    if (products.has(name) || matchesAny(name, events)) {
+    if (matchesAny(name, events)) {
       own.add(dataset)
       identified = true
-    } else if (matchesAny(name, strong)) {
+    } else if (products.has(name) || matchesAny(name, strong)) {
       own.add(dataset)
     }
   }

@@ -31,9 +31,9 @@ const ds = (name: string) => ({ name, shape: [1], dtype: 'float64' })
 describe('shotContainerStem', () => {
   it('reads the container name from the shot key', () => {
     expect(shotContainerStem(shot())).toBe('20260701_000007')
-    expect(
-      shotContainerStem(shot({ shot_key: 'radbio:2026-04-29:14' }))
-    ).toBe('20260429_000014')
+    expect(shotContainerStem(shot({ shot_key: 'radbio:2026-04-29:14' }))).toBe(
+      '20260429_000014'
+    )
   })
 
   it('falls back to the shot day and number without a shot key', () => {
