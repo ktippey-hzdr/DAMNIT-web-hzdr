@@ -49,6 +49,9 @@ behaviour; the merge PR has the details.
   page); the example shot reads "Shot 7 · 1 Jul, 11:36". A link
   `?add=hdf5:<dataset>` or `?add=metadata:<path>` (optional `&shot=`) opens
   the builder with that data chosen.
+- Context Builder previewed a per-shot dataset (`by_shot/<id>/...`) from the
+  campaign file's last shot whatever the example shot was (shot 16's image
+  labelled Shot 1); it now reads the example shot's own copy.
 - **Docs:** a contents list beside the text on wide screens, sections
   linkable as `/docs#review-matches`, a screenshot per section, and names
   that match the buttons. The launcher commands moved out to

@@ -254,7 +254,16 @@ export function ContextBuilderPage() {
         }
         const nextShots = loadedShots as HZDRShot[]
         setShots(nextShots)
-        setSelectedShotIndex(nextShots.length ? 0 : undefined)
+        // A deep link's shot (&shot=) stays the example shot even when the
+        // shots load again (a second load would otherwise reset it to the first).
+        const linked = addShot
+          ? nextShots.findIndex(
+              (shot) =>
+                shot.shot_key === addShot ||
+                String(shot.shot_number) === addShot
+            )
+          : -1
+        setSelectedShotIndex(nextShots.length ? Math.max(linked, 0) : undefined)
       })
       .catch(() => setSaveStatus('Could not load source shots.'))
       .finally(() => setShotsLoaded(true))
@@ -273,7 +282,7 @@ export function ContextBuilderPage() {
         )
       })
       .catch(() => setContextFiles([]))
-  }, [source_key])
+  }, [addShot, source_key])
 
   // Suggestions for this campaign only: a late answer for the campaign the
   // page showed before is dropped, so Add never writes its blocks here.
@@ -368,10 +377,20 @@ export function ContextBuilderPage() {
       })),
     [metadataKeys, shots]
   )
+  // The shot whose datasets are listed: per-shot previews read its own copy.
+  const exampleShotMetadataId = shotDetail?.shot.metadata?.shot_id
+  const exampleShotId =
+    typeof exampleShotMetadataId === 'string'
+      ? exampleShotMetadataId
+      : undefined
   const datasetOptions = useMemo(
     () =>
-      buildHdf5DatasetOptions(shotDetail?.hdf5_datasets ?? [], contextScope),
-    [contextScope, shotDetail?.hdf5_datasets]
+      buildHdf5DatasetOptions(
+        shotDetail?.hdf5_datasets ?? [],
+        contextScope,
+        exampleShotId
+      ),
+    [contextScope, exampleShotId, shotDetail?.hdf5_datasets]
   )
   const inputOptions = useMemo<SelectOptionGroup[]>(
     () =>
@@ -432,8 +451,13 @@ export function ContextBuilderPage() {
     ? formatShotLabel(selectedShot.shot_number, selectedShot.fired_at)
     : 'none'
   const shotDatasetOptions = useMemo(
-    () => buildHdf5DatasetOptions(shotDetail?.hdf5_datasets ?? [], 'shot'),
-    [shotDetail?.hdf5_datasets]
+    () =>
+      buildHdf5DatasetOptions(
+        shotDetail?.hdf5_datasets ?? [],
+        'shot',
+        exampleShotId
+      ),
+    [exampleShotId, shotDetail?.hdf5_datasets]
   )
   const shotDatasetSuggestions = useMemo(
     () => datasetSuggestions(shotDatasetOptions, exampleShotLabel),
