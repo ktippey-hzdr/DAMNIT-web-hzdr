@@ -304,11 +304,14 @@ export function HZDRDocsPage() {
                   </List.Item>
                   <List.Item>
                     <b>Click a shot</b> to open it in Shot detail; the{' '}
-                    <b>arrow keys</b> move to the shot above or below.
+                    <b>arrow keys</b> move to the shot above or below. The
+                    address names the selected shot, and <b>Copy link</b> in
+                    Shot detail copies a link that opens on it.
                   </List.Item>
                   <List.Item>
                     <b>Trends</b>, at the top of the side panel: pick a value to
                     plot it over the shots the table shows (the filters apply).
+                    Click a point to open that shot.
                   </List.Item>
                   <List.Item>
                     <b>Click a cell</b> for its value; a number opens a trend
