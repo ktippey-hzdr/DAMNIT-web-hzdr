@@ -1,13 +1,5 @@
-import { useEffect, useState } from 'react'
-import {
-  Anchor,
-  Card,
-  Group,
-  SimpleGrid,
-  Stack,
-  Text,
-  Title,
-} from '@mantine/core'
+import { type ReactNode, useEffect, useState } from 'react'
+import { Anchor, Group, Text } from '@mantine/core'
 import { Link } from 'react-router'
 
 import { requireJson } from '../utils/api'
@@ -30,6 +22,22 @@ type ProducerStatus = {
   shotcounter: { status: string; last_event_at: string | null }
 }
 
+function Item({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Text size="sm" span>
+      <Text span c="dimmed" inherit>
+        {label}:{' '}
+      </Text>
+      {children}
+    </Text>
+  )
+}
+
+/**
+ * One line above the shot table: the campaign's SciCat dataset, its wiki page
+ * and the producers the catalog has seen. Each comes from its own optional
+ * endpoint and fails on its own; the shot table stays usable either way.
+ */
 export function CampaignCards({ sourceKey }: { sourceKey: string }) {
   const [scicat, setScicat] = useState<ScicatInfo>()
   const [wiki, setWiki] = useState<WikiInfo>()
@@ -41,7 +49,6 @@ export function CampaignCards({ sourceKey }: { sourceKey: string }) {
     setWiki(undefined)
     setProducers(undefined)
     const base = `/metadata/hzdr/sources/${encodeURIComponent(sourceKey)}`
-    // Each optional integration fails independently; the shot table stays usable.
     fetch(`${base}/scicat`)
       .then((response) => requireJson<ScicatInfo>(response))
       .then((value) => current && setScicat(value))
@@ -59,54 +66,39 @@ export function CampaignCards({ sourceKey }: { sourceKey: string }) {
     }
   }, [sourceKey])
 
+  const watchdogs = producers?.watchdog_hosts.length
+
   return (
-    <SimpleGrid cols={{ base: 1, md: 3 }} spacing="md">
-      <Card withBorder radius={4} p="md">
-        <Stack gap="xs">
-          <Title order={4}>SciCat dataset</Title>
-          {scicat?.dataset_url ? (
-            <Anchor href={scicat.dataset_url} target="_blank" rel="noreferrer">
-              {scicat.pid ?? 'Open dataset'}
-            </Anchor>
-          ) : (
-            <Text size="sm" c="dimmed">
-              {scicat?.registered
-                ? `Registered as ${scicat.pid}; no SciCat link configured.`
-                : 'No registered dataset yet.'}
-            </Text>
-          )}
-        </Stack>
-      </Card>
-      <Card withBorder radius={4} p="md">
-        <Stack gap="xs">
-          <Title order={4}>Campaign wiki</Title>
-          {wiki?.page_url ? (
-            <Anchor href={wiki.page_url} target="_blank" rel="noreferrer">
-              {wiki.page_title ?? 'Open campaign wiki'}
-            </Anchor>
-          ) : (
-            <Text size="sm" c="dimmed">
-              No campaign wiki link configured.
-            </Text>
-          )}
-        </Stack>
-      </Card>
-      <Card withBorder radius={4} p="md">
-        <Stack gap="xs">
-          <Title order={4}>Producers seen in catalog</Title>
-          <Group gap="xs">
-            <Text size="sm">
-              Shotcounter: {producers?.shotcounter.status ?? 'unknown'}
-            </Text>
-            <Text size="sm">
-              Watchdog sources: {producers?.watchdog_hosts.length ?? 'unknown'}
-            </Text>
-          </Group>
-          <Anchor component={Link} to="/flow-monitor">
-            Open Flow Monitor
+    <Group gap="lg" wrap="wrap" role="group" aria-label="Campaign status">
+      <Item label="SciCat">
+        {scicat?.dataset_url ? (
+          <Anchor href={scicat.dataset_url} target="_blank" rel="noreferrer">
+            {scicat.pid ?? 'Open dataset'}
           </Anchor>
-        </Stack>
-      </Card>
-    </SimpleGrid>
+        ) : scicat?.registered ? (
+          `${scicat.pid} (no link configured)`
+        ) : (
+          'not registered yet'
+        )}
+      </Item>
+      <Item label="Wiki">
+        {wiki?.page_url ? (
+          <Anchor href={wiki.page_url} target="_blank" rel="noreferrer">
+            {wiki.page_title ?? 'Campaign wiki'}
+          </Anchor>
+        ) : (
+          'no page linked'
+        )}
+      </Item>
+      <Item label="Producers">
+        <Anchor component={Link} to="/flow-monitor">
+          {producers
+            ? `Shotcounter ${producers.shotcounter.status}, ${watchdogs} ${
+                watchdogs === 1 ? 'watchdog' : 'watchdogs'
+              }`
+            : 'Flow monitor'}
+        </Anchor>
+      </Item>
+    </Group>
   )
 }

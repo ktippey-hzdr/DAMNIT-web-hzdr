@@ -10,8 +10,8 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('CampaignCards', () => {
-  it('shows available links and catalog producer status', async () => {
+describe('CampaignCards status strip', () => {
+  it('shows available links and catalog producer status on one line', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn((url: string) => {
@@ -51,10 +51,8 @@ describe('CampaignCards', () => {
       'href',
       'https://wiki.example/radbio'
     )
-    expect(screen.getByText('Shotcounter: active')).toBeInTheDocument()
-    expect(screen.getByText('Watchdog sources: 1')).toBeInTheDocument()
     expect(
-      screen.getByRole('link', { name: 'Open Flow Monitor' })
+      await screen.findByRole('link', { name: 'Shotcounter active, 1 watchdog' })
     ).toHaveAttribute('href', '/flow-monitor')
   })
 
@@ -70,11 +68,10 @@ describe('CampaignCards', () => {
         </MemoryRouter>
       </MantineProvider>
     )
+    expect(await screen.findByText('no page linked')).toBeInTheDocument()
+    expect(screen.getByText('not registered yet')).toBeInTheDocument()
     expect(
-      await screen.findByText('No campaign wiki link configured.')
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('link', { name: 'Open Flow Monitor' })
-    ).toBeInTheDocument()
+      screen.getByRole('link', { name: 'Flow monitor' })
+    ).toHaveAttribute('href', '/flow-monitor')
   })
 })

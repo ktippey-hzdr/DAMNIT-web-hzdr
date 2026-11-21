@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PropsWithChildren } from 'react'
 import {
   Badge,
@@ -19,9 +19,11 @@ import {
   Textarea,
   TextInput,
   Title,
+  useMantineTheme,
 } from '@mantine/core'
-import { IconArrowDown, IconArrowUp, IconRefresh } from '@tabler/icons-react'
-import { useParams } from 'react-router'
+import { useMediaQuery } from '@mantine/hooks'
+import { IconRefresh } from '@tabler/icons-react'
+import { useParams, useSearchParams } from 'react-router'
 
 import { HomePage } from '@damnit-frontend/ui'
 
@@ -37,7 +39,11 @@ import type {
 import { AppHeader } from '../components/AppHeader'
 import { ColumnPreview } from '../components/ColumnPreview'
 import type { ColumnPreviewInput } from '../components/ColumnPreview'
-import { ContextAssistant } from '../components/ContextAssistant'
+import {
+  ContextAssistant,
+  SuggestionDetail,
+} from '../components/ContextAssistant'
+import { ContextColumnList } from '../components/ContextColumnList'
 import {
   buildHdf5DatasetOptions,
   getContextInputOptions,
@@ -66,11 +72,18 @@ import {
   getNestedMetadataValue,
   metadataFieldLabel,
 } from '../utils/metadata'
-import { formatContextValue, formatSelectedInput } from '../utils/format'
+import {
+  campaignTitle,
+  formatContextValue,
+  formatSelectedInput,
+  formatShotLabel,
+} from '../utils/format'
 import { useDatasetPreview } from '../utils/columnPreview'
 import { requireJson } from '../utils/api'
 import {
+  appendSuggestionBlocks,
   datasetSuggestions,
+  inputFormState,
   isAlreadyInContext,
   loadIgnoredSuggestions,
   saveIgnoredSuggestions,
@@ -78,6 +91,13 @@ import {
 } from '../utils/contextAssist'
 
 type BuilderMode = 'help' | 'build'
+
+/** What Customise and a deep link load into the builder form. */
+type BuilderFormState = {
+  fieldKind: string
+  selectedInputs: string[]
+  fieldTitle: string
+}
 
 function ContextBuilderSectionTitle({
   title,
@@ -201,6 +221,24 @@ export function ContextBuilderPage() {
   const [suggestionsError, setSuggestionsError] = useState('')
   const [ignoredSuggestionIds, setIgnoredSuggestionIds] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
+  const [selectedSuggestionId, setSelectedSuggestionId] = useState<
+    string | null
+  >(null)
+  const [checkedSuggestionIds, setCheckedSuggestionIds] = useState<string[]>(
+    []
+  )
+  const [shotsLoaded, setShotsLoaded] = useState(false)
+  const [shotDetailLoadedPath, setShotDetailLoadedPath] = useState<string>()
+  const [deepLinkNote, setDeepLinkNote] = useState('')
+  const [searchParams] = useSearchParams()
+  // ?add=<input> (and optionally &shot=<shot key or number>): open the
+  // builder with that input chosen, e.g. from a shot's "Add as column".
+  const addInput = searchParams.get('add')
+  const addShot = searchParams.get('shot')
+  const handledAddRef = useRef<string | null>(null)
+  const appliedShotRef = useRef<string | null>(null)
+  const theme = useMantineTheme()
+  const wide = useMediaQuery(`(min-width: ${theme.breakpoints.lg})`) ?? false
 
   useEffect(() => {
     if (!source_key) {
@@ -221,6 +259,7 @@ export function ContextBuilderPage() {
         setSelectedShotIndex(nextShots.length ? 0 : undefined)
       })
       .catch(() => setSaveStatus('Could not load source shots.'))
+      .finally(() => setShotsLoaded(true))
     fetch(`/contextfile/campaign/${source_key}/me`)
       .then((response) => requireJson<CampaignContextFile>(response))
       .then((loadedContext: CampaignContextFile) => {
@@ -299,6 +338,9 @@ export function ContextBuilderPage() {
       })
       .catch(() => {
         if (active) setShotDetail(undefined)
+      })
+      .finally(() => {
+        if (active) setShotDetailLoadedPath(shotDetailPath)
       })
     return () => {
       active = false
@@ -386,15 +428,23 @@ export function ContextBuilderPage() {
   const selectedContextVariable =
     selectedColumnIndex >= 0 ? contextVariables[selectedColumnIndex] : undefined
   const exampleShotLabel = selectedShot
-    ? `shot ${selectedShot.shot_number}, ${selectedShot.fired_at}`
+    ? formatShotLabel(selectedShot.shot_number, selectedShot.fired_at)
     : 'none'
+  const shotDatasetOptions = useMemo(
+    () => buildHdf5DatasetOptions(shotDetail?.hdf5_datasets ?? [], 'shot'),
+    [shotDetail?.hdf5_datasets]
+  )
   const shotDatasetSuggestions = useMemo(
+    () => datasetSuggestions(shotDatasetOptions, exampleShotLabel),
+    [exampleShotLabel, shotDatasetOptions]
+  )
+  const exampleShotOptions = useMemo(
     () =>
-      datasetSuggestions(
-        buildHdf5DatasetOptions(shotDetail?.hdf5_datasets ?? [], 'shot'),
-        exampleShotLabel
-      ),
-    [exampleShotLabel, shotDetail?.hdf5_datasets]
+      shots.map((shot, index) => ({
+        value: index.toString(),
+        label: formatShotLabel(shot.shot_number, shot.fired_at),
+      })),
+    [shots]
   )
   // Sorted once per change of the file, the list or what is ignored (not on
   // every render, e.g. each keystroke elsewhere on the page).
@@ -422,6 +472,19 @@ export function ContextBuilderPage() {
     serverSuggestions,
     shotDatasetSuggestions,
   ])
+  // On wide screens the right column always previews one suggestion: the
+  // one picked, else the first. On narrow ones it opens under its row.
+  const selectedSuggestion =
+    openSuggestions.find(
+      (suggestion) => suggestion.id === selectedSuggestionId
+    ) ?? (wide ? openSuggestions[0] : undefined)
+  const selectSuggestion = useCallback(
+    (id: string) =>
+      setSelectedSuggestionId((current) =>
+        !wide && current === id ? null : id
+      ),
+    [wide]
+  )
   const showMongoFields = fieldKind === 'mongo-filter'
   const showFunctionFields = fieldKind === 'function'
   const actionCanUseMultipleInputs = fieldKind === 'function'
@@ -571,30 +634,165 @@ export function ContextBuilderPage() {
     )
   }
 
+  // All ticked suggestions in one save: the file is written once, so a
+  // failure adds none of them.
+  const addSuggestions = (picked: ColumnSuggestion[]) => {
+    if (!source_key || !contextFile || !picked.length) {
+      return
+    }
+    const { fileContent, added, skipped } = appendSuggestionBlocks(
+      contextContent,
+      picked
+    )
+    const skippedNote = skipped.length
+      ? ` Skipped ${skipped.length} already in the file.`
+      : ''
+    if (!added.length) {
+      setSaveStatus(`Nothing to add.${skippedNote}`)
+      return
+    }
+    const columns = `${added.length} column${added.length === 1 ? '' : 's'}`
+    const addedIds = new Set(added.map((suggestion) => suggestion.id))
+    setSaveStatus(`Adding ${columns}...`)
+    setSaving(true)
+    fetch(
+      `/contextfile/campaign/${source_key}/me/files/${selectedContextFile}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fileContent }),
+      }
+    )
+      .then((response) => requireJson<CampaignContextFile>(response))
+      .then((savedContext: CampaignContextFile) => {
+        setContextFile(savedContext)
+        setContextContent(savedContext.fileContent ?? '')
+        setCheckedSuggestionIds((current) =>
+          current.filter((id) => !addedIds.has(id))
+        )
+        setSaveStatus(
+          `Added ${columns} to ${selectedContextFile}: ${added
+            .map((suggestion) => suggestion.title)
+            .join(', ')}.${skippedNote}`
+        )
+      })
+      .catch(() =>
+        setSaveStatus(
+          `Save failed: none of the ${columns} was added to ${selectedContextFile}.`
+        )
+      )
+      .finally(() => setSaving(false))
+  }
+
   const updateIgnoredSuggestions = (ids: string[]) => {
     setIgnoredSuggestionIds(ids)
     if (source_key) saveIgnoredSuggestions(source_key, ids)
   }
 
-  const ignoreSuggestion = (suggestion: ColumnSuggestion) => {
-    updateIgnoredSuggestions([...ignoredSuggestionIds, suggestion.id])
-    setSaveStatus(`Ignored “${suggestion.title}”.`)
+  const ignoreSuggestions = (picked: ColumnSuggestion[]) => {
+    const ids = new Set(picked.map((suggestion) => suggestion.id))
+    updateIgnoredSuggestions([...new Set([...ignoredSuggestionIds, ...ids])])
+    setCheckedSuggestionIds((current) => current.filter((id) => !ids.has(id)))
+    setSaveStatus(
+      picked.length === 1
+        ? `Ignored “${picked[0].title}”.`
+        : `Ignored ${picked.length} suggestions.`
+    )
   }
 
+  const ignoreSuggestion = (suggestion: ColumnSuggestion) =>
+    ignoreSuggestions([suggestion])
+
+  // Setters only, so this stays the same function across renders.
+  const loadIntoBuilder = useCallback(
+    (state: BuilderFormState, message: string) => {
+      setMode('build')
+      setSelectedColumnId(null)
+      setContextScope('shot')
+      setAllowMultipleInputs(false)
+      setSelectedInputs(state.selectedInputs)
+      setFieldKind(state.fieldKind)
+      setFieldTitle(state.fieldTitle)
+      setFieldTitleEdited(true)
+      setFieldNameOverridden(false)
+      setSaveStatus(message)
+    },
+    []
+  )
+
   const customiseSuggestion = (suggestion: ColumnSuggestion) => {
-    const state = suggestionFormState(suggestion)
-    setMode('build')
-    setSelectedColumnId(null)
-    setContextScope('shot')
-    setAllowMultipleInputs(false)
-    setSelectedInputs(state.selectedInputs)
-    setFieldKind(state.fieldKind)
-    setFieldTitle(state.fieldTitle)
-    setFieldTitleEdited(true)
-    setFieldNameOverridden(false)
-    setSaveStatus(
+    loadIntoBuilder(
+      suggestionFormState(suggestion),
       `Loaded “${suggestion.title}” into the builder. Adjust it, preview, then Add to context.`
     )
+  }
+
+  // A deep link's example shot first, so its datasets are the ones offered.
+  useEffect(() => {
+    if (!addShot || !shotsLoaded || appliedShotRef.current === addShot) {
+      return
+    }
+    appliedShotRef.current = addShot
+    const index = shots.findIndex(
+      (shot) => shot.shot_key === addShot || String(shot.shot_number) === addShot
+    )
+    if (index >= 0) setSelectedShotIndex(index)
+  }, [addShot, shots, shotsLoaded])
+
+  const deepLinkMetadataKeys = useMemo(
+    () =>
+      addInput?.startsWith('metadata:')
+        ? new Set(shots.flatMap((shot) => flattenObjectKeys(shot.metadata)))
+        : new Set<string>(),
+    [addInput, shots]
+  )
+
+  // ?add=: once the shots (and, for a dataset, the example shot's datasets)
+  // are known, open the builder with that input, or say it was not found.
+  useEffect(() => {
+    if (!addInput || handledAddRef.current === addInput || !shotsLoaded) {
+      return
+    }
+    if (addShot && appliedShotRef.current !== addShot) {
+      return
+    }
+    if (
+      addInput.startsWith('hdf5:') &&
+      shotDetailPath &&
+      shotDetailLoadedPath !== shotDetailPath
+    ) {
+      return
+    }
+    handledAddRef.current = addInput
+    const state = inputFormState(addInput, {
+      metadataKeys: deepLinkMetadataKeys,
+      datasetOptions: shotDatasetOptions,
+    })
+    if (!state) {
+      setDeepLinkNote(
+        `Could not find “${formatSelectedInput(addInput)}” in this campaign. Pick a suggestion or build the column yourself.`
+      )
+      return
+    }
+    setDeepLinkNote('')
+    loadIntoBuilder(
+      state,
+      `Loaded “${state.fieldTitle}” into the builder. Check the preview, then Add to context.`
+    )
+  }, [
+    addInput,
+    addShot,
+    deepLinkMetadataKeys,
+    loadIntoBuilder,
+    shotDatasetOptions,
+    shotDetailLoadedPath,
+    shotDetailPath,
+    shotsLoaded,
+  ])
+
+  const editColumn = (columnId: string) => {
+    setMode('build')
+    selectAndLoadColumn(columnId)
   }
 
   const selectAndLoadColumn = (columnId: string | null) => {
@@ -692,9 +890,9 @@ export function ContextBuilderPage() {
     )
   }
 
-  const deleteSelectedColumn = () => {
+  const deleteColumn = (columnId: string) => {
     const selectedBlock = contextVariables.find(
-      (block) => block.id === selectedColumnId
+      (block) => block.id === columnId
     )
     if (!source_key || !selectedBlock) {
       return
@@ -705,21 +903,24 @@ export function ContextBuilderPage() {
     )}${contextContent.slice(selectedBlock.end)}`.trimEnd()
     setSaveStatus(`Deleting ${selectedBlock.name}...`)
     saveContextContent(`${fileContent}\n`, `Deleted ${selectedBlock.name}`)
-    setSelectedColumnId(null)
+    if (columnId === selectedColumnId) setSelectedColumnId(null)
   }
 
-  const moveSelectedColumn = (direction: -1 | 1) => {
-    const targetIndex = selectedColumnIndex + direction
+  const moveColumn = (columnId: string, direction: -1 | 1) => {
+    const columnIndex = contextVariables.findIndex(
+      (block) => block.id === columnId
+    )
+    const targetIndex = columnIndex + direction
     if (
-      selectedColumnIndex < 0 ||
+      columnIndex < 0 ||
       targetIndex < 0 ||
       targetIndex >= contextVariables.length
     ) {
-      setSaveStatus('Select a column that can move in that direction.')
+      setSaveStatus('That column cannot move further.')
       return
     }
     const reorderedBlocks = [...contextVariables]
-    const [selectedBlock] = reorderedBlocks.splice(selectedColumnIndex, 1)
+    const [selectedBlock] = reorderedBlocks.splice(columnIndex, 1)
     reorderedBlocks.splice(targetIndex, 0, selectedBlock)
     const prefix = contextContent.slice(0, contextVariables[0].start)
     const suffix = contextContent.slice(

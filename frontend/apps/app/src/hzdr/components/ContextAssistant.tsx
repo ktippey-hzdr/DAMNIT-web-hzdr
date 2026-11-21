@@ -1,23 +1,26 @@
-import { useState } from 'react'
+import { memo, useCallback, useMemo, useState } from 'react'
+import type { Dispatch, ReactNode, SetStateAction } from 'react'
 import {
   Badge,
   Button,
-  Card,
+  Checkbox,
   Code,
   Group,
   Loader,
   Paper,
   Stack,
   Text,
+  UnstyledButton,
 } from '@mantine/core'
-import { IconCheck, IconEye, IconEyeOff, IconPencil } from '@tabler/icons-react'
+import { IconCheck, IconEyeOff, IconPencil } from '@tabler/icons-react'
 
 import type { ColumnSuggestion, HZDRShot } from '../types'
 import { useDatasetPreview } from '../utils/columnPreview'
+import { suggestionSummary } from '../utils/contextAssist'
 
 import { ColumnPreview } from './ColumnPreview'
 
-/** Cards shown before "Show more": a short list reads, a long one is skipped. */
+/** Rows shown before "Show more": a short list reads, a long one is skipped. */
 export const FIRST_SUGGESTIONS = 6
 
 const ORIGIN_COLORS: Record<ColumnSuggestion['origin'], string> = {
@@ -63,57 +66,53 @@ function SuggestionPreview({
   )
 }
 
-type PreviewContext = {
-  sourceKey?: string
-  exampleShot?: HZDRShot
-  shots: HZDRShot[]
-}
-
-function SuggestionCard({
+/**
+ * One suggestion in full: why, what the column does, its preview, and the
+ * single-column actions. Shown in the right column on wide screens and under
+ * its row on narrow ones.
+ */
+export function SuggestionDetail({
   suggestion,
   busy,
-  previewContext,
+  sourceKey,
+  exampleShot,
+  shots,
   onAdd,
   onIgnore,
   onCustomise,
 }: {
   suggestion: ColumnSuggestion
   busy: boolean
-  previewContext: PreviewContext
-  onAdd: () => void
-  onIgnore: () => void
-  onCustomise: () => void
+  sourceKey?: string
+  exampleShot?: HZDRShot
+  shots: HZDRShot[]
+  onAdd: (suggestion: ColumnSuggestion) => void
+  onIgnore: (suggestion: ColumnSuggestion) => void
+  onCustomise: (suggestion: ColumnSuggestion) => void
 }) {
   const [showCode, setShowCode] = useState(false)
-  const [showPreview, setShowPreview] = useState(false)
   return (
-    <Card
+    <Paper
       withBorder
       radius={4}
       p="sm"
-      aria-label={`Suggestion: ${suggestion.title}`}
-      component="article"
+      component="section"
+      aria-label={`Preview of ${suggestion.title}`}
     >
       <Stack gap={6}>
         <Group justify="space-between" align="flex-start" wrap="nowrap">
           <Text fw={700} size="sm">
             {suggestion.title}
           </Text>
-          <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
-            {suggestion.starter ? (
-              <Badge size="sm" radius={4} variant="filled" color="teal">
-                Top pick
-              </Badge>
-            ) : null}
-            <Badge
-              size="sm"
-              radius={4}
-              variant="light"
-              color={ORIGIN_COLORS[suggestion.origin]}
-            >
-              {suggestion.originLabel}
-            </Badge>
-          </Group>
+          <Badge
+            size="sm"
+            radius={4}
+            variant="light"
+            color={ORIGIN_COLORS[suggestion.origin]}
+            style={{ flexShrink: 0 }}
+          >
+            {suggestion.originLabel}
+          </Badge>
         </Group>
         <Text size="xs">
           <Text span fw={600} size="xs">
@@ -130,27 +129,20 @@ function SuggestionCard({
           <Text fw={600} size="xs" style={{ flexShrink: 0 }}>
             What it does:
           </Text>
-          <Badge
-            size="xs"
-            radius={4}
-            variant="outline"
-            mt={1}
-            style={{ flexShrink: 0 }}
-            styles={{ label: { textTransform: 'none' } }}
-          >
-            {suggestion.displayLabel}
-          </Badge>
           <Text size="xs">{suggestion.displayHelp}</Text>
         </Group>
-        {showPreview ? (
-          <SuggestionPreview suggestion={suggestion} {...previewContext} />
-        ) : null}
+        <SuggestionPreview
+          suggestion={suggestion}
+          sourceKey={sourceKey}
+          exampleShot={exampleShot}
+          shots={shots}
+        />
         {showCode ? <Code block>{suggestion.block.trim()}</Code> : null}
         <Group gap="xs" mt={2}>
           <Button
             size="xs"
             leftSection={<IconCheck size={14} />}
-            onClick={onAdd}
+            onClick={() => onAdd(suggestion)}
             disabled={busy}
           >
             Add this column
@@ -159,24 +151,15 @@ function SuggestionCard({
             size="xs"
             variant="default"
             leftSection={<IconEyeOff size={14} />}
-            onClick={onIgnore}
+            onClick={() => onIgnore(suggestion)}
           >
             Ignore this suggestion
           </Button>
           <Button
             size="xs"
             variant="subtle"
-            leftSection={<IconEye size={14} />}
-            onClick={() => setShowPreview((shown) => !shown)}
-            aria-expanded={showPreview}
-          >
-            {showPreview ? 'Hide preview' : 'Preview'}
-          </Button>
-          <Button
-            size="xs"
-            variant="subtle"
             leftSection={<IconPencil size={14} />}
-            onClick={onCustomise}
+            onClick={() => onCustomise(suggestion)}
           >
             Customise
           </Button>
@@ -191,13 +174,89 @@ function SuggestionCard({
           </Button>
         </Group>
       </Stack>
-    </Card>
+    </Paper>
   )
 }
 
+const SuggestionRow = memo(function SuggestionRow({
+  suggestion,
+  summary,
+  checked,
+  selected,
+  detail,
+  onToggle,
+  onSelect,
+}: {
+  suggestion: ColumnSuggestion
+  summary: string
+  checked: boolean
+  selected: boolean
+  detail?: ReactNode
+  onToggle: (id: string) => void
+  onSelect: (id: string) => void
+}) {
+  return (
+    <Paper
+      withBorder
+      radius={4}
+      px="sm"
+      py={6}
+      component="article"
+      aria-label={`Suggestion: ${suggestion.title}`}
+      bg={selected ? 'var(--mantine-color-teal-1)' : undefined}
+      style={
+        selected
+          ? { borderColor: 'var(--mantine-color-teal-5)' }
+          : { cursor: 'pointer' }
+      }
+    >
+      <Group gap="sm" wrap="nowrap" align="center">
+        <Checkbox
+          aria-label={`Tick ${suggestion.title}`}
+          checked={checked}
+          onChange={() => onToggle(suggestion.id)}
+        />
+        <UnstyledButton
+          onClick={() => onSelect(suggestion.id)}
+          aria-pressed={selected}
+          aria-label={suggestion.title}
+          style={{ flex: 1, minWidth: 0 }}
+        >
+          <Group gap={6} wrap="nowrap" justify="space-between">
+            <Text fw={600} size="sm" truncate="end">
+              {suggestion.title}
+            </Text>
+            <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
+              {suggestion.starter ? (
+                <Badge size="xs" radius={4} variant="filled" color="teal">
+                  Top pick
+                </Badge>
+              ) : null}
+              <Badge
+                size="xs"
+                radius={4}
+                variant="light"
+                color={ORIGIN_COLORS[suggestion.origin]}
+                styles={{ label: { textTransform: 'none' } }}
+              >
+                {suggestion.displayLabel}
+              </Badge>
+            </Group>
+          </Group>
+          <Text size="xs" c="dimmed" truncate="end">
+            {summary}
+          </Text>
+        </UnstyledButton>
+      </Group>
+      {detail ? <div style={{ marginTop: 8 }}>{detail}</div> : null}
+    </Paper>
+  )
+})
+
 /**
- * Context Builder's "Help me": what is worth a column, why, and what the
- * column would do, one suggestion at a time.
+ * Context Builder's "Help me choose": what is worth a column, one compact
+ * row each. Tick several and add them in one save, or select one to see its
+ * preview and add, ignore or customise it alone.
  */
 export function ContextAssistant({
   suggestions,
@@ -207,17 +266,16 @@ export function ContextAssistant({
   busy,
   ignoredCount,
   addedCount,
-  onAdd,
-  onIgnore,
-  onCustomise,
+  selectedId,
+  onSelect,
+  checkedIds,
+  onCheckedChange,
+  onAddMany,
+  onIgnoreMany,
   onRestoreIgnored,
-  sourceKey,
-  exampleShot,
+  selectedDetail,
   shots = [],
 }: {
-  sourceKey?: string
-  exampleShot?: HZDRShot
-  shots?: HZDRShot[]
   suggestions: ColumnSuggestion[]
   loading: boolean
   error: string
@@ -225,14 +283,66 @@ export function ContextAssistant({
   busy: boolean
   ignoredCount: number
   addedCount: number
-  onAdd: (suggestion: ColumnSuggestion) => void
-  onIgnore: (suggestion: ColumnSuggestion) => void
-  onCustomise: (suggestion: ColumnSuggestion) => void
+  /** The row whose preview is shown. */
+  selectedId: string | null
+  onSelect: (id: string) => void
+  checkedIds: string[]
+  onCheckedChange: Dispatch<SetStateAction<string[]>>
+  onAddMany: (suggestions: ColumnSuggestion[]) => void
+  onIgnoreMany: (suggestions: ColumnSuggestion[]) => void
   onRestoreIgnored: () => void
+  /** Shown under the selected row (narrow screens). */
+  selectedDetail?: ReactNode
+  shots?: HZDRShot[]
 }) {
   const [showAll, setShowAll] = useState(false)
-  const shown = showAll ? suggestions : suggestions.slice(0, FIRST_SUGGESTIONS)
+  const shown = useMemo(
+    () => (showAll ? suggestions : suggestions.slice(0, FIRST_SUGGESTIONS)),
+    [showAll, suggestions]
+  )
   const hidden = suggestions.length - shown.length
+  // Each row's line is worked out once per list and campaign, not per render.
+  const summaries = useMemo(
+    () =>
+      new Map(
+        suggestions.map((suggestion) => [
+          suggestion.id,
+          suggestionSummary(suggestion, shots),
+        ])
+      ),
+    [shots, suggestions]
+  )
+  // Ticks of suggestions no longer listed (added, ignored) do not count.
+  const ticked = useMemo(() => {
+    const ids = new Set(checkedIds)
+    return suggestions.filter((suggestion) => ids.has(suggestion.id))
+  }, [checkedIds, suggestions])
+  const tickedIds = useMemo(
+    () => new Set(ticked.map((suggestion) => suggestion.id)),
+    [ticked]
+  )
+  const shownTicked = shown.filter((suggestion) =>
+    tickedIds.has(suggestion.id)
+  ).length
+
+  const toggle = useCallback(
+    (id: string) =>
+      onCheckedChange((current) =>
+        current.includes(id)
+          ? current.filter((entry) => entry !== id)
+          : [...current, id]
+      ),
+    [onCheckedChange]
+  )
+  const tickAllShown = (tick: boolean) => {
+    const shownIds = new Set(shown.map((suggestion) => suggestion.id))
+    onCheckedChange((current) =>
+      tick
+        ? [...new Set([...current, ...shownIds])]
+        : current.filter((id) => !shownIds.has(id))
+    )
+  }
+
   return (
     <Paper withBorder radius={4} p="sm" bg="var(--mantine-color-teal-0)">
       <Stack gap="sm">
@@ -241,9 +351,9 @@ export function ContextAssistant({
             Suggested columns
           </Text>
           <Text size="xs" c="dimmed">
-            Picked from what this campaign’s shots record. Add the ones you want
-            (each is saved to {destination} straight away), ignore the rest, or
-            customise one in the builder first.
+            Picked from what this campaign’s shots record. Tick the ones you
+            want and add them to {destination} in one go, or select one to
+            preview it first.
           </Text>
         </Stack>
         {loading ? (
@@ -264,17 +374,54 @@ export function ContextAssistant({
               : 'Nothing to suggest yet: no recorded value varies from shot to shot. Use “Build a column myself” instead.'}
           </Text>
         ) : null}
-        {shown.map((suggestion) => (
-          <SuggestionCard
-            key={suggestion.id}
-            suggestion={suggestion}
-            busy={busy}
-            previewContext={{ sourceKey, exampleShot, shots }}
-            onAdd={() => onAdd(suggestion)}
-            onIgnore={() => onIgnore(suggestion)}
-            onCustomise={() => onCustomise(suggestion)}
-          />
-        ))}
+        {suggestions.length ? (
+          <Group justify="space-between" gap="xs">
+            <Checkbox
+              size="xs"
+              label="Tick all shown"
+              checked={shownTicked > 0 && shownTicked === shown.length}
+              indeterminate={shownTicked > 0 && shownTicked < shown.length}
+              onChange={(event) => tickAllShown(event.currentTarget.checked)}
+            />
+            <Group gap="xs">
+              <Button
+                size="xs"
+                leftSection={<IconCheck size={14} />}
+                disabled={!ticked.length || busy}
+                onClick={() => onAddMany(ticked)}
+              >
+                {ticked.length
+                  ? `Add ${ticked.length} column${ticked.length === 1 ? '' : 's'}`
+                  : 'Add ticked columns'}
+              </Button>
+              <Button
+                size="xs"
+                variant="default"
+                leftSection={<IconEyeOff size={14} />}
+                disabled={!ticked.length}
+                onClick={() => onIgnoreMany(ticked)}
+              >
+                Ignore ticked
+              </Button>
+            </Group>
+          </Group>
+        ) : null}
+        <Stack gap={6}>
+          {shown.map((suggestion) => (
+            <SuggestionRow
+              key={suggestion.id}
+              suggestion={suggestion}
+              summary={summaries.get(suggestion.id) ?? ''}
+              checked={tickedIds.has(suggestion.id)}
+              selected={suggestion.id === selectedId}
+              detail={
+                suggestion.id === selectedId ? selectedDetail : undefined
+              }
+              onToggle={toggle}
+              onSelect={onSelect}
+            />
+          ))}
+        </Stack>
         {hidden > 0 ? (
           <Button variant="light" size="xs" onClick={() => setShowAll(true)}>
             Show {hidden} more suggestion{hidden === 1 ? '' : 's'}

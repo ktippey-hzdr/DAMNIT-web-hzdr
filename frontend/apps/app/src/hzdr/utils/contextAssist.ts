@@ -1,7 +1,17 @@
-import type { ColumnSuggestion, HZDRDatasetOption } from '../types'
+import type { ColumnSuggestion, HZDRDatasetOption, HZDRShot } from '../types'
 
-import { buildComputedFieldSnippet, pythonNameFromTitle } from './context'
+import { campaignValues, formatPreviewNumber } from './columnPreview'
+import {
+  buildComputedFieldSnippet,
+  extractPythonFunctionName,
+  makeContextVariableBlockUnique,
+  mergeImportsAtTop,
+  parseContextVariableBlocks,
+  pythonNameFromTitle,
+  splitPythonImportBlock,
+} from './context'
 import { formatShape } from './hdf5'
+import { metadataFieldLabel } from './metadata'
 
 /** How many HDF5 datasets of the example shot are offered at most. */
 export const MAX_DATASET_SUGGESTIONS = 8
@@ -157,4 +167,124 @@ export function saveIgnoredSuggestions(campaign: string, ids: string[]) {
   } catch {
     // Private windows and blocked storage: ignoring lasts for this visit.
   }
+}
+
+const KIND_WORDS: Record<string, string> = {
+  image: 'An image',
+  line: 'A lineout',
+  scalar: 'One number',
+}
+
+/**
+ * A suggestion in one short line for its row: how many shots record it and
+ * the range of its values ("16 of 16 shots · 0.836–0.924 nC"), or its labels;
+ * for a dataset, what it holds on the example shot.
+ */
+export function suggestionSummary(
+  suggestion: ColumnSuggestion,
+  shots: HZDRShot[]
+) {
+  if (suggestion.origin === 'hdf5') {
+    return `${KIND_WORDS[suggestion.type] ?? 'A dataset'} on the example shot`
+  }
+  const across = shots.length ? campaignValues(shots, suggestion.field) : null
+  const recorded = across
+    ? `${across.recorded} of ${across.total} shots`
+    : `${suggestion.count} of ${suggestion.total} shots`
+  if (!across?.recorded) {
+    return suggestion.examples.length
+      ? `${recorded} · e.g. ${suggestion.examples.slice(0, 3).join(', ')}`
+      : recorded
+  }
+  const unit = suggestion.unit ? ` ${suggestion.unit}` : ''
+  if (suggestion.type !== 'text' && across.numbers.length) {
+    let low = Infinity
+    let high = -Infinity
+    for (const { value } of across.numbers) {
+      if (value < low) low = value
+      if (value > high) high = value
+    }
+    const range =
+      low === high
+        ? formatPreviewNumber(low)
+        : `${formatPreviewNumber(low)}–${formatPreviewNumber(high)}`
+    return `${recorded} · ${range}${unit}`
+  }
+  const count = across.labels.length
+  return `${recorded} · ${count} label${count === 1 ? '' : 's'}`
+}
+
+/**
+ * Several suggestions appended to a context file in one go, the same way a
+ * single Add does it: imports at the top, function names made unique. One
+ * already read by the file (or by a block added before it) is skipped.
+ */
+export function appendSuggestionBlocks(
+  contextContent: string,
+  suggestions: ColumnSuggestion[]
+) {
+  let fileContent = contextContent
+  const added: ColumnSuggestion[] = []
+  const skipped: ColumnSuggestion[] = []
+  for (const suggestion of suggestions) {
+    const { imports, body } = splitPythonImportBlock(suggestion.block)
+    if (
+      isAlreadyInContext(suggestion, fileContent) ||
+      !extractPythonFunctionName(body)
+    ) {
+      skipped.push(suggestion)
+      continue
+    }
+    const uniqueBody = makeContextVariableBlockUnique(
+      body,
+      parseContextVariableBlocks(fileContent)
+    )
+    fileContent = `${mergeImportsAtTop(fileContent, imports).trimEnd()}\n\n${uniqueBody.trimEnd()}\n`
+    added.push(suggestion)
+  }
+  return { fileContent, added, skipped }
+}
+
+/** The builder's display for a dataset kind, as its suggestion uses it. */
+export function datasetDisplay(kind: string) {
+  return DATASET_DISPLAYS[kind]?.display ?? 'hdf5'
+}
+
+/**
+ * The builder form state for a deep link's input (`?add=`), in the format
+ * the builder's own inputs use: `metadata:<path>` for a recorded field, or
+ * `hdf5:<dataset>` for a dataset of the example shot, by its builder name or
+ * its name in the file. Null when the campaign has no such input.
+ */
+export function inputFormState(
+  input: string,
+  {
+    metadataKeys,
+    datasetOptions,
+  }: { metadataKeys: Set<string>; datasetOptions: HZDRDatasetOption[] }
+) {
+  if (input.startsWith('metadata:')) {
+    const path = input.slice('metadata:'.length)
+    if (!path || !metadataKeys.has(path)) return null
+    return {
+      fieldKind: 'metadata',
+      selectedInputs: [input],
+      fieldTitle: metadataFieldLabel(path),
+    }
+  }
+  if (input.startsWith('hdf5:')) {
+    const name = input.slice('hdf5:'.length).replace(/^\/+/, '')
+    const option = datasetOptions.find(
+      (candidate) =>
+        candidate.value === `hdf5:${name}` ||
+        candidate.previewName.replace(/^\/+/, '') === name
+    )
+    if (!name || !option) return null
+    return {
+      fieldKind: datasetDisplay(option.kind),
+      selectedInputs: [option.value],
+      fieldTitle: datasetTitle(option.name),
+    }
+  }
+  return null
 }
