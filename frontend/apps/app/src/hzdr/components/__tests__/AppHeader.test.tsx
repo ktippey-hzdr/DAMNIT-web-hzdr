@@ -51,9 +51,10 @@ describe('AppHeader', () => {
       '/home'
     )
     expect(screen.queryByText('Inspect sources')).toBeNull()
-    expect(
-      screen.getByRole('link', { name: 'Flow monitor' })
-    ).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('link', { name: 'Flow monitor' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
   })
 
   it('keeps every tab reachable from the phone menu', async () => {
@@ -65,7 +66,9 @@ describe('AppHeader', () => {
         within(menu).getByRole('menuitem', { name: label })
       ).toBeInTheDocument()
     }
-    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Review matches' }))
+    fireEvent.click(
+      within(menu).getByRole('menuitem', { name: 'Review matches' })
+    )
     expect(screen.getByTestId('where')).toHaveTextContent('/review-matches')
   })
 })

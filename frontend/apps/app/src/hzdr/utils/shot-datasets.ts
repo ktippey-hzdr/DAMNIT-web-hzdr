@@ -104,7 +104,11 @@ function weakTokens(shot: ShotDatasetShot) {
   const shotId = shot.metadata.shot_id
   // A bare count ("7") would match any index in a path: only ids that name
   // themselves ("shot-000007", "draco-0007") are used.
-  if (typeof shotId === 'string' && shotId.length >= 4 && !/^\d+$/.test(shotId)) {
+  if (
+    typeof shotId === 'string' &&
+    shotId.length >= 4 &&
+    !/^\d+$/.test(shotId)
+  ) {
     tokens.add(shotId)
   }
   return tokens

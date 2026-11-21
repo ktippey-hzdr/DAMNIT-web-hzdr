@@ -9,7 +9,13 @@ import {
   type ShotDatasetNode,
 } from '../utils/shot-datasets'
 
-function DatasetRow({ dataset, label }: { dataset: HZDRHDF5Dataset; label: string }) {
+function DatasetRow({
+  dataset,
+  label,
+}: {
+  dataset: HZDRHDF5Dataset
+  label: string
+}) {
   return (
     <Group
       justify="space-between"
@@ -58,7 +64,11 @@ function FolderNode({
       </summary>
       {open ? (
         <Stack gap={2} pl={12} mt={2}>
-          <TreeNodes nodes={node.children} depth={depth + 1} expandAll={expandAll} />
+          <TreeNodes
+            nodes={node.children}
+            depth={depth + 1}
+            expandAll={expandAll}
+          />
         </Stack>
       ) : null}
     </details>
@@ -78,7 +88,11 @@ function TreeNodes({
     <>
       {nodes.map((node) =>
         node.dataset ? (
-          <DatasetRow key={node.path} dataset={node.dataset} label={node.label} />
+          <DatasetRow
+            key={node.path}
+            dataset={node.dataset}
+            label={node.label}
+          />
         ) : (
           <FolderNode
             key={node.path}

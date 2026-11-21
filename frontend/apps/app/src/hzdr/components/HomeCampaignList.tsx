@@ -2,6 +2,7 @@ import { Anchor, Badge, Card, Group, Stack, Text } from '@mantine/core'
 import { Link } from 'react-router'
 
 import { formatShotTime } from '../utils/format'
+
 import type { HomeCampaignSummary } from './homeCampaignSummary'
 
 function plural(count: number, one: string, many: string) {

@@ -52,7 +52,9 @@ describe('CampaignCards status strip', () => {
       'https://wiki.example/radbio'
     )
     expect(
-      await screen.findByRole('link', { name: 'Shotcounter active, 1 watchdog' })
+      await screen.findByRole('link', {
+        name: 'Shotcounter active, 1 watchdog',
+      })
     ).toHaveAttribute('href', '/flow-monitor')
   })
 
@@ -70,8 +72,9 @@ describe('CampaignCards status strip', () => {
     )
     expect(await screen.findByText('no page linked')).toBeInTheDocument()
     expect(screen.getByText('not registered yet')).toBeInTheDocument()
-    expect(
-      screen.getByRole('link', { name: 'Flow monitor' })
-    ).toHaveAttribute('href', '/flow-monitor')
+    expect(screen.getByRole('link', { name: 'Flow monitor' })).toHaveAttribute(
+      'href',
+      '/flow-monitor'
+    )
   })
 })

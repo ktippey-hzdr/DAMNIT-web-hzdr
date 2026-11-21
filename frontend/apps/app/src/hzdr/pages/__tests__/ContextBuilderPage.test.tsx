@@ -12,6 +12,7 @@ import { MantineProvider } from '@mantine/core'
 import { MemoryRouter, Route, Routes } from 'react-router'
 
 import { ContextBuilderPage } from '../ContextBuilderPage'
+import { formatShotLabel } from '../../utils/format'
 
 vi.mock('@damnit-frontend/ui', () => ({
   HomePage: ({ main }: { main: ReactNode }) => main,
@@ -104,15 +105,15 @@ describe('ContextBuilderPage example shots', () => {
       // duplicate option values fail here just as they do in the browser.
       const selector = screen.getByRole('textbox', { name: 'Example shot' })
       await waitFor(() =>
-        expect(selector).toHaveValue(`${shotNumber} - 2026-05-05T08:15:00Z`)
+        expect(selector).toHaveValue(formatShotLabel(shotNumber, '2026-05-05T08:15:00Z'))
       )
       await user.click(selector)
       await user.click(
         await screen.findByRole('option', {
-          name: `${shotNumber} - 2026-05-06T08:15:00Z`,
+          name: formatShotLabel(shotNumber, '2026-05-06T08:15:00Z'),
         })
       )
-      expect(selector).toHaveValue(`${shotNumber} - 2026-05-06T08:15:00Z`)
+      expect(selector).toHaveValue(formatShotLabel(shotNumber, '2026-05-06T08:15:00Z'))
       await waitFor(() =>
         expect(fetchMock).toHaveBeenCalledWith(
           withKeys
@@ -149,11 +150,11 @@ describe('ContextBuilderPage example shots', () => {
       await user.click(
         screen.getByRole('button', { name: 'Use a shot with this field' })
       )
-      expect(selector).toHaveValue(`${shotNumber} - 2026-05-05T08:15:00Z`)
+      expect(selector).toHaveValue(formatShotLabel(shotNumber, '2026-05-05T08:15:00Z'))
       await user.click(selector)
       await user.click(
         await screen.findByRole('option', {
-          name: `${shotNumber} - 2026-05-06T08:15:00Z`,
+          name: formatShotLabel(shotNumber, '2026-05-06T08:15:00Z'),
         })
       )
       await user.click(data)

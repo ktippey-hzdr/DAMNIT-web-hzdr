@@ -18,14 +18,18 @@ vi.mock('@damnit-frontend/ui', () => ({
   HomePage: ({ main }: { main: ReactNode }) => main,
 }))
 vi.mock('../../components/AppHeader', () => ({ AppHeader: () => null }))
-vi.mock('../../components/CampaignCards', () => ({ CampaignCards: () => null }))
+vi.mock('../../components/ShotCampaignStrip', () => ({
+  ShotCampaignStrip: () => null,
+}))
+vi.mock('../../components/ShotDetailPanel', () => ({
+  ShotDetailPanel: () => null,
+}))
 vi.mock('../../components/ShotTable', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../components/ShotTable')>()),
   SelectedCellPanel: () => null,
   HZDRShotSetsPanel: ({ shots }: { shots: HZDRShot[] }) => (
     <span>{shots.length} trend records</span>
   ),
-  ShotDetailPanel: () => null,
 }))
 
 afterEach(() => {

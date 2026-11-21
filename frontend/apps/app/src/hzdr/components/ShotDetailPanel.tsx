@@ -29,16 +29,15 @@ import {
 } from '../utils/format'
 import { formatTargetLabel } from '../utils/metadata'
 import { formatShotLabel, getShotRowKey } from '../utils/shot-key'
-
-import { ShotDatasetBrowser } from './ShotDatasetTree'
-import { ShotProductPreview } from './ShotProductPreview'
 import {
-  DetailsSection,
-  StatusBadge,
   formatMetadataCorrectionDraft,
   isCorrectableMetadataKey,
   parseMetadataCorrectionDraft,
-} from './ShotTable'
+} from '../utils/shot-metadata-correction'
+
+import { ShotDatasetBrowser } from './ShotDatasetTree'
+import { ShotProductPreview } from './ShotProductPreview'
+import { DetailsSection, StatusBadge } from './ShotTable'
 
 type MetadataCorrection = (
   rowKey: string,
@@ -269,7 +268,9 @@ function MetadataCard({
               description="JSON values keep their type; plain text stays text."
               minRows={2}
               value={correctionDraft}
-              onChange={(event) => setCorrectionDraft(event.currentTarget.value)}
+              onChange={(event) =>
+                setCorrectionDraft(event.currentTarget.value)
+              }
             />
             <TextInput
               label="Reason"
@@ -377,7 +378,7 @@ export function ShotDetailPanel({
               value={shot.fired_at ? formatShotTime(shot.fired_at) : undefined}
               title={shot.fired_at}
             />
-            <ShotField label="Target">
+            <ShotField label="Target" value={target}>
               {shot.target_wiki_ref ? (
                 <Anchor
                   href={shot.target_wiki_ref}
@@ -413,16 +414,58 @@ export function ShotDetailPanel({
             <ShotField label="LabFrog record" value={shot.labfrog_record_id} />
             <ShotField label="LabFrog local count" value={localCount} />
           </SimpleGrid>
-          {/* Target without a wiki link falls back to the plain field. */}
           <ShotKeyField shotKey={shot.shot_key} />
           <ShotField label="HDF5 file">
             {shot.hdf5_path ? (
-              <Code block style={{ overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}>
+              <Code
+                block
+                style={{ overflowWrap: 'anywhere', whiteSpace: 'pre-wrap' }}
+              >
                 {shot.hdf5_path}
               </Code>
             ) : undefined}
           </ShotField>
           <ShotReviewControl shot={shot} onUpdateStatus={onUpdateStatus} />
+        </Stack>
+      </Card>
+
+      <Card withBorder radius={4} p="md">
+        <Stack gap="xs">
+          <Group justify="space-between">
+            <Title order={5}>Linked source events</Title>
+            <Badge variant="light">{shot.events?.length ?? 0}</Badge>
+          </Group>
+          {shot.events?.length ? (
+            shot.events.map((event) => (
+              <Paper key={event.event_id} withBorder radius={4} p="xs">
+                <Group justify="space-between" align="flex-start">
+                  <Stack gap={2}>
+                    <Group gap="xs">
+                      <Badge variant="light">{event.source}</Badge>
+                      <Text size="sm" fw={600}>
+                        {event.kind}
+                      </Text>
+                    </Group>
+                    <Text size="xs" c="dimmed" title={event.timestamp}>
+                      {formatShotTime(event.timestamp)} /{' '}
+                      {event.transport ?? 'unknown transport'}
+                    </Text>
+                  </Stack>
+                  <Text
+                    size="xs"
+                    c="dimmed"
+                    title={event.match_quality ?? undefined}
+                  >
+                    {matchQualityLabel(event.match_quality)}
+                  </Text>
+                </Group>
+              </Paper>
+            ))
+          ) : (
+            <Text size="sm" c="dimmed">
+              No source events are linked to this canonical shot.
+            </Text>
+          )}
         </Stack>
       </Card>
 
@@ -511,46 +554,6 @@ export function ShotDetailPanel({
               container={detail.container}
             />
           ) : null}
-        </Stack>
-      </Card>
-
-      <Card withBorder radius={4} p="md">
-        <Stack gap="xs">
-          <Group justify="space-between">
-            <Title order={5}>Linked source events</Title>
-            <Badge variant="light">{shot.events?.length ?? 0}</Badge>
-          </Group>
-          {shot.events?.length ? (
-            shot.events.map((event) => (
-              <Paper key={event.event_id} withBorder radius={4} p="xs">
-                <Group justify="space-between" align="flex-start">
-                  <Stack gap={2}>
-                    <Group gap="xs">
-                      <Badge variant="light">{event.source}</Badge>
-                      <Text size="sm" fw={600}>
-                        {event.kind}
-                      </Text>
-                    </Group>
-                    <Text size="xs" c="dimmed" title={event.timestamp}>
-                      {formatShotTime(event.timestamp)} /{' '}
-                      {event.transport ?? 'unknown transport'}
-                    </Text>
-                  </Stack>
-                  <Text
-                    size="xs"
-                    c="dimmed"
-                    title={event.match_quality ?? undefined}
-                  >
-                    {matchQualityLabel(event.match_quality)}
-                  </Text>
-                </Group>
-              </Paper>
-            ))
-          ) : (
-            <Text size="sm" c="dimmed">
-              No source events are linked to this canonical shot.
-            </Text>
-          )}
         </Stack>
       </Card>
 

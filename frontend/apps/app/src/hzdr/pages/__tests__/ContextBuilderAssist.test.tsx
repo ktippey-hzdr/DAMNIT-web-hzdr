@@ -95,13 +95,23 @@ const shots = [1, 2].map((number) => ({
   data_products: [],
 }))
 
-function setup() {
+const existingFile =
+  'from damnit_ctx import Variable\n\n\n@Variable(title="Existing")\ndef existing(run):\n    return 1\n'
+
+function setup({
+  url = '/source/radbio/context-builder',
+  fileContent = existingFile,
+  failPut = false,
+}: { url?: string; fileContent?: string; failPut?: boolean } = {}) {
   const saved: Record<string, string> = {}
+  const puts: string[] = []
   const fetchMock = vi.fn((url: string, init?: RequestInit) => {
     if (init?.method === 'PUT') {
       const { fileContent } = JSON.parse(String(init.body)) as {
         fileContent: string
       }
+      puts.push(fileContent)
+      if (failPut) return Promise.reject(new Error('offline'))
       saved[url] = fileContent
       return Promise.resolve({
         ok: true,
@@ -112,7 +122,7 @@ function setup() {
       url === `${base}/shots`
         ? shots
         : url === base
-          ? { key: 'radbio', title: 'Radbio' }
+          ? { key: 'radbio', title: 'HZDR canonical campaign (Radbio)' }
           : url.includes('/datasets/')
             ? {
                 name: 'cam/image',
@@ -142,16 +152,13 @@ function setup() {
                       ],
                       hdf5_exists: true,
                     }
-                  : {
-                      fileContent:
-                        'from damnit_ctx import Variable\n\n\n@Variable(title="Existing")\ndef existing(run):\n    return 1\n',
-                    }
+                  : { fileContent }
     return Promise.resolve({ ok: true, json: () => Promise.resolve(value) })
   })
   vi.stubGlobal('fetch', fetchMock)
   render(
     <MantineProvider>
-      <MemoryRouter initialEntries={['/source/radbio/context-builder']}>
+      <MemoryRouter initialEntries={[url]}>
         <Routes>
           <Route
             path="/source/:source_key/context-builder"
@@ -161,8 +168,10 @@ function setup() {
       </MemoryRouter>
     </MantineProvider>
   )
-  return { fetchMock, saved }
+  return { fetchMock, saved, puts }
 }
+
+const originalMatchMedia = window.matchMedia
 
 beforeEach(() => {
   vi.stubGlobal(
@@ -184,30 +193,65 @@ afterEach(() => {
   clearDatasetPreviewCache()
   vi.unstubAllGlobals()
   window.localStorage.clear()
+  window.matchMedia = originalMatchMedia
   Reflect.deleteProperty(HTMLElement.prototype, 'scrollIntoView')
 })
+
+/** A wide screen: the selected suggestion is previewed in the right column. */
+function wideScreen() {
+  window.matchMedia = ((query: string) => ({
+    ...originalMatchMedia(query),
+    matches: query.includes('min-width'),
+  })) as typeof window.matchMedia
+}
 
 const card = (title: string) =>
   screen.findByRole('article', { name: `Suggestion: ${title}` })
 
+/** Select a row: on a narrow screen its preview opens under it. */
+async function openCard(user: ReturnType<typeof userEvent.setup>, title: string) {
+  const row = await card(title)
+  await user.click(within(row).getByRole('button', { name: title }))
+  return row
+}
+
+const status = () => screen.getAllByRole('status').map((node) => node.textContent)
+
 describe('Context Builder "Help me choose"', () => {
-  it('explains each suggestion, including datasets on the example shot', async () => {
+  it('lists each suggestion in one line and explains the selected one', async () => {
+    const user = userEvent.setup()
     setup()
     const charge = await card('ICT charge (nC)')
     expect(within(charge).getByText('Top pick')).toBeInTheDocument()
-    expect(
-      within(charge).getByText(/Recorded on 2 of 2 shots, from 1.5 to 3 nC/)
-    ).toBeInTheDocument()
     expect(within(charge).getByText('Number column')).toBeInTheDocument()
+    expect(
+      within(charge).getByText('2 of 2 shots · 1.5–3 nC')
+    ).toBeInTheDocument()
+    expect(within(charge).queryByText(/Recorded on 2 of 2 shots/)).toBeNull()
+    await openCard(user, 'ICT charge (nC)')
+    const detail = within(charge).getByRole('region', {
+      name: 'Preview of ICT charge (nC)',
+    })
+    expect(
+      within(detail).getByText(/Recorded on 2 of 2 shots, from 1.5 to 3 nC/)
+    ).toBeInTheDocument()
     const image = await card('Image')
     expect(within(image).getByText('Image preview')).toBeInTheDocument()
+    expect(
+      within(image).getByText('An image on the example shot')
+    ).toBeInTheDocument()
+    await openCard(user, 'Image')
     expect(within(image).getByText(/On the example shot/)).toBeInTheDocument()
+    // One preview open at a time.
+    expect(
+      screen.queryByRole('region', { name: 'Preview of ICT charge (nC)' })
+    ).not.toBeInTheDocument()
   })
 
   it('adds a suggestion to the context file, which then drops it', async () => {
     const user = userEvent.setup()
     const { saved } = setup()
-    const charge = await card('ICT charge (nC)')
+    const charge = await openCard(user, 'ICT charge (nC)')
     await user.click(
       within(charge).getByRole('button', { name: 'Add this column' })
     )
@@ -230,10 +274,60 @@ describe('Context Builder "Help me choose"', () => {
     expect(screen.getByText(/1 already in context.py/)).toBeInTheDocument()
   })
 
+  it('adds every ticked suggestion in one save', async () => {
+    const user = userEvent.setup()
+    const { puts } = setup()
+    await card('ICT charge (nC)')
+    const add = screen.getByRole('button', { name: 'Add ticked columns' })
+    expect(add).toBeDisabled()
+    await user.click(screen.getByRole('checkbox', { name: 'Tick ICT charge (nC)' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Tick Shot group' }))
+    await user.click(screen.getByRole('button', { name: 'Add 2 columns' }))
+    await waitFor(() =>
+      expect(status()).toContain(
+        'Added 2 columns to context.py: ICT charge (nC), Shot group.'
+      )
+    )
+    expect(puts).toHaveLength(1)
+    const content = puts[0]
+    expect(content).toContain('def existing(run)')
+    expect(content).toContain('def ict_charge(')
+    expect(content).toContain('def shot_group(')
+    // The blocks' shared import is added once, at the top.
+    expect(
+      content.match(/from damnit_ctx import Skip, Variable/g)
+    ).toHaveLength(1)
+    expect(content.indexOf('import Skip')).toBeLessThan(
+      content.indexOf('@Variable')
+    )
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('article', { name: 'Suggestion: Shot group' })
+      ).not.toBeInTheDocument()
+    )
+    expect(screen.getByText(/2 already in context.py/)).toBeInTheDocument()
+  })
+
+  it('says nothing was added when the save fails, and keeps the ticks', async () => {
+    const user = userEvent.setup()
+    setup({ failPut: true })
+    await card('ICT charge (nC)')
+    await user.click(screen.getByRole('checkbox', { name: 'Tick ICT charge (nC)' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Tick Shot group' }))
+    await user.click(screen.getByRole('button', { name: 'Add 2 columns' }))
+    await waitFor(() =>
+      expect(status()).toContain(
+        'Save failed: none of the 2 columns was added to context.py.'
+      )
+    )
+    expect(screen.getByRole('checkbox', { name: 'Tick Shot group' })).toBeChecked()
+    expect(await card('ICT charge (nC)')).toBeInTheDocument()
+  })
+
   it('ignores a suggestion until it is asked for again', async () => {
     const user = userEvent.setup()
     const { saved } = setup()
-    const group = await card('Shot group')
+    const group = await openCard(user, 'Shot group')
     await user.click(
       within(group).getByRole('button', { name: 'Ignore this suggestion' })
     )
@@ -250,18 +344,34 @@ describe('Context Builder "Help me choose"', () => {
     expect(await card('Shot group')).toBeInTheDocument()
   })
 
+  it('ignores the ticked suggestions together', async () => {
+    const user = userEvent.setup()
+    const { saved } = setup()
+    await card('Image')
+    await user.click(screen.getByRole('checkbox', { name: 'Tick Shot group' }))
+    await user.click(screen.getByRole('checkbox', { name: 'Tick Image' }))
+    await user.click(screen.getByRole('button', { name: 'Ignore ticked' }))
+    expect(
+      JSON.parse(
+        window.localStorage.getItem('hzdr.contextAssist.ignored.radbio') ?? ''
+      )
+    ).toEqual(['labfrog:Shot group', 'hdf5:cam/image'])
+    expect(status()).toContain('Ignored 2 suggestions.')
+    expect(saved).toEqual({})
+    expect(screen.queryByRole('article', { name: 'Suggestion: Image' })).toBeNull()
+    expect(await card('ICT charge (nC)')).toBeInTheDocument()
+  })
+
   it('previews a suggestion on the example shot before adding it', async () => {
     const user = userEvent.setup()
     const { fetchMock } = setup()
-    const charge = await card('ICT charge (nC)')
-    await user.click(within(charge).getByRole('button', { name: 'Preview' }))
+    const charge = await openCard(user, 'ICT charge (nC)')
     expect(within(charge).getByText('1.5 nC')).toBeInTheDocument()
     expect(
       within(charge).getByText('Across the campaign: 2 of 2 shots')
     ).toBeInTheDocument()
 
-    const image = await card('Image')
-    await user.click(within(image).getByRole('button', { name: 'Preview' }))
+    const image = await openCard(user, 'Image')
     expect(await within(image).findByText('42')).toBeInTheDocument()
     expect(
       within(image).getByRole('img', { name: 'Image preview' })
@@ -271,10 +381,33 @@ describe('Context Builder "Help me choose"', () => {
     )
   })
 
+  it('previews the selected suggestion in the right column on wide screens', async () => {
+    wideScreen()
+    const user = userEvent.setup()
+    setup()
+    const charge = await card('ICT charge (nC)')
+    // The first suggestion is previewed until another is picked, beside the
+    // list rather than inside it.
+    const first = await screen.findByRole('region', {
+      name: 'Preview of ICT charge (nC)',
+    })
+    expect(charge).not.toContainElement(first)
+    expect(within(first).getByText('1.5 nC')).toBeInTheDocument()
+    const group = await card('Shot group')
+    await user.click(within(group).getByRole('button', { name: 'Shot group' }))
+    const second = screen.getByRole('region', { name: 'Preview of Shot group' })
+    expect(group).not.toContainElement(second)
+    expect(
+      screen.queryByRole('region', { name: 'Preview of ICT charge (nC)' })
+    ).not.toBeInTheDocument()
+    await user.click(within(second).getByRole('button', { name: 'Show code' }))
+    expect(within(second).getByText(/def shot_group/)).toBeInTheDocument()
+  })
+
   it('customises a suggestion in the builder form', async () => {
     const user = userEvent.setup()
     setup()
-    const group = await card('Shot group')
+    const group = await openCard(user, 'Shot group')
     await user.click(within(group).getByRole('button', { name: 'Customise' }))
     expect(screen.getByRole('textbox', { name: 'Column title' })).toHaveValue(
       'Shot group'
@@ -282,5 +415,141 @@ describe('Context Builder "Help me choose"', () => {
     expect(screen.getByRole('textbox', { name: 'Data to use' })).toHaveValue(
       'Shot group (2/2 shots)'
     )
+  })
+
+  it('names the campaign in the subtitle', async () => {
+    setup()
+    expect(await screen.findByText(/Choose columns for the Radbio shot table/)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Add columns' })).toBeInTheDocument()
+  })
+})
+
+const twoColumns = `from damnit_ctx import Variable
+
+
+@Variable(title="First")
+def first(run):
+    return 1
+
+
+@Variable(title="Second")
+def second(run):
+    return 2
+`
+
+describe('Context Builder existing columns', () => {
+  it('lists the file’s columns and moves one', async () => {
+    const user = userEvent.setup()
+    const { puts } = setup({ fileContent: twoColumns })
+    const first = await screen.findByRole('listitem', { name: 'Column: First' })
+    expect(
+      within(first).getByRole('button', { name: 'Move First up' })
+    ).toBeDisabled()
+    await user.click(
+      within(first).getByRole('button', { name: 'Move First down' })
+    )
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0].indexOf('def second')).toBeLessThan(
+      puts[0].indexOf('def first')
+    )
+    expect(status()).toContain('Moved first')
+    const items = await screen.findAllByRole('listitem')
+    expect(items.map((item) => item.getAttribute('aria-label'))).toEqual([
+      'Column: Second',
+      'Column: First',
+    ])
+  })
+
+  it('deletes a column only after confirming', async () => {
+    const user = userEvent.setup()
+    const { puts } = setup({ fileContent: twoColumns })
+    const second = await screen.findByRole('listitem', {
+      name: 'Column: Second',
+    })
+    await user.click(within(second).getByRole('button', { name: 'Delete Second' }))
+    const confirm = within(second).getByRole('group', {
+      name: 'Confirm deleting Second',
+    })
+    await user.click(within(confirm).getByRole('button', { name: 'Cancel' }))
+    expect(puts).toHaveLength(0)
+    await user.click(within(second).getByRole('button', { name: 'Delete Second' }))
+    await user.click(
+      within(
+        within(second).getByRole('group', { name: 'Confirm deleting Second' })
+      ).getByRole('button', { name: 'Delete' })
+    )
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toContain('def first')
+    expect(puts[0]).not.toContain('def second')
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('listitem', { name: 'Column: Second' })
+      ).not.toBeInTheDocument()
+    )
+  })
+
+  it('loads a column into the builder to replace it', async () => {
+    const user = userEvent.setup()
+    setup({ fileContent: twoColumns })
+    const second = await screen.findByRole('listitem', {
+      name: 'Column: Second',
+    })
+    await user.click(within(second).getByRole('button', { name: 'Edit Second' }))
+    expect(screen.getByRole('textbox', { name: 'Column title' })).toHaveValue(
+      'Second'
+    )
+    expect(within(second).getByText('Editing')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Replace Second' })
+    ).toBeInTheDocument()
+    await user.click(within(second).getByRole('button', { name: 'Stop editing' }))
+    expect(
+      screen.queryByRole('button', { name: 'Replace Second' })
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('Context Builder deep link (?add=)', () => {
+  it('opens the builder with an HDF5 dataset chosen', async () => {
+    const { fetchMock } = setup({
+      url: '/source/radbio/context-builder?add=hdf5:cam/image',
+    })
+    expect(
+      await screen.findByRole('textbox', { name: 'Column title' })
+    ).toHaveValue('Image')
+    expect(screen.getByRole('textbox', { name: 'Data to use' })).toHaveValue(
+      'cam/image (uint16, 64x64)'
+    )
+    expect(
+      screen.getByRole('textbox', { name: 'What should this column do?' })
+    ).toHaveValue(expect.stringMatching(/image/i))
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        expect.stringContaining('/datasets/cam/image')
+      )
+    )
+  })
+
+  it('opens the builder with a recorded field chosen', async () => {
+    setup({
+      url: `/source/radbio/context-builder?add=${encodeURIComponent('metadata:labfrog_variables.ICT charge.value')}`,
+    })
+    expect(
+      await screen.findByRole('textbox', { name: 'Column title' })
+    ).toHaveValue('ICT charge')
+    expect(screen.getByRole('textbox', { name: 'Data to use' })).toHaveValue(
+      'ICT charge (2/2 shots)'
+    )
+  })
+
+  it('stays in "Help me choose" with a note for an unknown input', async () => {
+    setup({ url: '/source/radbio/context-builder?add=hdf5:missing/data' })
+    expect(
+      await screen.findByText(/Could not find .* in this campaign/)
+    ).toBeInTheDocument()
+    expect(await card('ICT charge (nC)')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('textbox', { name: 'Column title' })
+    ).not.toBeInTheDocument()
   })
 })

@@ -285,8 +285,8 @@ export function HZDRDocsPage() {
                     shots. For anything else use the filter row.
                   </List.Item>
                   <List.Item>
-                    <b>Choose columns</b> under Columns; <b>Add columns</b>{' '}
-                    next to it makes new ones (see{' '}
+                    <b>Choose columns</b> under Columns; <b>Add columns</b> next
+                    to it makes new ones (see{' '}
                     <Anchor href="#own-columns">Your own columns</Anchor>).{' '}
                     <b>Move a column</b> by dragging its header onto another;{' '}
                     <b>Reset order</b> puts them back. Your choice is kept per
@@ -503,8 +503,7 @@ def laser_energy_mj(run, laser_energy_j=None):
                   The generated endpoint reference is the{' '}
                   <Anchor href="/api-docs">API reference</Anchor>. The server
                   runbook (deploying, rebuilding a campaign by hand) is{' '}
-                  <Code>hzdr/docs/guides/operations.md</Code> in the
-                  repository.
+                  <Code>hzdr/docs/guides/operations.md</Code> in the repository.
                 </Text>
               </DocSection>
             </Stack>

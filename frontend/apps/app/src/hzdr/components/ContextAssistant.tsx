@@ -414,9 +414,7 @@ export function ContextAssistant({
               summary={summaries.get(suggestion.id) ?? ''}
               checked={tickedIds.has(suggestion.id)}
               selected={suggestion.id === selectedId}
-              detail={
-                suggestion.id === selectedId ? selectedDetail : undefined
-              }
+              detail={suggestion.id === selectedId ? selectedDetail : undefined}
               onToggle={toggle}
               onSelect={onSelect}
             />

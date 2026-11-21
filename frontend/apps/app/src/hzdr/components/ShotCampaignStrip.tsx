@@ -71,7 +71,8 @@ export function ShotCampaignStrip({ sourceKey }: { sourceKey: string }) {
     }
   }, [sourceKey])
 
-  const watchdogCount = producers?.watchdog_hosts.length
+  const watchdogCount = producers?.watchdog_hosts?.length
+  const shotcounterStatus = producers?.shotcounter?.status
   return (
     <Group gap={6} wrap="wrap">
       {scicat?.dataset_url ? (
@@ -98,8 +99,8 @@ export function ShotCampaignStrip({ sourceKey }: { sourceKey: string }) {
         <Chip>Wiki: none</Chip>
       )}
       <Chip title="As seen in the catalog">
-        {producers
-          ? `Shotcounter ${producers.shotcounter.status}`
+        {shotcounterStatus
+          ? `Shotcounter ${shotcounterStatus}`
           : 'Shotcounter: unknown'}
       </Chip>
       <Chip title="Watchdog computers seen in the catalog">

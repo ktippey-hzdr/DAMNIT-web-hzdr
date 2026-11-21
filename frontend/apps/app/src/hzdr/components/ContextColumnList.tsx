@@ -85,7 +85,11 @@ export function ContextColumnList({
               </Stack>
               <Group gap={4} wrap="nowrap" style={{ flexShrink: 0 }}>
                 {editing ? (
-                  <Button size="compact-xs" variant="subtle" onClick={onStopEditing}>
+                  <Button
+                    size="compact-xs"
+                    variant="subtle"
+                    onClick={onStopEditing}
+                  >
                     Stop editing
                   </Button>
                 ) : (

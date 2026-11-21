@@ -224,9 +224,7 @@ export function ContextBuilderPage() {
   const [selectedSuggestionId, setSelectedSuggestionId] = useState<
     string | null
   >(null)
-  const [checkedSuggestionIds, setCheckedSuggestionIds] = useState<string[]>(
-    []
-  )
+  const [checkedSuggestionIds, setCheckedSuggestionIds] = useState<string[]>([])
   const [shotsLoaded, setShotsLoaded] = useState(false)
   const [shotDetailLoadedPath, setShotDetailLoadedPath] = useState<string>()
   const [deepLinkNote, setDeepLinkNote] = useState('')
@@ -421,7 +419,10 @@ export function ContextBuilderPage() {
   const canBuildColumn = selectedInputs.length > 0
   const canSaveGeneratedColumn =
     canBuildColumn && Boolean(extractPythonFunctionName(generatedDraft))
-  const contextVariables = parseContextVariableBlocks(contextContent)
+  const contextVariables = useMemo(
+    () => parseContextVariableBlocks(contextContent),
+    [contextContent]
+  )
   const selectedColumnIndex = contextVariables.findIndex(
     (block) => block.id === selectedColumnId
   )
@@ -734,7 +735,8 @@ export function ContextBuilderPage() {
     }
     appliedShotRef.current = addShot
     const index = shots.findIndex(
-      (shot) => shot.shot_key === addShot || String(shot.shot_number) === addShot
+      (shot) =>
+        shot.shot_key === addShot || String(shot.shot_number) === addShot
     )
     if (index >= 0) setSelectedShotIndex(index)
   }, [addShot, shots, shotsLoaded])
@@ -1124,6 +1126,20 @@ export function ContextBuilderPage() {
       setFieldTitle(nextTitle)
     }
   }
+  const campaignName = campaignTitle(source?.title) || source_key
+  const suggestionDetail = selectedSuggestion ? (
+    <SuggestionDetail
+      key={selectedSuggestion.id}
+      suggestion={selectedSuggestion}
+      busy={saving || !contextFile}
+      sourceKey={source_key}
+      exampleShot={selectedShot}
+      shots={shots}
+      onAdd={addSuggestion}
+      onIgnore={ignoreSuggestion}
+      onCustomise={customiseSuggestion}
+    />
+  ) : null
   return (
     <HomePage
       header={<AppHeader />}
@@ -1132,11 +1148,11 @@ export function ContextBuilderPage() {
           <Stack gap="md">
             <Group justify="space-between">
               <Stack gap={2}>
-                <Title order={3}>Context builder</Title>
+                <Title order={3}>Add columns</Title>
                 <Text size="sm" c="dimmed">
-                  Add columns to the shot table for{' '}
-                  {source?.title ?? source_key}: take a suggestion, or choose a
-                  field yourself and check it on an example shot.
+                  Choose columns for the {campaignName} shot table: tick
+                  suggestions, or build one yourself and check it on an example
+                  shot.
                 </Text>
               </Stack>
               <Button
@@ -1151,6 +1167,11 @@ export function ContextBuilderPage() {
               <Grid.Col span={{ base: 12, lg: 5 }}>
                 <Card withBorder radius={4} p="md">
                   <Stack gap="md">
+                    {deepLinkNote ? (
+                      <Text size="sm" c="orange.8" role="status">
+                        {deepLinkNote}
+                      </Text>
+                    ) : null}
                     <SegmentedControl
                       fullWidth
                       aria-label="How to add columns"
@@ -1194,16 +1215,23 @@ export function ContextBuilderPage() {
                               value ? Number(value) : undefined
                             )
                           }
-                          data={shots.map((shot, index) => ({
-                            value: index.toString(),
-                            label: `${shot.shot_number} - ${shot.fired_at}`,
-                          }))}
+                          data={exampleShotOptions}
                         />
                       </SimpleGrid>
                       <Text size="xs" c="dimmed">
-                        Source: {source?.title ?? source_key}
+                        Campaign: {campaignName}
                       </Text>
                     </ContextBuilderDisclosure>
+                    <Paper
+                      withBorder
+                      radius={4}
+                      p="sm"
+                      bg="var(--mantine-color-gray-0)"
+                    >
+                      <Text size="sm" c="dimmed" role="status">
+                        {saveStatus || contextFile?.path || '-'}
+                      </Text>
+                    </Paper>
                     {mode === 'help' ? (
                       <ContextAssistant
                         suggestions={openSuggestions}
@@ -1213,12 +1241,14 @@ export function ContextBuilderPage() {
                         busy={saving || !contextFile}
                         ignoredCount={ignoredOpenCount}
                         addedCount={inContextCount}
-                        onAdd={addSuggestion}
-                        onIgnore={ignoreSuggestion}
-                        onCustomise={customiseSuggestion}
+                        selectedId={selectedSuggestion?.id ?? null}
+                        onSelect={selectSuggestion}
+                        checkedIds={checkedSuggestionIds}
+                        onCheckedChange={setCheckedSuggestionIds}
+                        onAddMany={addSuggestions}
+                        onIgnoreMany={ignoreSuggestions}
                         onRestoreIgnored={() => updateIgnoredSuggestions([])}
-                        sourceKey={source_key}
-                        exampleShot={selectedShot}
+                        selectedDetail={wide ? undefined : suggestionDetail}
                         shots={shots}
                       />
                     ) : null}
@@ -1476,25 +1506,36 @@ export function ContextBuilderPage() {
                         ) : null}
                       </>
                     ) : null}
-                    <Paper
-                      withBorder
-                      radius={4}
-                      p="sm"
-                      bg="var(--mantine-color-gray-0)"
-                    >
-                      <Text size="sm" c="dimmed">
-                        {saveStatus || contextFile?.path || '-'}
-                      </Text>
-                    </Paper>
                   </Stack>
                 </Card>
               </Grid.Col>
               <Grid.Col span={{ base: 12, lg: 7 }}>
                 <Stack gap="sm">
+                  {mode === 'help' && wide ? (
+                    <div
+                      style={{
+                        position: 'sticky',
+                        top: 'calc(var(--app-shell-header-offset, 0rem) + var(--mantine-spacing-md))',
+                        zIndex: 2,
+                        maxHeight:
+                          'calc(100vh - var(--app-shell-header-offset, 0rem) - var(--app-shell-footer-offset, 0rem) - 2 * var(--mantine-spacing-md))',
+                        overflowY: 'auto',
+                        background: 'var(--mantine-color-body)',
+                      }}
+                    >
+                      {suggestionDetail ?? (
+                        <Paper withBorder radius={4} p="sm">
+                          <Text size="sm" c="dimmed">
+                            Select a suggestion to preview it here.
+                          </Text>
+                        </Paper>
+                      )}
+                    </div>
+                  ) : null}
                   <ContextBuilderPanel
                     tone="gray"
                     title="Context file and existing columns"
-                    description="Choose the destination, manage existing columns, and add the generated variable."
+                    description="Choose the file, then edit, reorder or delete its columns."
                   >
                     <Group justify="space-between" gap="xs">
                       <Badge variant="light" radius={4}>
@@ -1509,6 +1550,15 @@ export function ContextBuilderPage() {
                             Add to context
                           </Button>
                         ) : null}
+                        {mode === 'build' && selectedContextVariable ? (
+                          <Button
+                            variant="light"
+                            onClick={replaceSelectedColumn}
+                            disabled={!canSaveGeneratedColumn}
+                          >
+                            Replace {selectedContextVariable.title}
+                          </Button>
+                        ) : null}
                         <Button onClick={saveManualContext}>
                           Save {selectedContextFile}
                         </Button>
@@ -1521,113 +1571,50 @@ export function ContextBuilderPage() {
                         </Button>
                       </Group>
                     </Group>
-                    <SimpleGrid cols={{ base: 1, md: 2 }} spacing="sm">
-                      <Stack gap={6}>
-                        <Select
-                          label="Context file"
-                          description="The shot table uses the active file, context.py."
-                          value={selectedContextFile}
-                          onChange={loadContextVariant}
-                          data={contextFiles.map((entry) => ({
-                            value: entry.name,
-                            label: entry.active
-                              ? `${entry.name} (active)`
-                              : entry.name,
-                          }))}
-                          searchable
-                        />
-                        {selectedContextFile !== 'context.py' ? (
-                          <Button
-                            variant="light"
-                            onClick={makeContextActive}
-                            title="Write this variant (as shown in the editor) to context.py, keeping the current context.py as context_previous.py."
-                          >
-                            Make {selectedContextFile} active
-                          </Button>
-                        ) : null}
-                      </Stack>
-                      <Paper withBorder radius={4} p="sm">
-                        <Stack gap="xs">
-                          <Select
-                            label="Selected existing column"
-                            description="The actions below apply to this column."
-                            value={selectedColumnId}
-                            onChange={selectAndLoadColumn}
-                            data={contextVariables.map((block, index) => ({
-                              value: block.id,
-                              label: block.title
-                                ? `${index + 1}. ${block.title} (${block.name})`
-                                : `${index + 1}. ${block.name}`,
-                            }))}
-                            placeholder="Choose a @Variable"
-                            searchable
-                          />
-                          {selectedContextVariable ? (
-                            <Text size="xs" c="dimmed">
-                              Position {selectedColumnIndex + 1} of{' '}
-                              {contextVariables.length}
-                            </Text>
-                          ) : null}
-                          <Group gap="xs">
-                            <Button
-                              size="xs"
-                              variant="light"
-                              onClick={() => {
-                                setSelectedColumnId(null)
-                                setSaveStatus(
-                                  'Existing column deselected. Add to context will create a new column.'
-                                )
-                              }}
-                              disabled={!selectedContextVariable}
-                            >
-                              Deselect / new column
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="light"
-                              onClick={replaceSelectedColumn}
-                              disabled={
-                                !selectedContextVariable ||
-                                !canSaveGeneratedColumn
-                              }
-                            >
-                              Replace selected
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="light"
-                              leftSection={<IconArrowUp size={16} />}
-                              onClick={() => moveSelectedColumn(-1)}
-                              disabled={selectedColumnIndex <= 0}
-                            >
-                              Move selected up
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="light"
-                              leftSection={<IconArrowDown size={16} />}
-                              onClick={() => moveSelectedColumn(1)}
-                              disabled={
-                                selectedColumnIndex < 0 ||
-                                selectedColumnIndex >=
-                                  contextVariables.length - 1
-                              }
-                            >
-                              Move selected down
-                            </Button>
-                            <Button
-                              size="xs"
-                              variant="light"
-                              color="red"
-                              onClick={deleteSelectedColumn}
-                              disabled={!selectedContextVariable}
-                            >
-                              Delete selected column
-                            </Button>
-                          </Group>
-                        </Stack>
-                      </Paper>
-                    </SimpleGrid>
+                    <Group gap="xs" align="flex-end">
+                      <Select
+                        label="Context file"
+                        description="The shot table uses the active file, context.py."
+                        value={selectedContextFile}
+                        onChange={loadContextVariant}
+                        data={contextFiles.map((entry) => ({
+                          value: entry.name,
+                          label: entry.active
+                            ? `${entry.name} (active)`
+                            : entry.name,
+                        }))}
+                        searchable
+                        style={{ flex: 1, minWidth: 200 }}
+                      />
+                      {selectedContextFile !== 'context.py' ? (
+                        <Button
+                          variant="light"
+                          onClick={makeContextActive}
+                          title="Write this variant (as shown in the editor) to context.py, keeping the current context.py as context_previous.py."
+                        >
+                          Make {selectedContextFile} active
+                        </Button>
+                      ) : null}
+                    </Group>
+                    <Stack gap={4}>
+                      <Text size="sm" fw={600}>
+                        Columns in {selectedContextFile} (
+                        {contextVariables.length})
+                      </Text>
+                      <ContextColumnList
+                        columns={contextVariables}
+                        selectedId={selectedContextVariable?.id ?? null}
+                        onEdit={editColumn}
+                        onStopEditing={() => {
+                          setSelectedColumnId(null)
+                          setSaveStatus(
+                            'Stopped editing. Add to context will create a new column.'
+                          )
+                        }}
+                        onMove={moveColumn}
+                        onDelete={deleteColumn}
+                      />
+                    </Stack>
                   </ContextBuilderPanel>
                   {mode === 'build' ? (
                     <>
