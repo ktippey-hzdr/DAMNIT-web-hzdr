@@ -24,6 +24,9 @@ import reviewMatchesShot from '../assets/docs/docs-review-matches.jpg'
 import shotTableShot from '../assets/docs/docs-shot-table.jpg'
 import { AppHeader } from '../components/AppHeader'
 
+/** Long paths in inline code break instead of widening a phone screen. */
+const WRAP = { overflowWrap: 'anywhere' } as const
+
 /** The guide's sections, in order: the table of contents and the anchors. */
 const SECTIONS = [
   { id: 'find-your-campaign', title: 'Find your campaign' },
@@ -327,18 +330,21 @@ export function HZDRDocsPage() {
                   instead.
                 </Text>
                 <Text size="sm">
-                  Each data product has a preview. <b>Add as column</b> turns a
-                  dataset into a column of your shot table.
+                  A data product in the campaign file has a preview. Where its
+                  dataset is stored the same way for every shot,{' '}
+                  <b>Add as column</b> turns it into a column of your shot
+                  table.
                 </Text>
               </DocSection>
 
               <DocSection id="own-columns">
                 <Text size="sm">
-                  Each user has a <Code>context.py</Code> per campaign. Every{' '}
-                  <Code>@Variable</Code> in it becomes a column in your shot
-                  table. Press <b>Add columns</b> next to Columns on the
-                  campaign page to build one (a metadata value, an HDF5 summary,
-                  an image or plot preview), or write it yourself:
+                  Each user has a <Code style={WRAP}>context.py</Code> per
+                  campaign. Every <Code style={WRAP}>@Variable</Code> in it
+                  becomes a column in your shot table. Press <b>Add columns</b>{' '}
+                  next to Columns on the campaign page to build one (a metadata
+                  value, an HDF5 summary, an image or plot preview), or write it
+                  yourself:
                 </Text>
                 <Code block>
                   {`@Variable(title="Laser energy (mJ)")
@@ -388,9 +394,10 @@ def laser_energy_mj(run, laser_energy_j=None):
                 <Text size="sm" c="dimmed">
                   <b>Variants</b>: Save as keeps another version of the file
                   (for example a test). The shot table always uses the active
-                  one, <Code>context.py</Code>; choose a variant under Context
-                  file and make it active to use it. The file it replaces is
-                  kept as <Code>context_previous.py</Code>.
+                  one, <Code style={WRAP}>context.py</Code>; choose a variant
+                  under Context file and make it active to use it. The file it
+                  replaces is kept as{' '}
+                  <Code style={WRAP}>context_previous.py</Code>.
                 </Text>
               </DocSection>
 
@@ -430,14 +437,15 @@ def laser_energy_mj(run, laser_energy_j=None):
               <DocSection id="campaign-file">
                 <Text size="sm">
                   Each campaign has one NeXus file,{' '}
-                  <Code>
+                  <Code style={WRAP}>
                     /bigdata/HPLexp/nexus/&lt;campaign&gt;/&lt;campaign&gt;.nxs
                   </Code>
-                  . It holds one row per shot (<Code>/entry/shots</Code>), every
-                  event behind them (<Code>/entry/source_events</Code>) and the
+                  . It holds one row per shot (
+                  <Code style={WRAP}>/entry/shots</Code>), every event behind
+                  them (<Code style={WRAP}>/entry/source_events</Code>) and the
                   record versions a correction replaced (
-                  <Code>/entry/labfrog_history</Code>). It is rebuilt when a
-                  LabFrog export or new events change it.
+                  <Code style={WRAP}>/entry/labfrog_history</Code>). It is
+                  rebuilt when a LabFrog export or new events change it.
                 </Text>
                 <Text size="sm">
                   Every build updates the campaign&apos;s SciCat dataset (same
@@ -476,8 +484,8 @@ def laser_energy_mj(run, laser_energy_j=None):
                   </List.Item>
                   <List.Item>
                     <b>No new shots during a shot day</b>: open the flow monitor
-                    in Live. If <Code>draco.trigger</Code> does not grow, the
-                    triggers are not reaching the shot authority.
+                    in Live. If <Code style={WRAP}>draco.trigger</Code> does not
+                    grow, the triggers are not reaching the shot authority.
                   </List.Item>
                   <List.Item>
                     <b>An event is not on its shot</b>: look in Review matches;
@@ -503,7 +511,8 @@ def laser_energy_mj(run, laser_energy_j=None):
                   The generated endpoint reference is the{' '}
                   <Anchor href="/api-docs">API reference</Anchor>. The server
                   runbook (deploying, rebuilding a campaign by hand) is{' '}
-                  <Code>hzdr/docs/guides/operations.md</Code> in the repository.
+                  <Code style={WRAP}>hzdr/docs/guides/operations.md</Code> in
+                  the repository.
                 </Text>
               </DocSection>
             </Stack>

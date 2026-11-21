@@ -68,7 +68,8 @@ back); **Customise** opens it in the builder. The file's existing columns are
 a list with Edit, Move up/down and Delete (confirmed in the page). A link
 `/source/<campaign>/context-builder?add=hdf5:<dataset>` (or
 `?add=metadata:<path>`, optional `&shot=<shot_key or number>`) opens the
-builder with that data chosen; Shot detail's **Add as column** uses it. A suggestion drops off once the file reads its data
+builder with that data chosen; Shot detail's **Add as column** uses it for a
+dataset stored per shot (`by_shot/`, `shots/`, `shot/`), passing the shot. A suggestion drops off once the file reads its data
 path (quoted); a column that only shares its function name reads other data,
 so the suggestion stays and is renamed when added. A column reading the same
 data through a helper is not recognised either, so that suggestion stays

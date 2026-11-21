@@ -124,14 +124,30 @@ describe('previewable data products', () => {
     ).toBe(undefined)
   })
 
-  it('links Context Builder with the dataset as the input', () => {
-    const path = shotAddColumnPath('demo', 'entry/laserdata/a b/values')
+  it('links Context Builder with the per-shot template and the shot', () => {
+    const path = shotAddColumnPath(
+      'demo',
+      'fixtures/by_shot/shot 7/images/camera_raw',
+      'demo:20260701:000007'
+    )
     expect(path).toBe(
-      '/source/demo/context-builder?add=hdf5:entry/laserdata/a%20b/values'
+      '/source/demo/context-builder?add=hdf5:fixtures/by_shot/{shot_id}/images/camera_raw&shot=demo:20260701:000007'
     )
-    expect(new URL(path, 'http://x').searchParams.get('add')).toBe(
-      'hdf5:entry/laserdata/a b/values'
+    const params = new URL(path!, 'http://x').searchParams
+    expect(params.get('add')).toBe(
+      'hdf5:fixtures/by_shot/{shot_id}/images/camera_raw'
     )
+    expect(params.get('shot')).toBe('demo:20260701:000007')
+  })
+
+  it('offers no column for a dataset named for one shot', () => {
+    // an event's values and a container path would repeat this shot's value
+    expect(
+      shotAddColumnPath('demo', 'entry/laserdata/waveform/ev-1/values')
+    ).toBe(undefined)
+    expect(
+      shotAddColumnPath('demo', '20260701_000007/instrument/camera/data')
+    ).toBe(undefined)
   })
 })
 

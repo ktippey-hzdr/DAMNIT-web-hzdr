@@ -27,7 +27,10 @@ behaviour; the merge PR has the details.
   13,000 px for 16 shots). Facts come first, then a compact OK / Review /
   Revise control. Times, match quality and empty values read in words; the
   shot key has a copy button. Data products in the campaign file preview
-  inline, with **Add as column**.
+  inline (a product recorded with the campaign file as its path counts),
+  with **Add as column** where the dataset is stored per shot (`by_shot/`,
+  `shots/`, `shot/`): a dataset named for one event or container would
+  repeat that shot's value in every row, so it gets no such link.
 - **Review matches** says "All clear" when nothing waits instead of four
   empty cards; the campaign picker shows what waits in each campaign and
   opens on the busiest one unless you chose; the count chips jump to their

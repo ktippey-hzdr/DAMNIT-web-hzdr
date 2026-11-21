@@ -1,5 +1,7 @@
 import type { HZDRDataProduct } from '../types'
 
+import { hdf5PerShotTemplateName } from './hdf5'
+
 const PREVIEW_KINDS = ['scalar', 'line', 'image']
 
 function kindFromShape(shape: Array<number | string>) {
@@ -49,13 +51,26 @@ export function previewableProductDataset(
 }
 
 /**
- * Context Builder, opened with this HDF5 dataset as the column's input:
- * `?add=hdf5:<dataset name>`, with `:` and `/` left readable.
+ * Context Builder, opened with this HDF5 dataset as the column's input, or
+ * undefined when the dataset cannot become a column. A column reads the same
+ * path on every shot, so only a dataset the builder can generalise (one under
+ * `by_shot/`, `shots/` or `shot/<id>/`, see hdf5PerShotTemplateName) is
+ * offered; an event's values or a container path name one shot, and a column
+ * of them would repeat that shot's value in every row. The link carries the
+ * per-shot template and the shot (`&shot=`) as the builder's example shot:
+ * `?add=hdf5:<template>&shot=<shot key>`, with `:`, `/` and braces readable.
  */
-export function shotAddColumnPath(sourceKey: string, datasetName: string) {
-  const value = encodeURIComponent(`hdf5:${datasetName}`).replace(
-    /%3A|%2F/gi,
-    (code) => decodeURIComponent(code)
-  )
-  return `/source/${sourceKey}/context-builder?add=${value}`
+export function shotAddColumnPath(
+  sourceKey: string,
+  datasetName: string,
+  shotKey?: string | null
+): string | undefined {
+  const template = hdf5PerShotTemplateName(datasetName)
+  if (!template) return undefined
+  const params = new URLSearchParams({ add: `hdf5:${template}` })
+  if (shotKey) params.set('shot', shotKey)
+  const query = params
+    .toString()
+    .replace(/%3A|%2F|%7B|%7D/gi, (code) => decodeURIComponent(code))
+  return `/source/${sourceKey}/context-builder?${query}`
 }

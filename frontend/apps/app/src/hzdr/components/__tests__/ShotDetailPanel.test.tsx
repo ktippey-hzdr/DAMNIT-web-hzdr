@@ -69,13 +69,13 @@ const detail: HZDRShotDetail = {
   ],
 }
 
-function renderPanel(onUpdateStatus = vi.fn()) {
+function renderPanel(onUpdateStatus = vi.fn(), panelShot: HZDRShot = shot) {
   render(
     <MantineProvider>
       <MemoryRouter>
         <ShotDetailPanel
-          shot={shot}
-          shotDetail={detail}
+          shot={panelShot}
+          shotDetail={{ ...detail, shot: panelShot }}
           sourceKey={CAMPAIGN}
           availableSources={[]}
           onUpdateStatus={onUpdateStatus}
@@ -200,7 +200,33 @@ describe('ShotDetailPanel datasets', () => {
 })
 
 describe('ShotDetailPanel data products', () => {
-  it('previews an in-file product on request and links Add as column', async () => {
+  it('links Add as column for a per-shot dataset, with the shot', () => {
+    const perShot = 'fixtures/by_shot/shot-000007/images/camera_raw'
+    renderPanel(vi.fn(), {
+      ...shot,
+      data_products: [
+        {
+          product_id: 'camera',
+          source: 'Camera',
+          kind: 'hdf5_dataset',
+          dataset_name: `/${perShot}`,
+          preview_kind: 'image',
+          shape: [64, 64],
+          dtype: 'float32',
+          metadata: {},
+        },
+      ],
+    })
+    const link = screen.getByRole('link', { name: 'Add as column' })
+    const url = new URL(link.getAttribute('href')!, 'http://x')
+    expect(url.pathname).toBe(`/source/${CAMPAIGN}/context-builder`)
+    expect(url.searchParams.get('add')).toBe(
+      'hdf5:fixtures/by_shot/{shot_id}/images/camera_raw'
+    )
+    expect(url.searchParams.get('shot')).toBe(shot.shot_key)
+  })
+
+  it('previews an in-file product on request; a one-shot dataset is no column', async () => {
     const user = userEvent.setup()
     const fetchMock = vi.fn(() =>
       Promise.resolve({
@@ -226,12 +252,10 @@ describe('ShotDetailPanel data products', () => {
     ).toHaveLength(1)
     expect(within(products).getByText('missing')).toBeInTheDocument()
     expect(fetchMock).not.toHaveBeenCalled()
+    // the waveform's dataset is named for this shot's event: no column
     expect(
-      within(products).getByRole('link', { name: 'Add as column' })
-    ).toHaveAttribute(
-      'href',
-      `/source/${CAMPAIGN}/context-builder?add=hdf5:${WAVEFORM}`
-    )
+      within(products).queryByRole('link', { name: 'Add as column' })
+    ).not.toBeInTheDocument()
     await user.click(within(products).getByRole('button', { name: 'Preview' }))
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(

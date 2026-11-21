@@ -86,6 +86,7 @@ export function ShotProductPreview({
   const [open, setOpen] = useState(false)
   const datasetName = previewableProductDataset(product, shot.hdf5_path)
   if (!datasetName) return null
+  const addColumnPath = shotAddColumnPath(sourceKey, datasetName, shot.shot_key)
   return (
     <Stack gap={4}>
       <Group gap="sm">
@@ -97,13 +98,11 @@ export function ShotProductPreview({
         >
           {open ? 'Hide preview' : 'Preview'}
         </Button>
-        <Anchor
-          component={Link}
-          to={shotAddColumnPath(sourceKey, datasetName)}
-          size="xs"
-        >
-          Add as column
-        </Anchor>
+        {addColumnPath ? (
+          <Anchor component={Link} to={addColumnPath} size="xs">
+            Add as column
+          </Anchor>
+        ) : null}
       </Group>
       {open ? (
         <InlinePreview
