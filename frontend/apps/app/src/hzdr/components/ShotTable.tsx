@@ -15,7 +15,6 @@ import {
   Text,
   Textarea,
   TextInput,
-  Title,
 } from '@mantine/core'
 
 import type { HZDRShot, HZDRSelectedCell, HZDRSortState } from '../types'
@@ -320,12 +319,9 @@ export function HZDRShotSetsPanel({ shots }: { shots: HZDRShot[] }) {
     <Card withBorder radius={4} p="md">
       <Stack gap="sm">
         <Group justify="space-between">
-          <Stack gap={2}>
-            <Title order={4}>Shot sets</Title>
-            <Text size="sm" c="dimmed">
-              Collections of shots for trends across the campaign/source.
-            </Text>
-          </Stack>
+          <Text size="sm" c="dimmed">
+            Pick a value to plot over the shots the table shows.
+          </Text>
           <Badge variant="light">{shots.length} shots</Badge>
         </Group>
         <Select

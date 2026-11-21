@@ -61,10 +61,11 @@ A campaign page (`/source/{source_key}`): DAMNIT's per-shot table with
 status badges, campaign/context columns and inline image and trend previews.
 Above it, one line of status chips (SciCat, wiki, producers, Flow monitor),
 quick filters for review status and day, and **Add columns** beside Columns.
-The capture clicks a camera-image cell of shot 7, so the side panel shows the
-full preview, then Shot detail (open by default: facts, the review control,
-events, data products and only that shot's datasets as a tree), then Shot
-sets with a trend.
+The side panel opens with **Trends** (pick a value; it plots the shots the
+table shows). The capture clicks a camera-image cell of shot 7, so below it
+Selected cell shows the full preview, then Shot detail (open by default:
+facts, the review control, events, data products and only that shot's
+datasets as a tree).
 
 ![Shot table](screenshots/shot-table.png)
 

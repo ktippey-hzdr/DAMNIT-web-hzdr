@@ -303,6 +303,10 @@ export function HZDRDocsPage() {
                     <b>arrow keys</b> move to the shot above or below.
                   </List.Item>
                   <List.Item>
+                    <b>Trends</b>, at the top of the side panel: pick a value to
+                    plot it over the shots the table shows (the filters apply).
+                  </List.Item>
+                  <List.Item>
                     <b>Click a cell</b> for its value; a number opens a trend
                     over the visible shots, a plot cell its full plot.
                   </List.Item>

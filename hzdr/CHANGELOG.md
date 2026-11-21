@@ -6,6 +6,12 @@ behaviour; the merge PR has the details.
 
 ## 2026-11-21
 
+### Shot table: Trends at the top of the side panel
+- The trend (pick a value, see it over the shots) is now the first panel
+  beside the table, named **Trends**, above Selected cell and Shot detail;
+  it was at the bottom as "Shot sets", below the long Shot detail. It plots
+  the shots the table shows, so the quick filters and the text filter apply.
+
 ### UI cleanup across every page (from the UI review)
 - **Header:** "Inspect sources" is now **Campaigns**. Below tablet width the
   tabs fold into a menu button, so every page is reachable on a phone;

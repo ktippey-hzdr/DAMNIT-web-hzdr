@@ -1228,6 +1228,11 @@ export function HZDRShotPage() {
 
               <Grid.Col span={{ base: 12, lg: 3 }}>
                 <Stack gap="md">
+                  {/* Trends first: pick a value and see it over the shots the
+                      table shows (its filters apply). */}
+                  <DetailsSection title="Trends" open>
+                    <HZDRShotSetsPanel shots={visibleShots} />
+                  </DetailsSection>
                   <DetailsSection title="Selected cell" open>
                     <SelectedCellPanel
                       cell={selectedCell}
@@ -1243,9 +1248,6 @@ export function HZDRShotPage() {
                       onUpdateStatus={updateShotStatus}
                       onCorrectMetadata={updateShotMetadata}
                     />
-                  </DetailsSection>
-                  <DetailsSection title="Shot sets" open>
-                    <HZDRShotSetsPanel shots={tableShots} />
                   </DetailsSection>
                 </Stack>
               </Grid.Col>
