@@ -298,7 +298,8 @@ describe('reviewWaiting / busiestSourceKey / closestCandidateKey', () => {
 
   it('picks the campaign with most waiting; ties and unknowns keep list order', () => {
     const sources = ['a', 'b', 'c'].map(
-      (key) => ({ key, title: key, shots: [], metadata: {} }) as HZDRSource
+      (key) =>
+        ({ key, title: key, shots: [], metadata: {} }) as unknown as HZDRSource
     )
     expect(busiestSourceKey(sources, { a: 1, b: 3, c: 3 })).toBe('b')
     expect(busiestSourceKey(sources, { a: 0, b: null, c: 0 })).toBe('a')

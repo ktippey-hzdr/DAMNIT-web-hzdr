@@ -20,7 +20,9 @@ describe('labels for people', () => {
   })
 
   it('says match qualities in words', () => {
-    expect(matchQualityLabel('event_identity')).toBe('Built from its own events')
+    expect(matchQualityLabel('event_identity')).toBe(
+      'Built from its own events'
+    )
     expect(matchQualityLabel('new_rank')).toBe('new rank')
     expect(matchQualityLabel(null)).toBe(NOT_RECORDED)
   })

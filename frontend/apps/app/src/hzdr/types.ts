@@ -6,6 +6,8 @@ export type RuntimeConfig = {
 
       mongo: boolean
     }
+    /** True when a spool consumer (ASAPO or Kafka) is enabled. */
+    live_traffic?: boolean
   }
   terminology: {
     uses_proposals: boolean

@@ -48,7 +48,6 @@ import { FlowTrafficLog } from '../components/FlowTrafficLog'
 import { requireJson } from '../utils/api'
 import { activityChanges } from '../utils/flow-activity'
 import {
-  type FlowRuntimeConfig,
   type FlowTrafficEntry,
   initialFlowMode,
   laneSource,
@@ -75,10 +74,7 @@ export function HZDRFlowMonitorPage() {
   const [chosenMode, setChosenMode] = useState<FlowMonitorMode | null>(
     readStoredFlowMode
   )
-  const monitorMode = initialFlowMode(
-    chosenMode,
-    runtimeConfig as FlowRuntimeConfig | undefined
-  )
+  const monitorMode = initialFlowMode(chosenMode, runtimeConfig)
   const chooseMode = useCallback((mode: FlowMonitorMode) => {
     setChosenMode(mode)
     storeFlowMode(mode)
