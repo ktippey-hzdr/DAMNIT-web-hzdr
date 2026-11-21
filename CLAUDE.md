@@ -215,15 +215,27 @@ workspace. HZDR-specific UI code lives under `apps/app/src/hzdr/`:
 - `pages/` — `ShotPage`, `ReviewMatchesPage`, `FlowMonitorPage`, `ContextBuilderPage`,
   `DocsPage`, `PrivacyPage` (public `/privacy`, linked from the site footer;
   keep its "What we process" list in step with what the API stores), `SourceHome`
-- `components/` — `ShotTable`, `ReviewMatches`, `FlowDiagram`, `AppHeader`, `previews`
+- `components/` — `ShotTable`, `ShotDetailPanel` (`utils/shot-datasets`: only
+  the selected shot's datasets, the campaign file behind a toggle),
+  `ShotCampaignStrip`, `HomeCampaignList`, `ReviewMatches`, `FlowDiagram`,
+  `FlowTrafficLog`, `AppHeader` (a menu below `sm`), `ContextAssistant`,
+  `ContextColumnList`, `ColumnPreview`, `previews`
 - `utils/` — `api`, `filter`, `format`, `hdf5`, `review`, `metadata`, `plotly`,
   `preview`, `context`
 - `types.ts`, `hooks.ts`, `index.ts`
 
 `ContextBuilderPage` opens on "Help me choose" (`components/ContextAssistant`,
 `utils/contextAssist`: the API's suggestions plus the example shot's HDF5
-datasets; Add appends and saves, Ignore is per browser in localStorage,
-Customise fills the builder form) beside "Build a column myself". Both
+datasets as tickable rows; "Add N columns" appends the ticked blocks in one
+save, Ignore is per browser in localStorage, the selected row's preview and
+Customise sit in the right column; `?add=hdf5:<dataset>` /
+`?add=metadata:<path>` opens the builder with that input) beside "Build a
+column myself". The campaign page stays DAMNIT's table of shots with
+context-column previews; cleanups go around the table, not into it.
+Labels for people (`formatShotTime`, `matchQualityLabel`, `campaignTitle`,
+`NOT_RECORDED`) live in `utils/format.ts`. Flow monitor opens in Live when
+`GET /config/runtime` says `flow_monitor.live_traffic` (a spool consumer
+is enabled), else Demo, unless the browser stored a choice. Both
 preview a column with `components/ColumnPreview` (`utils/columnPreview`: the
 example shot's cell, the double-click image/curve, the campaign trend or label
 counts; live, no button), which reads `HZDRDatasetPreview.summary`.

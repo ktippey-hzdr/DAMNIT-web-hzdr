@@ -4,6 +4,53 @@ Notable changes to the HZDR fork of DAMNIT-web. Newest first. Upstream
 (European-XFEL/DAMNIT-web) changes are summarised only where they reach HZDR
 behaviour; the merge PR has the details.
 
+## 2026-11-21
+
+### UI cleanup across every page (from the UI review)
+- **Header:** "Inspect sources" is now **Campaigns**. Below tablet width the
+  tabs fold into a menu button, so every page is reachable on a phone;
+  **Send feedback** shrinks to its icon there.
+- **Home** opens on the campaign list, newest first, with a filter box.
+  Each campaign shows its last shot, "+N today", how many decisions wait in
+  Review matches (a link there) and how many shots need review or revision.
+  The three cards that repeated the tabs are gone; the DAMNIT folder is
+  small print.
+- **Shot table:** the table and its context previews stay the page's main
+  content. Around it: one line of status chips (SciCat, wiki, producers,
+  Flow monitor) replaces the three cards; quick filters for *Needs review*,
+  *Needs revision* and each day; **Add columns** (was Context builder) sits
+  beside Columns; the trend picker names fields in words; the arrow keys
+  move between shots.
+- **Shot detail** opens by default, above Shot sets. It lists only the
+  selected shot's datasets, as a folding tree with a search box; the rest
+  of the campaign file is behind a toggle (it listed every shot's datasets,
+  13,000 px for 16 shots). Facts come first, then a compact OK / Review /
+  Revise control. Times, match quality and empty values read in words; the
+  shot key has a copy button. Data products in the campaign file preview
+  inline, with **Add as column**.
+- **Review matches** says "All clear" when nothing waits instead of four
+  empty cards; the campaign picker shows what waits in each campaign and
+  opens on the busiest one unless you chose; the count chips jump to their
+  section; in an ambiguous case the candidate closest in time is
+  highlighted (time alone still never decides).
+- **Flow monitor** opens in Live where live traffic is configured and
+  remembers your choice per browser; Demo shows a banner. The traffic log is
+  a full-width table under the diagram; "Poll DAMNIT" is **Check now**; the
+  right rail shows the current campaign instead of repeating Home's list.
+  API: `GET /config/runtime` returns `flow_monitor.live_traffic` (true when
+  a spool consumer is enabled).
+- **Context Builder** (page title *Add columns*): tick several suggestions
+  and **Add N columns** in one save; the selected suggestion's preview shows
+  in the right column (under its row on narrow screens); the file's existing
+  columns are a list with Edit, Move up/down and Delete (confirmed in the
+  page); the example shot reads "Shot 7 · 1 Jul, 11:36". A link
+  `?add=hdf5:<dataset>` or `?add=metadata:<path>` (optional `&shot=`) opens
+  the builder with that data chosen.
+- **Docs:** a contents list beside the text on wide screens, sections
+  linkable as `/docs#review-matches`, a screenshot per section, and names
+  that match the buttons. The launcher commands moved out to
+  `hzdr/docs/guides/operations.md`.
+
 ## 2026-11-20
 
 ### Context Builder: generated columns that cannot break a context file

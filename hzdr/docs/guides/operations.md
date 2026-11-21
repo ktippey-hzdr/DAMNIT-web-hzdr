@@ -57,11 +57,18 @@ example shot's HDF5 images, lineouts and scalars. A column's function name
 never takes a Python keyword or builtin, or a name the file uses (`np`,
 `Skip`, ...): `class` becomes `class_column`. A LabFrog name with a dot in it
 is read by name from `meta#labfrog_variables`, since `meta#` paths split on
-dots. **Add this column**
-appends that suggestion's `@Variable` to the destination file and saves it;
-**Ignore this suggestion** hides it in this browser only (localStorage, per
-campaign; **Show ignored suggestions again** brings them back); **Customise**
-opens it in the builder. A suggestion drops off once the file reads its data
+dots. Each suggestion is a row with a checkbox; tick several and **Add N
+columns** appends their `@Variable` blocks to the destination file in one
+save (nothing is added when the save fails), or **Ignore ticked**. Selecting
+a row shows its preview, reason and single **Add this column** / **Ignore
+this suggestion** / **Customise** / **Show code** in the right column (under
+the row on narrow screens). Ignoring hides a suggestion in this browser only
+(localStorage, per campaign; **Show ignored suggestions again** brings them
+back); **Customise** opens it in the builder. The file's existing columns are
+a list with Edit, Move up/down and Delete (confirmed in the page). A link
+`/source/<campaign>/context-builder?add=hdf5:<dataset>` (or
+`?add=metadata:<path>`, optional `&shot=<shot_key or number>`) opens the
+builder with that data chosen; Shot detail's **Add as column** uses it. A suggestion drops off once the file reads its data
 path (quoted); a column that only shares its function name reads other data,
 so the suggestion stays and is renamed when added. A column reading the same
 data through a helper is not recognised either, so that suggestion stays
@@ -73,7 +80,7 @@ the example value is for the selected shot. If that shot lacks the field,
 **Use a shot with this field** selects one containing it. Choose the display,
 set the column title, and add it to the context file.
 
-**Preview** (in the builder, and behind each suggestion's **Preview** button)
+**Preview** (in the builder, and for the selected suggestion)
 follows the choices as they are made, with nothing to press. *In the table*
 is the example shot's cell as the column will show it: the value with its
 unit (a LabFrog decimal comma read as a number), *Missing* when the shot has
