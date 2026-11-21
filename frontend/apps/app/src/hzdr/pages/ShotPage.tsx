@@ -31,6 +31,7 @@ import { Link, useParams } from 'react-router'
 
 import { history, HomePage } from '@damnit-frontend/ui'
 
+import { rememberLastCampaign } from '../components/homeCampaignSummary'
 import type {
   HZDRShot,
   HZDRShotDetail,
@@ -134,6 +135,7 @@ export function HZDRShotPage() {
       return
     }
     skipNextViewSave.current = true
+    rememberLastCampaign(source_key)
     const savedView = loadShotTableView(source_key)
     setFilterColumn(savedView?.filterColumn ?? 'all')
     setFilterOperator(savedView?.filterOperator ?? 'includes')

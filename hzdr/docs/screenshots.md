@@ -48,8 +48,11 @@ was ever fired.
 
 ## Home — campaigns
 
-The landing page (`/home`, the **Campaigns** tab): every campaign the HZDR
-provider sees, newest first, with a filter box. Each row has its last shot
+The landing page (`/home`, the **Campaigns** tab): a welcome card with the
+figures at a glance (campaigns, shots today, decisions waiting, the newest
+shot) and, once a campaign was opened in this browser, **Continue with** it;
+then every campaign the HZDR provider sees, newest first, with a filter box,
+and *How it works* beside the list. Each row has its last shot
 time, shot count, "+N today", the decisions waiting in Review matches and
 the shots needing review or revision; the DAMNIT folder is small print.
 

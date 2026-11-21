@@ -261,8 +261,12 @@ export function HZDRDocsPage() {
               <DocSection id="find-your-campaign">
                 <Text size="sm">
                   Open <b>Campaigns</b> in the header (on a phone, the menu
-                  button at the top left). The newest campaign comes first; type
-                  in <b>Filter campaigns</b> to find one by name. Each row shows
+                  button at the top left). The top of the page has the figures
+                  at a glance (campaigns, shots today, decisions waiting, the
+                  newest shot), <b>Continue with</b> the campaign you last
+                  opened in this browser, and a short <i>How it works</i> beside
+                  the list. The newest campaign comes first; type in{' '}
+                  <b>Filter campaigns</b> to find one by name. Each row shows
                   the last shot, the number of shots and how many came today,
                   and what waits for you: decisions in Review matches (click the
                   chip to go there) and shots marked <i>Needs review</i> or{' '}

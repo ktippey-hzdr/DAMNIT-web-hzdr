@@ -6,6 +6,15 @@ behaviour; the merge PR has the details.
 
 ## 2026-11-21
 
+### Home: help to get oriented
+- Home opens with what DAMNIT-web is for, the figures at a glance
+  (campaigns, shots today, decisions waiting with a link to Review matches,
+  the newest shot and its campaign) and **Continue with** the campaign last
+  opened in this browser (localStorage). Beside the campaign list, *How it
+  works* gives three steps (open a campaign, add your own columns, settle
+  what DAMNIT will not guess), each linking its Docs section, and points to
+  Flow monitor when shots are not arriving.
+
 ### Shot table: Trends at the top of the side panel
 - The trend (pick a value, see it over the shots) is now the first panel
   beside the table, named **Trends**, above Selected cell and Shot detail;
