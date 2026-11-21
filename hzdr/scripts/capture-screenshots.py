@@ -28,6 +28,7 @@ import json
 import math
 import os
 import random
+import re
 import shutil
 import signal
 import socket
@@ -641,9 +642,9 @@ def _select_camera_image_cell(page: Page) -> None:
     """Open the camera-image cell of a mid-run shot in the selected-cell panel.
 
     Shows what a context image column does on click - the full preview and the
-    column trend - instead of the empty "click a cell" placeholder. The Shot
-    detail panel below it stays folded: its HDF5 dataset list is thousands of
-    rows long, and a full-page capture would be mostly that list.
+    column trend - instead of the empty "click a cell" placeholder. Shot
+    detail, open below it, lists only that shot's datasets, so the capture
+    shows it too.
     """
     column_index = _context_column_index(page, "HZDR/Camera image")
     if column_index is None:
@@ -676,17 +677,18 @@ def _open_details_section(page: Page, title: str) -> None:
 def _prepare_context_assist(page: Page) -> None:
     """Show the builder's default "Help me choose" view with its suggestions.
 
-    Waits for the campaign's suggestion cards and for the "Show more" button
-    that appears once the example shot's dataset suggestions have joined them
-    (the capture campaign has more than the first six), then opens the first
-    card's preview.
+    Waits for the suggestion rows and for the "Show more" button that appears
+    once the example shot's dataset suggestions have joined them (the capture
+    campaign has more than the first page), ticks three rows so the "Add N
+    columns" bar is live, and waits for the first row's preview, which the
+    right column shows on a wide screen.
     """
     _open_details_section(page, "Target and example shot")
     page.get_by_text("Suggested columns").first.wait_for()
-    page.get_by_role("article").first.wait_for()
     page.get_by_role("button", name="more suggestions").wait_for()
-    # Open the first suggestion's preview: its cell and campaign trend.
-    page.get_by_role("article").first.get_by_role("button", name="Preview").click()
+    ticks = page.get_by_role("checkbox", name="Tick ")
+    for index in range(3):
+        ticks.nth(index).check()
     page.get_by_text("Across the campaign").first.wait_for()
 
 
@@ -724,12 +726,13 @@ def _prepare_docs(page: Page) -> None:
 
 
 def _prepare_review_matches(page: Page) -> None:
-    """Wait for the first catalog's review lists to load.
+    """Wait for the chosen campaign's review lists to load.
 
-    The page selects the first campaign catalog itself; the cards appear only
-    once its review list and shots have arrived.
+    The page picks the campaign with the most waiting itself; the cards, or
+    the "all clear" banner when nothing waits, appear once its review list
+    and shots have arrived.
     """
-    page.get_by_text("Ambiguous matches").first.wait_for()
+    page.get_by_text(re.compile("all clear|Ambiguous matches")).first.wait_for()
 
 
 def _prepare_flow_monitor(page: Page) -> None:
@@ -745,7 +748,7 @@ def _prepare_flow_monitor(page: Page) -> None:
         page.get_by_role("button", name="New shot"),
         page.get_by_role("button", name="Enrich latest").first,
         page.get_by_role("button", name="Enrich latest").last,
-        page.get_by_role("button", name="Poll live"),
+        page.get_by_role("button", name="Refresh"),
         page.get_by_role("button", name="Build HDF5"),
     ):
         button.click(force=True)
@@ -758,7 +761,7 @@ def _prepare_flow_monitor(page: Page) -> None:
 # Capture order matters: the flow monitor's demo actions mutate the fixture
 # stack, so it runs after every page that photographs the unmodified campaign.
 SHOTS = (
-    Shot("home.png", "/home", "heading", "DAMNIT! HZDR workspace"),
+    Shot("home.png", "/home", "heading", "Campaigns"),
     Shot(
         "shot-table.png",
         f"/source/{PRIMARY.source_key}",
@@ -770,14 +773,14 @@ SHOTS = (
         "context-assist.png",
         f"/source/{PRIMARY.source_key}/context-builder",
         "heading",
-        "Context builder",
+        "Add columns",
         _prepare_context_assist,
     ),
     Shot(
         "context-builder.png",
         f"/source/{PRIMARY.source_key}/context-builder",
         "heading",
-        "Context builder",
+        "Add columns",
         _prepare_context_builder,
     ),
     # The file keeps its old name until the screenshot revamp recaptures it.

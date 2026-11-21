@@ -83,6 +83,29 @@ describe('previewable data products', () => {
     ).toBe('entry/laserdata/waveform/ev-1/values')
   })
 
+  it('previews a product whose path is the campaign file itself', () => {
+    const campaignFile = '/bigdata/nexus/Pilot/Pilot.nxs'
+    expect(
+      previewableProductDataset(
+        { ...product, path: campaignFile },
+        campaignFile
+      )
+    ).toBe('entry/laserdata/waveform/ev-1/values')
+    // the same file recorded under another host's mount
+    expect(
+      previewableProductDataset(
+        { ...product, path: 'Z:/bigdata/nexus/Pilot/Pilot.nxs' },
+        campaignFile
+      )
+    ).toBe('entry/laserdata/waveform/ev-1/values')
+    expect(
+      previewableProductDataset(
+        { ...product, path: '/data/a.h5' },
+        campaignFile
+      )
+    ).toBe(undefined)
+  })
+
   it('skips files, stacks and LabFrog tables of every shot', () => {
     expect(previewableProductDataset({ ...product, path: '/data/a.h5' })).toBe(
       undefined

@@ -84,7 +84,7 @@ export function ShotProductPreview({
   product: HZDRDataProduct
 }) {
   const [open, setOpen] = useState(false)
-  const datasetName = previewableProductDataset(product)
+  const datasetName = previewableProductDataset(product, shot.hdf5_path)
   if (!datasetName) return null
   return (
     <Stack gap={4}>
