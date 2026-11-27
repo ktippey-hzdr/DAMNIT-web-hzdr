@@ -89,7 +89,7 @@ decomposition into plasma source, medium/target, diagnostics, and resources
 | --- | --- | --- | --- | --- |
 | `name` | `name` (dataset) | — (string) | — | Standard `NXsample.name` |
 | `type` | `type` (dataset) | — (string enum, target-ontology.md §3) | Target type | Standard `NXsample.type` **field name**; HZDR enum values (`foil`/`gas_jet`/`cluster`/`liquid`/`structured`/`other`), not the upstream sample/can/buffer vocabulary |
-| `type` | `target_type` (dataset) | — (same enum) | Target type | **Profile extension** (since v0.11): the same value under the name the DAPHNE4NFDI HZDR site definition `NXlaser_pump_probe_hzdr_draco` uses, so `type` can return to its NeXus meaning in v1.0 |
+| `type` (copied, since v0.11) | `target_type` (dataset) | — (same enum) | Target type | **Profile extension** (since v0.11): the same value under the name the DAPHNE4NFDI HZDR site definition `NXlaser_pump_probe_hzdr_draco` uses, so `type` can return to its NeXus meaning in v1.0 |
 | `material` | `material` (dataset) | — (string) | Material | **Profile extension** — free text; no standard `NXsample` field |
 | `material` (only when it parses as a formula) | `chemical_formula` (dataset) | — (string) | Material | Standard `NXsample.chemical_formula` |
 | `thickness` | `thickness` (dataset), `@units` | nm | Thickness | Standard `NXsample.thickness` |
